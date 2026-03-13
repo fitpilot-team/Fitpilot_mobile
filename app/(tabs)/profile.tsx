@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,7 +52,7 @@ export default function ProfileScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -112,7 +112,11 @@ export default function ProfileScreen() {
         <View style={styles.userCard}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Ionicons name="person" size={40} color={colors.primary[500]} />
+              {user?.profilePictureUrl ? (
+                <Image source={{ uri: user.profilePictureUrl }} style={styles.avatarImage} />
+              ) : (
+                <Ionicons name="person" size={40} color={colors.primary[500]} />
+              )}
             </View>
             <TouchableOpacity
               style={styles.editAvatarButton}
@@ -123,7 +127,7 @@ export default function ProfileScreen() {
               <Ionicons name="camera" size={14} color={colors.white} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.userName}>{user?.full_name || 'Usuario'}</Text>
+          <Text style={styles.userName}>{user?.displayName || 'Usuario'}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
           <View style={styles.roleBadge}>
             <Text style={styles.roleText}>Cliente</Text>
@@ -257,6 +261,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary[100],
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   editAvatarButton: {
     position: 'absolute',

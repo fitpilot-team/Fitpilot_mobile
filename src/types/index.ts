@@ -4,13 +4,36 @@ export type UserRole = 'admin' | 'trainer' | 'client';
 export interface User {
   id: string;
   email: string;
-  full_name: string;
+  displayName: string;
+  firstName: string | null;
+  lastName: string | null;
   role: UserRole;
-  preferred_language: 'es' | 'en';
-  is_active: boolean;
-  is_verified: boolean;
-  created_at: string;
-  updated_at: string;
+  phoneNumber: string | null;
+  isPhoneVerified: boolean;
+  onboardingStatus: string | null;
+  profilePictureUrl: string | null;
+  professionalRoles: string[];
+  currentSubscription: Record<string, unknown> | null;
+  hasSubscription: boolean;
+  hasActiveSubscription: boolean;
+  subscriptionVigency: Record<string, unknown> | null;
+}
+
+export interface NutritionAuthUserResponse {
+  id: string | number;
+  email: string;
+  name?: string | null;
+  lastname?: string | null;
+  role: string;
+  phone_number?: string | null;
+  is_phone_verified?: boolean;
+  onboarding_status?: string | null;
+  profile_picture?: string | null;
+  professional_role?: string[] | string | null;
+  current_subscription?: Record<string, unknown> | null;
+  has_subscription?: boolean;
+  has_active_subscription?: boolean;
+  subscription_vigency?: Record<string, unknown> | null;
 }
 
 export interface LoginCredentials {
@@ -20,7 +43,7 @@ export interface LoginCredentials {
 
 export interface LoginResponse {
   access_token: string;
-  token_type: string;
+  refresh_token: string;
 }
 
 // Training hierarchy types
@@ -140,11 +163,13 @@ export interface WorkoutLog {
 export interface MissedWorkout {
   training_day_id: string;
   training_day_name: string;
-  training_day_focus?: string | null;
   scheduled_date: string;
-  day_number: number;
-  microcycle_week: number;
-  exercises_count: number;
+  days_overdue: number;
+  status: 'never_started' | 'abandoned';
+  abandon_reason?: AbandonReason | null;
+  can_reschedule: boolean;
+  training_day_focus?: string | null;
+  exercises_count?: number;
 }
 
 export interface DayProgress {
@@ -216,6 +241,49 @@ export interface MuscleVolumeResponse {
   training_day_name: string;
   total_effective_sets: number;
   muscles: MuscleVolumeItem[];
+}
+
+export interface MetricSummary {
+  metric_type: string;
+  latest_value: number;
+  latest_date: string;
+  unit: string;
+  change_from_previous: number | null;
+}
+
+export interface ClientRecipeSummary {
+  id: number;
+  title: string;
+  imageUrl: string | null;
+  ingredientCount?: number;
+}
+
+export interface ClientDietItem {
+  id: string;
+  kind: 'food' | 'recipe';
+  label: string;
+  quantityLabel: string;
+  exchangeGroupName: string | null;
+  recipe: ClientRecipeSummary | null;
+}
+
+export interface ClientDietMeal {
+  id: string;
+  name: string;
+  totalCalories: number | null;
+  items: ClientDietItem[];
+}
+
+export interface ClientDietDay {
+  id: string;
+  assignedDate: string;
+  title: string;
+  description: string | null;
+  meals: ClientDietMeal[];
+  isToday: boolean;
+  totalMeals: number;
+  totalItems: number;
+  totalRecipes: number;
 }
 
 // API types

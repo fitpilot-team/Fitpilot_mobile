@@ -1,202 +1,372 @@
-import axios, { AxiosInstance, AxiosError } from 'axios';
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  AxiosRequestConfig,
+  InternalAxiosRequestConfig,
+} from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
-import type { MuscleVolumeResponse } from '../types';
+import type { ApiError, LoginResponse, MuscleVolumeResponse } from '../types';
 
-// Get API URL from app config or use default
-const API_URL =
-  Constants.expoConfig?.extra?.apiUrl ||
-  process.env.EXPO_PUBLIC_API_URL ||
-  'http://localhost:8000/api';
+type ValidationDetail = {
+  msg?: string;
+  loc?: Array<string | number>;
+};
 
-if (__DEV__) {
-  console.log('[API] base URL:', API_URL);
+type ApiErrorPayload = {
+  detail?: string | ValidationDetail[];
+  message?: string | string[];
+  error?: string;
+};
+
+type PublicExtra = {
+  nutritionApiUrl?: string;
+  trainingApiUrl?: string;
+};
+
+type SessionTokens = {
+  accessToken: string | null;
+  refreshToken: string | null;
+};
+
+interface RequestConfig<D = unknown> extends AxiosRequestConfig<D> {
+  skipAuth?: boolean;
+  skipAuthRefresh?: boolean;
+  skipErrorLogging?: boolean;
 }
 
-// Get base URL (without /api) for static assets
-const BASE_URL = API_URL.replace(/\/api$/, '');
+interface InternalRequestConfig<D = unknown> extends InternalAxiosRequestConfig<D> {
+  skipAuth?: boolean;
+  skipAuthRefresh?: boolean;
+  skipErrorLogging?: boolean;
+  _retry?: boolean;
+}
 
-/**
- * Constructs full URL for static assets (videos, images, etc.)
- * Converts relative paths like "/static/videos/file.mp4" to full URLs
- */
-export const getAssetUrl = (relativePath: string | null | undefined): string | null => {
-  if (!relativePath) return null;
-  // If already a full URL, return as-is
-  if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
-    return relativePath;
+const ACCESS_TOKEN_KEY = 'fitpilot_access_token';
+const REFRESH_TOKEN_KEY = 'fitpilot_refresh_token';
+const REQUEST_TIMEOUT_MS = 30_000;
+
+const extra = (Constants.expoConfig?.extra ?? {}) as PublicExtra;
+
+const resolveRequiredUrl = (
+  value: string | undefined,
+  envKey: 'EXPO_PUBLIC_NUTRITION_API_URL' | 'EXPO_PUBLIC_TRAINING_API_URL',
+) => {
+  const normalized = value?.trim();
+
+  if (!normalized) {
+    throw new Error(
+      `[Config] Missing ${envKey}. Configure both EXPO_PUBLIC_NUTRITION_API_URL and EXPO_PUBLIC_TRAINING_API_URL.`,
+    );
   }
-  // Ensure path starts with /
-  const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-  return `${BASE_URL}${path}`;
+
+  return normalized.replace(/\/+$/, '');
 };
 
-/**
- * Extracts a thumbnail frame from a Cloudinary video URL.
- * Converts video URL to image URL using Cloudinary transformations.
- * Example: .../video/upload/v123/file.mp4 → .../video/upload/so_0/v123/file.jpg
- * @param videoUrl - The Cloudinary video URL
- * @returns Thumbnail image URL or null if not a Cloudinary video
- */
-export const getVideoThumbnailUrl = (videoUrl: string | null | undefined): string | null => {
-  if (!videoUrl) return null;
+const NUTRITION_API_URL = resolveRequiredUrl(
+  process.env.EXPO_PUBLIC_NUTRITION_API_URL || extra.nutritionApiUrl,
+  'EXPO_PUBLIC_NUTRITION_API_URL',
+);
+const TRAINING_API_URL = resolveRequiredUrl(
+  process.env.EXPO_PUBLIC_TRAINING_API_URL || extra.trainingApiUrl,
+  'EXPO_PUBLIC_TRAINING_API_URL',
+);
+const TRAINING_ASSET_BASE_URL = new URL(TRAINING_API_URL).origin;
 
-  // Only process Cloudinary URLs
-  if (!videoUrl.includes('res.cloudinary.com')) return null;
+if (__DEV__) {
+  console.log('[API] nutrition base URL:', NUTRITION_API_URL);
+  console.log('[API] training base URL:', TRAINING_API_URL);
+}
 
-  // Insert transformation after /upload/ and change extension to .jpg
-  const thumbnailUrl = videoUrl
-    .replace('/video/upload/', '/video/upload/so_0,w_400,h_400,c_fill/')
-    .replace(/\.(mp4|webm|mov|avi)$/i, '.jpg');
-
-  return thumbnailUrl;
+let cachedTokens: SessionTokens = {
+  accessToken: null,
+  refreshToken: null,
 };
-
-// Token storage keys and in-memory cache to avoid SecureStore read on every request
-const TOKEN_KEY = 'fitpilot_access_token';
-let cachedToken: string | null = null;
+let tokensHydrated = false;
 let unauthorizedHandler: (() => void | Promise<void>) | null = null;
+let refreshPromise: Promise<SessionTokens | null> | null = null;
+let unauthorizedPromise: Promise<void> | null = null;
 
-// Create axios instance
-const api: AxiosInstance = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  timeout: 30000,
-});
-
-// Token management functions
-export const getToken = async (): Promise<string | null> => {
-  try {
-    if (cachedToken !== null) {
-      return cachedToken;
-    }
-    const stored = await SecureStore.getItemAsync(TOKEN_KEY);
-    cachedToken = stored;
-    return stored;
-  } catch {
-    return null;
+const createApiError = (
+  error: AxiosError<ApiErrorPayload> | Error,
+  fallbackMessage = 'Ha ocurrido un error inesperado',
+) => {
+  if (!axios.isAxiosError<ApiErrorPayload>(error)) {
+    const apiError = new Error(error.message || fallbackMessage) as ApiError;
+    return apiError;
   }
+
+  const detail = error.response?.data?.detail;
+  const message = error.response?.data?.message;
+  let errorMessage = fallbackMessage;
+
+  if (typeof detail === 'string') {
+    errorMessage = detail;
+  } else if (Array.isArray(detail)) {
+    errorMessage = detail
+      .map((item) => {
+        const field = item.loc?.slice(1).join('.') || 'campo';
+        return `${field}: ${item.msg || 'valor invalido'}`;
+      })
+      .join(', ');
+  } else if (Array.isArray(message)) {
+    errorMessage = message.join(', ');
+  } else if (typeof message === 'string') {
+    errorMessage = message;
+  } else if (typeof error.response?.data?.error === 'string') {
+    errorMessage = error.response.data.error;
+  } else if (error.message) {
+    errorMessage = error.message;
+  }
+
+  const apiError = new Error(errorMessage) as ApiError;
+  apiError.status = error.response?.status;
+  return apiError;
 };
 
-export const setToken = async (token: string): Promise<void> => {
-  cachedToken = token;
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
+const hydrateTokens = async (): Promise<SessionTokens> => {
+  if (tokensHydrated) {
+    return cachedTokens;
+  }
+
+  const [accessToken, refreshToken] = await Promise.all([
+    SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
+    SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
+  ]);
+
+  cachedTokens = { accessToken, refreshToken };
+  tokensHydrated = true;
+
+  return cachedTokens;
 };
 
-export const removeToken = async (): Promise<void> => {
-  cachedToken = null;
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+export const getAccessToken = async (): Promise<string | null> => {
+  const tokens = await hydrateTokens();
+  return tokens.accessToken;
+};
+
+export const getRefreshToken = async (): Promise<string | null> => {
+  const tokens = await hydrateTokens();
+  return tokens.refreshToken;
+};
+
+export const setSessionTokens = async (tokens: {
+  accessToken: string;
+  refreshToken: string;
+}): Promise<void> => {
+  cachedTokens = {
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+  };
+  tokensHydrated = true;
+
+  await Promise.all([
+    SecureStore.setItemAsync(ACCESS_TOKEN_KEY, tokens.accessToken),
+    SecureStore.setItemAsync(REFRESH_TOKEN_KEY, tokens.refreshToken),
+  ]);
+};
+
+export const clearSessionTokens = async (): Promise<void> => {
+  cachedTokens = {
+    accessToken: null,
+    refreshToken: null,
+  };
+  tokensHydrated = true;
+
+  await Promise.all([
+    SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
+    SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
+  ]);
 };
 
 export const setUnauthorizedHandler = (handler: (() => void | Promise<void>) | null) => {
   unauthorizedHandler = handler;
 };
 
-// Request interceptor - add auth token
-api.interceptors.request.use(
-  async (config) => {
-    const token = cachedToken || (await getToken());
-    if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    if (__DEV__) {
-      console.log('[API] request:', config.method?.toUpperCase(), config.url);
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
+const notifyUnauthorized = async () => {
+  if (unauthorizedPromise) {
+    await unauthorizedPromise;
+    return;
   }
-);
 
-// Response interceptor - handle errors
-api.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError<{ detail?: string | Array<{ msg: string; loc: string[] }> }>) => {
-    // Handle 401 - clear token (will redirect to login via store)
-    if (error.response?.status === 401) {
-      await removeToken();
-      if (unauthorizedHandler) {
-        await unauthorizedHandler();
-      }
+  unauthorizedPromise = (async () => {
+    await clearSessionTokens();
+    if (unauthorizedHandler) {
+      await unauthorizedHandler();
     }
+  })();
 
-    if (__DEV__) {
-      console.warn(
-        '[API] error:',
-        error.config?.url,
-        error.response?.status,
-        error.message
-      );
-    }
-
-    // Extract error message
-    let errorMessage = 'Ha ocurrido un error inesperado';
-    const detail = error.response?.data?.detail;
-
-    if (typeof detail === 'string') {
-      errorMessage = detail;
-    } else if (Array.isArray(detail)) {
-      errorMessage = detail
-        .map((err) => {
-          const field = err.loc?.slice(1).join('.') || 'campo';
-          return `${field}: ${err.msg}`;
-        })
-        .join(', ');
-    } else if (error.message) {
-      errorMessage = error.message;
-    }
-
-    return Promise.reject({
-      message: errorMessage,
-      status: error.response?.status,
-    });
+  try {
+    await unauthorizedPromise;
+  } finally {
+    unauthorizedPromise = null;
   }
-);
-
-// API client with typed methods
-export const apiClient = {
-  get: async <T>(url: string): Promise<T> => {
-    const response = await api.get<T>(url);
-    return response.data;
-  },
-
-  post: async <T>(url: string, data?: unknown): Promise<T> => {
-    const response = await api.post<T>(url, data);
-    return response.data;
-  },
-
-  put: async <T>(url: string, data?: unknown): Promise<T> => {
-    const response = await api.put<T>(url, data);
-    return response.data;
-  },
-
-  patch: async <T>(url: string, data?: unknown): Promise<T> => {
-    const response = await api.patch<T>(url, data);
-    return response.data;
-  },
-
-  delete: async <T>(url: string): Promise<T> => {
-    const response = await api.delete<T>(url);
-    return response.data;
-  },
 };
 
-/**
- * Get muscle volume breakdown for a training day.
- * Returns effective sets and total sets per muscle group.
- * @param trainingDayId - The training day ID
- * @param countSecondary - Whether to count secondary muscles with 0.5x multiplier (default: true)
- */
-export const getMuscleVolume = async (
-  trainingDayId: string,
-  countSecondary: boolean = true
-): Promise<MuscleVolumeResponse> => {
-  return apiClient.get<MuscleVolumeResponse>(
-    `/training-days/${trainingDayId}/muscle-volume?count_secondary=${countSecondary}`
+const refreshSession = async (): Promise<SessionTokens | null> => {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    const refreshToken = await getRefreshToken();
+
+    if (!refreshToken) {
+      await notifyUnauthorized();
+      return null;
+    }
+
+    try {
+      const response = await axios.post<LoginResponse>(
+        `${NUTRITION_API_URL}/auth/refresh`,
+        { refresh_token: refreshToken },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-refresh-transport': 'body',
+          },
+          timeout: REQUEST_TIMEOUT_MS,
+        },
+      );
+
+      const nextTokens = {
+        accessToken: response.data.access_token,
+        refreshToken: response.data.refresh_token || refreshToken,
+      };
+
+      await setSessionTokens(nextTokens);
+      return nextTokens;
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('[API] refresh failed', error);
+      }
+      await notifyUnauthorized();
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+};
+
+const createAxiosInstance = (baseURL: string) =>
+  axios.create({
+    baseURL,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    timeout: REQUEST_TIMEOUT_MS,
+  });
+
+const attachAuthInterceptors = (instance: AxiosInstance, label: 'nutrition' | 'training') => {
+  instance.interceptors.request.use(
+    async (config: InternalRequestConfig) => {
+      if (!config.skipAuth) {
+        const accessToken = await getAccessToken();
+        if (accessToken) {
+          config.headers.Authorization = `Bearer ${accessToken}`;
+        }
+      }
+
+      if (__DEV__) {
+        console.log(`[API:${label}] request`, config.method?.toUpperCase(), config.url);
+      }
+
+      return config;
+    },
+    (error) => Promise.reject(createApiError(error)),
+  );
+
+  instance.interceptors.response.use(
+    (response) => response,
+    async (error: AxiosError<ApiErrorPayload>) => {
+      const config = error.config as InternalRequestConfig | undefined;
+
+      if (error.response?.status === 401 && config && !config.skipAuthRefresh) {
+        if (!config._retry) {
+          config._retry = true;
+          const refreshedSession = await refreshSession();
+
+          if (refreshedSession?.accessToken) {
+            config.headers.Authorization = `Bearer ${refreshedSession.accessToken}`;
+            return instance.request(config);
+          }
+        } else {
+          await notifyUnauthorized();
+        }
+      }
+
+      if (__DEV__ && !config?.skipErrorLogging) {
+        console.warn(
+          `[API:${label}] error`,
+          error.config?.url,
+          error.response?.status,
+          error.message,
+        );
+      }
+
+      return Promise.reject(createApiError(error));
+    },
   );
 };
 
-export default api;
+const withData = async <T>(request: Promise<{ data: T }>): Promise<T> => {
+  const response = await request;
+  return response.data;
+};
+
+const createClient = (instance: AxiosInstance) => ({
+  get: async <T>(url: string, config?: RequestConfig): Promise<T> =>
+    withData(instance.get<T>(url, config)),
+
+  post: async <T>(url: string, data?: unknown, config?: RequestConfig): Promise<T> =>
+    withData(instance.post<T>(url, data, config)),
+
+  put: async <T>(url: string, data?: unknown, config?: RequestConfig): Promise<T> =>
+    withData(instance.put<T>(url, data, config)),
+
+  patch: async <T>(url: string, data?: unknown, config?: RequestConfig): Promise<T> =>
+    withData(instance.patch<T>(url, data, config)),
+
+  delete: async <T>(url: string, config?: RequestConfig): Promise<T> =>
+    withData(instance.delete<T>(url, config)),
+});
+
+export const nutritionApi = createAxiosInstance(NUTRITION_API_URL);
+export const trainingApi = createAxiosInstance(TRAINING_API_URL);
+
+attachAuthInterceptors(nutritionApi, 'nutrition');
+attachAuthInterceptors(trainingApi, 'training');
+
+export const nutritionClient = createClient(nutritionApi);
+export const trainingClient = createClient(trainingApi);
+
+export const getAssetUrl = (relativePath: string | null | undefined): string | null => {
+  if (!relativePath) return null;
+
+  if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
+    return relativePath;
+  }
+
+  const normalizedPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+  return new URL(normalizedPath, `${TRAINING_ASSET_BASE_URL}/`).toString();
+};
+
+export const getVideoThumbnailUrl = (videoUrl: string | null | undefined): string | null => {
+  if (!videoUrl) return null;
+
+  if (!videoUrl.includes('res.cloudinary.com')) return null;
+
+  return videoUrl
+    .replace('/video/upload/', '/video/upload/so_0,w_400,h_400,c_fill/')
+    .replace(/\.(mp4|webm|mov|avi)$/i, '.jpg');
+};
+
+export const getMuscleVolume = async (
+  trainingDayId: string,
+  countSecondary: boolean = true,
+): Promise<MuscleVolumeResponse> =>
+  trainingClient.get<MuscleVolumeResponse>(
+    `/training-days/${trainingDayId}/muscle-volume?count_secondary=${countSecondary}`,
+  );

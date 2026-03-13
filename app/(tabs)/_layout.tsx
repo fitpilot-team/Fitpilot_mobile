@@ -3,8 +3,6 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, brandColors } from '../../src/constants/colors';
 
-type IconName = React.ComponentProps<typeof Ionicons>['name'];
-
 export default function TabLayout() {
   return (
     <Tabs
@@ -66,12 +64,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="payments"
+        name="diet"
         options={{
-          title: 'Pagos',
+          title: 'Dieta',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
-              name={focused ? 'card' : 'card-outline'}
+              name={focused ? 'restaurant' : 'restaurant-outline'}
               size={size}
               color={color}
             />

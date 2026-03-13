@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
@@ -10,8 +9,8 @@ import Animated, {
   withDelay,
   Easing,
   interpolate,
-  useAnimatedProps,
 } from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
 import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import { StatCardSkeleton } from '../common/Skeleton';
 import type { WeeklyProgress } from '../../types';
@@ -30,8 +29,6 @@ interface StatItem {
   color: string;
   gradientColors: [string, string];
 }
-
-const AnimatedText = Animated.createAnimatedComponent(Text);
 
 export const QuickStats: React.FC<QuickStatsProps> = ({
   weeklyProgress,
@@ -110,7 +107,7 @@ export const QuickStats: React.FC<QuickStatsProps> = ({
 interface StatCardProps {
   stat: StatItem;
   index: number;
-  animationProgress: Animated.SharedValue<number>;
+  animationProgress: SharedValue<number>;
 }
 
 const StatCard: React.FC<StatCardProps> = ({ stat, index, animationProgress }) => {

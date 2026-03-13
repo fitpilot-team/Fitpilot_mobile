@@ -1,17 +1,39 @@
 import { ConfigContext, ExpoConfig } from '@expo/config';
 
-const getApiUrl = (config: ExpoConfig) => {
-  return (
-    process.env.EXPO_PUBLIC_API_URL ||
-    config.extra?.apiUrl ||
-    // IP del host accesible desde el móvil (con sufijo /api)
-    'http://192.168.100.12:8000/api'
-  );
+type PublicExtra = {
+  nutritionApiUrl?: string;
+  trainingApiUrl?: string;
+};
+
+const resolveRequiredUrl = (
+  envValue: string | undefined,
+  configValue: string | undefined,
+  envKey: 'EXPO_PUBLIC_NUTRITION_API_URL' | 'EXPO_PUBLIC_TRAINING_API_URL',
+) => {
+  const resolved = envValue?.trim() || configValue?.trim();
+
+  if (!resolved) {
+    throw new Error(
+      `[Fitpilot-mobile] Missing ${envKey}. Configure both EXPO_PUBLIC_NUTRITION_API_URL and EXPO_PUBLIC_TRAINING_API_URL.`,
+    );
+  }
+
+  return resolved.replace(/\/+$/, '');
 };
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appEnv = process.env.APP_ENV || 'development';
-  const apiUrl = getApiUrl(config);
+  const extra = (config.extra ?? {}) as PublicExtra;
+  const nutritionApiUrl = resolveRequiredUrl(
+    process.env.EXPO_PUBLIC_NUTRITION_API_URL,
+    extra.nutritionApiUrl,
+    'EXPO_PUBLIC_NUTRITION_API_URL',
+  );
+  const trainingApiUrl = resolveRequiredUrl(
+    process.env.EXPO_PUBLIC_TRAINING_API_URL,
+    extra.trainingApiUrl,
+    'EXPO_PUBLIC_TRAINING_API_URL',
+  );
   const isProd = appEnv === 'production';
 
   return {
@@ -34,7 +56,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       bundleIdentifier: 'com.fitpilot.mobile',
       infoPlist: {
         NSAppTransportSecurity: {
-          // En producción se aplica ATS por defecto (HTTPS); en dev permitimos red local y cargas arbitrarias
           NSAllowsArbitraryLoads: !isProd,
           NSAllowsLocalNetworking: !isProd,
         },
@@ -58,7 +79,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     extra: {
       ...config.extra,
-      apiUrl,
+      nutritionApiUrl,
+      trainingApiUrl,
       appEnv,
     },
   };

@@ -1,14 +1,21 @@
 import { create } from 'zustand';
 import {
-  apiClient,
-  setToken,
-  removeToken,
-  getToken,
+  clearSessionTokens,
+  getAccessToken,
+  getRefreshToken,
+  nutritionApi,
+  nutritionClient,
+  setSessionTokens,
   setUnauthorizedHandler,
-  default as api,
 } from '../services/api';
 import { useWorkoutStore } from './workoutStore';
-import type { User, LoginCredentials, LoginResponse } from '../types';
+import type {
+  LoginCredentials,
+  LoginResponse,
+  NutritionAuthUserResponse,
+  User,
+  UserRole,
+} from '../types';
 
 interface AuthState {
   user: User | null;
@@ -17,7 +24,6 @@ interface AuthState {
   isInitialized: boolean;
   error: string | null;
 
-  // Actions
   initialize: () => Promise<void>;
   login: (credentials: LoginCredentials) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -25,7 +31,76 @@ interface AuthState {
   clearError: () => void;
 }
 
+const normalizeRole = (role: string | null | undefined): UserRole => {
+  const normalizedRole = role?.trim().toLowerCase();
+
+  if (normalizedRole === 'admin' || normalizedRole === 'administrator') {
+    return 'admin';
+  }
+
+  if (normalizedRole === 'professional' || normalizedRole === 'trainer') {
+    return 'trainer';
+  }
+
+  return 'client';
+};
+
+const normalizeProfessionalRoles = (
+  professionalRole: NutritionAuthUserResponse['professional_role'],
+): string[] => {
+  if (Array.isArray(professionalRole)) {
+    return professionalRole.filter((role): role is string => typeof role === 'string');
+  }
+
+  if (typeof professionalRole === 'string' && professionalRole.trim()) {
+    return [professionalRole.trim()];
+  }
+
+  return [];
+};
+
+const mapNutritionUserToUser = (payload: NutritionAuthUserResponse): User => {
+  const firstName = payload.name?.trim() || null;
+  const lastName = payload.lastname?.trim() || null;
+  const displayName = [firstName, lastName].filter(Boolean).join(' ').trim() || payload.email;
+
+  return {
+    id: String(payload.id),
+    email: payload.email,
+    displayName,
+    firstName,
+    lastName,
+    role: normalizeRole(payload.role),
+    phoneNumber: payload.phone_number ?? null,
+    isPhoneVerified: payload.is_phone_verified ?? false,
+    onboardingStatus: payload.onboarding_status ?? null,
+    profilePictureUrl: payload.profile_picture ?? null,
+    professionalRoles: normalizeProfessionalRoles(payload.professional_role),
+    currentSubscription: payload.current_subscription ?? null,
+    hasSubscription: payload.has_subscription ?? false,
+    hasActiveSubscription: payload.has_active_subscription ?? false,
+    subscriptionVigency: payload.subscription_vigency ?? null,
+  };
+};
+
+const fetchCurrentUser = async () => {
+  const payload = await nutritionClient.get<NutritionAuthUserResponse>('/auth/me');
+  return mapNutritionUserToUser(payload);
+};
+
 export const useAuthStore = create<AuthState>((set, get) => {
+  const clearAuthenticatedState = async (error: string | null = null) => {
+    await clearSessionTokens();
+    useWorkoutStore.getState().reset();
+    set({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isInitialized: true,
+      error,
+    });
+  };
+
   const authStore: AuthState = {
     user: null,
     isAuthenticated: false,
@@ -35,48 +110,45 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     initialize: async () => {
       try {
-        const token = await getToken();
-        if (token) {
-          if (__DEV__) {
-            console.log('[Auth] init: token found');
-          }
-          // Try to get current user
-          const user = await apiClient.get<User>('/auth/me');
+        const accessToken = await getAccessToken();
 
-          // Only allow clients to use the mobile app
-          if (user.role !== 'client') {
-            await removeToken();
-            set({
-              user: null,
-              isAuthenticated: false,
-              isInitialized: true,
-              error: 'Esta aplicación es solo para clientes',
-            });
-            return;
-          }
-
-          if (__DEV__) {
-            console.log('[Auth] init: user loaded', user.email);
-          }
+        if (!accessToken) {
           set({
-            user,
-            isAuthenticated: true,
             isInitialized: true,
+            isAuthenticated: false,
+            user: null,
             error: null,
           });
-        } else {
-          set({ isInitialized: true });
+          return;
         }
-      } catch (err) {
+
         if (__DEV__) {
-          console.warn('[Auth] init error', err);
+          console.log('[Auth] init: access token found');
         }
-        await removeToken();
+
+        const user = await fetchCurrentUser();
+
+        if (user.role !== 'client') {
+          await clearAuthenticatedState('Esta aplicacion es solo para clientes');
+          return;
+        }
+
+        if (__DEV__) {
+          console.log('[Auth] init: user loaded', user.email);
+        }
+
         set({
-          user: null,
-          isAuthenticated: false,
+          user,
+          isAuthenticated: true,
           isInitialized: true,
+          error: null,
         });
+      } catch (error) {
+        if (__DEV__) {
+          console.warn('[Auth] init error', error);
+        }
+
+        await clearAuthenticatedState();
       }
     },
 
@@ -87,110 +159,130 @@ export const useAuthStore = create<AuthState>((set, get) => {
         if (__DEV__) {
           console.log('[Auth] login start', credentials.email);
         }
-        // Get token
-        const response = await apiClient.post<LoginResponse>('/auth/login', credentials);
-        await setToken(response.access_token);
 
-        // Get user info
-        const user = await apiClient.get<User>('/auth/me');
+        const response = await nutritionClient.post<LoginResponse>(
+          '/auth/login',
+          {
+            identifier: credentials.email.trim(),
+            password: credentials.password,
+            app_type: 'CLIENT_APP',
+          },
+          {
+            skipAuth: true,
+            skipAuthRefresh: true,
+          },
+        );
 
-        // Only allow clients
+        await setSessionTokens({
+          accessToken: response.access_token,
+          refreshToken: response.refresh_token,
+        });
+
+        const user = await fetchCurrentUser();
+
         if (user.role !== 'client') {
-          await removeToken();
-          set({
-            isLoading: false,
-            error:
-              'Esta aplicación es solo para clientes. Los entrenadores y administradores deben usar la aplicación web.',
-          });
+          await clearAuthenticatedState(
+            'Esta aplicacion es solo para clientes. Los profesionales deben usar la aplicacion web.',
+          );
           return false;
         }
 
-        if (__DEV__) {
-          console.log('[Auth] login success', user.email);
-        }
         set({
           user,
           isAuthenticated: true,
           isLoading: false,
+          isInitialized: true,
           error: null,
         });
 
-        return true;
-      } catch (err: any) {
         if (__DEV__) {
-          console.warn('[Auth] login error', err?.message || err);
+          console.log('[Auth] login success', user.email);
         }
+
+        return true;
+      } catch (error: any) {
+        if (__DEV__) {
+          console.warn('[Auth] login error', error?.message || error);
+        }
+
         set({
           isLoading: false,
-          error: err.message || 'Error al iniciar sesión',
+          error: error.message || 'Error al iniciar sesion',
         });
+
         return false;
       }
     },
 
     logout: async () => {
-      await removeToken();
-      useWorkoutStore.getState().reset();
-      set({
-        user: null,
-        isAuthenticated: false,
-        error: null,
-      });
-      if (__DEV__) {
-        console.log('[Auth] logout');
+      try {
+        const refreshToken = await getRefreshToken();
+
+        if (refreshToken) {
+          await nutritionClient.post(
+            '/auth/logout',
+            { refresh_token: refreshToken },
+            { skipAuthRefresh: true },
+          );
+        }
+      } catch (error) {
+        if (__DEV__) {
+          console.warn('[Auth] logout request failed', error);
+        }
+      } finally {
+        await clearAuthenticatedState();
       }
     },
 
-    clearError: () => set({ error: null }),
-
     uploadAvatar: async (uri: string) => {
       set({ isLoading: true, error: null });
+
       try {
         const formData = new FormData();
-        // @ts-ignore - React Native handles file uploads this way
         formData.append('file', {
           uri,
           name: 'profile.jpg',
           type: 'image/jpeg',
-        });
+        } as unknown as Blob);
 
-        // Upload image
-        // We use the raw api instance to set multipart/form-data header
-        const response = await api.post<User>('/users/me/avatar', formData, {
+        await nutritionApi.patch('/users/me/profile-picture', formData, {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
         });
 
-        const updatedUser = response.data;
-
-        if (__DEV__) {
-          console.log('[Auth] uploadAvatar success', updatedUser.email);
-        }
+        const user = await fetchCurrentUser();
 
         set({
-          user: updatedUser,
+          user,
           isLoading: false,
           error: null,
         });
-      } catch (err: any) {
+
         if (__DEV__) {
-          console.warn('[Auth] uploadAvatar error', err?.message || err);
+          console.log('[Auth] uploadAvatar success', user.email);
         }
+      } catch (error: any) {
+        if (__DEV__) {
+          console.warn('[Auth] uploadAvatar error', error?.message || error);
+        }
+
         set({
           isLoading: false,
-          error: err.message || 'Error al subir la imagen',
+          error: error.message || 'Error al subir la imagen',
         });
-        throw err;
+
+        throw error;
       }
     },
+
+    clearError: () => set({ error: null }),
   };
 
-  // Global handler for 401s -> clear session and workout state
   setUnauthorizedHandler(async () => {
     const { isAuthenticated } = get();
     if (isAuthenticated) {
-      await authStore.logout();
+      await clearAuthenticatedState();
     }
   });
 

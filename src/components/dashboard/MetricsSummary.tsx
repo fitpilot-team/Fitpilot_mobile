@@ -5,22 +5,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import { StatCardSkeleton } from '../common/Skeleton';
-import api from '../../services/api';
-
-interface MetricSummary {
-  metric_type: string;
-  latest_value: number;
-  latest_date: string;
-  unit: string;
-  change_from_previous: number | null;
-}
+import { nutritionClient } from '../../services/api';
+import type { ApiError, MetricSummary } from '../../types';
 
 interface MetricsSummaryProps {
   onPress?: () => void;
 }
 
-// Mapeo de tipos de métrica a iconos y labels
-const metricConfig: Record<string, { icon: string; label: string; color: string }> = {
+const metricConfig: Record<
+  string,
+  { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; color: string }
+> = {
   weight: { icon: 'scale', label: 'Peso', color: '#3B82F6' },
   body_fat: { icon: 'body', label: 'Grasa', color: '#EF4444' },
   chest: { icon: 'fitness', label: 'Pecho', color: '#10B981' },
@@ -36,32 +31,33 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadMetrics();
+    void loadMetrics();
   }, []);
 
   const loadMetrics = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await api.get<MetricSummary[]>('/client-metrics/me/summary');
-      setMetrics(response.data);
-    } catch (err: any) {
-      // Si es 403, el usuario no tiene permisos (no es cliente)
-      // Si es 404, no hay métricas
-      if (err.response?.status !== 403) {
-        setError('Error al cargar métricas');
+      const response = await nutritionClient.get<MetricSummary[]>('/client-metrics/me/summary', {
+        skipErrorLogging: true,
+      });
+      setMetrics(response);
+    } catch (error) {
+      const apiError = error as ApiError;
+
+      if (apiError.status !== 403 && apiError.status !== 404 && apiError.status !== 501) {
+        setError('Error al cargar metricas');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Si está cargando, mostrar skeleton
   if (isLoading) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Mis métricas</Text>
+          <Text style={styles.title}>Mis metricas</Text>
         </View>
         <View style={styles.metricsGrid}>
           <StatCardSkeleton />
@@ -72,21 +68,18 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress }) => {
     );
   }
 
-  // Si hay error o no hay métricas, no mostrar nada
   if (error || metrics.length === 0) {
     return null;
   }
 
-  // Mostrar solo las primeras 4 métricas más relevantes
   const displayMetrics = metrics.slice(0, 4);
 
   return (
     <Animated.View entering={FadeInUp.duration(500)} style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Ionicons name="analytics" size={20} color={brandColors.navy} />
-          <Text style={styles.title}>Mis métricas</Text>
+          <Text style={styles.title}>Mis metricas</Text>
         </View>
         <TouchableOpacity style={styles.seeAllButton} onPress={onPress}>
           <Text style={styles.seeAllText}>Ver todo</Text>
@@ -94,7 +87,6 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Grid de métricas */}
       <View style={styles.metricsGrid}>
         {displayMetrics.map((metric, index) => (
           <MetricCard key={metric.metric_type} metric={metric} index={index} />
@@ -111,7 +103,7 @@ interface MetricCardProps {
 
 const MetricCard: React.FC<MetricCardProps> = ({ metric, index }) => {
   const config = metricConfig[metric.metric_type] || {
-    icon: 'analytics',
+    icon: 'analytics' as React.ComponentProps<typeof Ionicons>['name'],
     label: metric.metric_type,
     color: brandColors.sky,
   };
@@ -119,8 +111,6 @@ const MetricCard: React.FC<MetricCardProps> = ({ metric, index }) => {
   const hasChange = metric.change_from_previous !== null;
   const isPositive = metric.change_from_previous && metric.change_from_previous > 0;
   const isNegative = metric.change_from_previous && metric.change_from_previous < 0;
-
-  // Para peso y grasa, negativo es bueno. Para medidas, depende del objetivo
   const isWeightOrFat = ['weight', 'body_fat'].includes(metric.metric_type);
   const changeColor = isWeightOrFat
     ? isNegative ? colors.success : isPositive ? colors.error : colors.gray[500]
@@ -138,23 +128,17 @@ const MetricCard: React.FC<MetricCardProps> = ({ metric, index }) => {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Icono */}
       <View style={[styles.metricIcon, { backgroundColor: `${config.color}15` }]}>
-        <Ionicons name={config.icon as any} size={16} color={config.color} />
+        <Ionicons name={config.icon} size={16} color={config.color} />
       </View>
 
-      {/* Valor */}
       <View style={styles.metricValueRow}>
-        <Text style={styles.metricValue}>
-          {metric.latest_value}
-        </Text>
+        <Text style={styles.metricValue}>{metric.latest_value}</Text>
         <Text style={styles.metricUnit}>{metric.unit}</Text>
       </View>
 
-      {/* Label */}
       <Text style={styles.metricLabel}>{config.label}</Text>
 
-      {/* Cambio */}
       {hasChange && metric.change_from_previous !== 0 && (
         <View style={[styles.changeBadge, { backgroundColor: `${changeColor}15` }]}>
           <Ionicons

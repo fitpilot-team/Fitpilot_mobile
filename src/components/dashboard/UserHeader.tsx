@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, brandColors, spacing, fontSize, borderRadius } from '../../constants/colors';
 import { Logo } from '../common/Logo';
@@ -27,7 +27,7 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
   onMenuPress,
 }) => {
   // Get initials for avatar
-  const initials = user.full_name
+  const initials = user.displayName
     .split(' ')
     .map((n) => n[0])
     .join('')
@@ -44,11 +44,15 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
       {/* User Info - Avatar + Name + Goal */}
       <View style={styles.userInfo}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
+          {user.profilePictureUrl ? (
+            <Image source={{ uri: user.profilePictureUrl }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarText}>{initials}</Text>
+          )}
         </View>
         <View style={styles.textContainer}>
           <Text style={styles.userName} numberOfLines={1}>
-            {user.full_name}
+            {user.displayName}
           </Text>
           {objectiveLabel && (
             <Text style={styles.goal} numberOfLines={1}>
@@ -94,6 +98,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarText: {
     fontSize: fontSize.lg,

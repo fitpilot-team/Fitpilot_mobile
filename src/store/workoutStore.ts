@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { apiClient } from '../services/api';
+import { trainingClient } from '../services/api';
 import type {
   Macrocycle,
   TrainingDay,
@@ -105,11 +105,11 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
 
       try {
         // Load weekly progress
-        const progress = await apiClient.get<WeeklyProgress>('/workout-logs/progress/weekly');
+        const progress = await trainingClient.get<WeeklyProgress>('/workout-logs/progress/weekly');
         set({ weeklyProgress: progress });
 
         // Load active macrocycle
-        const response = await apiClient.get<{ total: number; macrocycles: Macrocycle[] }>(
+        const response = await trainingClient.get<{ total: number; macrocycles: Macrocycle[] }>(
           '/mesocycles?status=active&limit=1'
         );
 
@@ -131,11 +131,11 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
 
       try {
         // Usar el nuevo endpoint secuencial
-        const response = await apiClient.get<NextWorkoutResponse>('/workout-logs/next');
+        const response = await trainingClient.get<NextWorkoutResponse>('/workout-logs/next');
 
         if (response.training_day) {
           // Obtener detalles completos del training day con ejercicios
-          const fullDay = await apiClient.get<TrainingDay>(
+          const fullDay = await trainingClient.get<TrainingDay>(
             `/training-days/${response.training_day.id}`
           );
 
@@ -189,7 +189,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
             );
             if (trainingDay) {
               // Load full training day with exercises
-              const fullDay = await apiClient.get<TrainingDay>(
+              const fullDay = await trainingClient.get<TrainingDay>(
                 `/training-days/${trainingDay.id}`
               );
               set({ todayTrainingDay: fullDay });
@@ -208,7 +208,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       set({ isLoadingMissed: true });
 
       try {
-        const response = await apiClient.get<{ missed_workouts: MissedWorkout[]; total: number }>(
+        const response = await trainingClient.get<{ missed_workouts: MissedWorkout[]; total: number }>(
           `/workout-logs/missed?days_back=${daysBack}`
         );
 
@@ -229,12 +229,12 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       set({ isStartingWorkout: true, error: null });
 
       try {
-        const workoutLog = await apiClient.post<WorkoutLog>('/workout-logs', {
+        const workoutLog = await trainingClient.post<WorkoutLog>('/workout-logs', {
           training_day_id: trainingDayId,
         });
 
         // Load full workout state
-        const state = await apiClient.get<CurrentWorkoutState>(
+        const state = await trainingClient.get<CurrentWorkoutState>(
           `/workout-logs/${workoutLog.id}/state`
         );
 
@@ -267,7 +267,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       set({ isLoading: true, error: null });
 
       try {
-        const state = await apiClient.get<CurrentWorkoutState>(
+        const state = await trainingClient.get<CurrentWorkoutState>(
           `/workout-logs/${workoutLogId}/state`
         );
 
@@ -303,7 +303,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       set({ isSavingSet: true, error: null });
 
       try {
-        await apiClient.post<ExerciseSetLog>(
+        await trainingClient.post<ExerciseSetLog>(
           `/workout-logs/${currentWorkout.workout_log.id}/sets`,
           {
             day_exercise_id: data.dayExerciseId,
@@ -314,7 +314,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
         );
 
         // Reload workout state
-        const state = await apiClient.get<CurrentWorkoutState>(
+        const state = await trainingClient.get<CurrentWorkoutState>(
           `/workout-logs/${currentWorkout.workout_log.id}/state`
         );
 
@@ -348,7 +348,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       set({ isLoading: true, error: null });
 
       try {
-        await apiClient.patch(`/workout-logs/${currentWorkout.workout_log.id}`, {
+        await trainingClient.patch(`/workout-logs/${currentWorkout.workout_log.id}`, {
           status: 'completed',
         });
 
@@ -373,7 +373,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       if (!currentWorkout) return;
 
       try {
-        await apiClient.patch(`/workout-logs/${currentWorkout.workout_log.id}`, {
+        await trainingClient.patch(`/workout-logs/${currentWorkout.workout_log.id}`, {
           status: 'abandoned',
           abandon_reason: reason,
           abandon_notes: notes,
