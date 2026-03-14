@@ -9,6 +9,7 @@ import type {
   ExerciseSetLog,
   DayExercise,
   NextWorkoutResponse,
+  NextWorkoutReason,
   MissedWorkout,
   AbandonReason,
   ExerciseProgress,
@@ -25,6 +26,7 @@ interface WorkoutState {
   // Next Workout (Sistema Secuencial)
   workoutPosition: number | null; // Ej: 5 (de 24)
   workoutTotal: number | null; // Ej: 24
+  nextWorkoutReason: NextWorkoutReason | null;
   allCompleted: boolean; // True si completó todo el programa
 
   // UI State
@@ -80,6 +82,122 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
     };
   };
 
+  const getTodayDateKey = () => new Date().toISOString().split('T')[0];
+
+  const getWeeklyTrainingDayIds = (progress: WeeklyProgress | null): string[] =>
+    progress?.days
+      ?.map((day) => day.training_day_id)
+      .filter((value): value is string => !!value) ?? [];
+
+  const logDashboardDiagnostics = (
+    progress: WeeklyProgress | null,
+    activeMacrocycleCount: number,
+  ) => {
+    if (!__DEV__) {
+      return;
+    }
+
+    console.log('[Workout] dashboard diagnostics', {
+      hasWeeklyProgress: !!progress,
+      weeklyTrainingDayIds: getWeeklyTrainingDayIds(progress),
+      activeMacrocycleCount,
+    });
+  };
+
+  const logNextWorkoutDiagnostics = (
+    nextReason: NextWorkoutReason | null,
+    nextTrainingDayId: string | null,
+    progress: WeeklyProgress | null,
+  ) => {
+    if (!__DEV__) {
+      return;
+    }
+
+    console.log('[Workout] next workout diagnostics', {
+      hasWeeklyProgress: !!progress,
+      weeklyTrainingDayIds: getWeeklyTrainingDayIds(progress),
+      nextReason,
+      nextTrainingDayId,
+      activeMacrocycleCount: get().activeMacrocycle ? 1 : 0,
+    });
+  };
+
+  const pickFallbackTrainingDayIdFromWeeklyProgress = (
+    progress: WeeklyProgress | null,
+  ): string | null => {
+    if (!progress?.days?.length) {
+      return null;
+    }
+
+    const today = getTodayDateKey();
+    const candidates = progress.days.filter(
+      (day) => day.has_workout && !day.is_rest_day && !!day.training_day_id,
+    );
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const fallbackDay =
+      candidates.find(
+        (day) =>
+          day.date >= today &&
+          day.completion_percentage < 100 &&
+          !!day.training_day_id,
+      ) ||
+      candidates.find((day) => day.date >= today && !!day.training_day_id) ||
+      candidates.find(
+        (day) => day.completion_percentage < 100 && !!day.training_day_id,
+      ) ||
+      candidates[0];
+
+    return fallbackDay?.training_day_id ?? null;
+  };
+
+  const loadFallbackNextWorkoutFromWeeklyProgress = async () => {
+    const trainingDayId = pickFallbackTrainingDayIdFromWeeklyProgress(
+      get().weeklyProgress,
+    );
+
+    if (!trainingDayId) {
+      if (__DEV__) {
+        console.log('[Workout] next workout fallback unavailable', {
+          weeklyTrainingDayIds: getWeeklyTrainingDayIds(get().weeklyProgress),
+        });
+      }
+      return false;
+    }
+
+    try {
+      const fullDay = await trainingClient.get<TrainingDay>(`/training-days/${trainingDayId}`);
+
+      set({
+        todayTrainingDay: fullDay,
+        workoutPosition: null,
+        workoutTotal: null,
+        allCompleted: false,
+        nextWorkoutReason: null,
+        isLoading: false,
+        error: null,
+      });
+
+      if (__DEV__) {
+        console.log('[Workout] next workout fallback resolved', {
+          trainingDayId,
+        });
+      }
+
+      return true;
+    } catch {
+      if (__DEV__) {
+        console.log('[Workout] next workout fallback failed', {
+          trainingDayId,
+        });
+      }
+      return false;
+    }
+  };
+
   return {
     // Initial state
     activeMacrocycle: null,
@@ -90,6 +208,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
     workoutPosition: null,
     workoutTotal: null,
     allCompleted: false,
+    nextWorkoutReason: null,
     isLoading: false,
     isStartingWorkout: false,
     isSavingSet: false,
@@ -113,13 +232,17 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
           '/mesocycles?status=active&limit=1'
         );
 
-        if (response.macrocycles.length > 0) {
-          set({ activeMacrocycle: response.macrocycles[0] });
-        }
+        set({
+          activeMacrocycle: response.macrocycles[0] ?? null,
+        });
+
+        logDashboardDiagnostics(progress, response.total);
 
         set({ isLoading: false });
       } catch (err: any) {
         set({
+          weeklyProgress: null,
+          activeMacrocycle: null,
           isLoading: false,
           error: err.message || 'Error al cargar datos',
         });
@@ -132,6 +255,15 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       try {
         // Usar el nuevo endpoint secuencial
         const response = await trainingClient.get<NextWorkoutResponse>('/workout-logs/next');
+        const nextReason =
+          (response as NextWorkoutResponse & { reason?: NextWorkoutReason | null }).reason ?? null;
+        const resolvedFromFallback = async () => loadFallbackNextWorkoutFromWeeklyProgress();
+
+        logNextWorkoutDiagnostics(
+          nextReason,
+          response.training_day?.id ?? null,
+          get().weeklyProgress,
+        );
 
         if (response.training_day) {
           // Obtener detalles completos del training day con ejercicios
@@ -144,6 +276,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
             workoutPosition: response.position,
             workoutTotal: response.total,
             allCompleted: false,
+            nextWorkoutReason: null,
             isLoading: false,
           });
         } else if (response.all_completed) {
@@ -153,20 +286,30 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
             workoutPosition: response.position,
             workoutTotal: response.total,
             allCompleted: true,
+            nextWorkoutReason: nextReason ?? 'all_completed',
             isLoading: false,
           });
         } else {
+          if (await resolvedFromFallback()) {
+            return;
+          }
           // No hay programa activo o no hay entrenamientos
           set({
             todayTrainingDay: null,
             workoutPosition: null,
             workoutTotal: null,
             allCompleted: false,
+            nextWorkoutReason: nextReason,
             isLoading: false,
           });
         }
       } catch (err: any) {
+        if (await loadFallbackNextWorkoutFromWeeklyProgress()) {
+          return;
+        }
+
         set({
+          nextWorkoutReason: null,
           isLoading: false,
           error: err.message || 'Error al cargar próximo entrenamiento',
         });
@@ -432,6 +575,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
         workoutPosition: null,
         workoutTotal: null,
         allCompleted: false,
+        nextWorkoutReason: null,
         isLoading: false,
         isLoadingMissed: false,
         error: null,
@@ -442,3 +586,4 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       }),
   };
 });
+

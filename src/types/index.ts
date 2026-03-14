@@ -221,11 +221,17 @@ export interface NextWorkoutTrainingDay {
   rest_day: boolean;
 }
 
+export type NextWorkoutReason =
+  | 'no_active_macrocycle'
+  | 'no_training_days'
+  | 'all_completed';
+
 export interface NextWorkoutResponse {
   training_day: NextWorkoutTrainingDay | null;
   position: number | null;  // Posición actual (ej: 5 de 24)
   total: number | null;     // Total de entrenamientos en el programa
   all_completed: boolean;   // True si completó todo el programa
+  reason?: NextWorkoutReason | null;
 }
 
 // Muscle Volume types (from GET /api/training-days/{id}/muscle-volume)
@@ -258,20 +264,37 @@ export interface ClientRecipeSummary {
   ingredientCount?: number;
 }
 
-export interface ClientDietItem {
+export interface ClientDietPortion {
+  householdLabel: string | null;
+  equivalents: number | null;
+  grams: number | null;
+}
+
+export interface ClientDietIngredientRow {
   id: string;
-  kind: 'food' | 'recipe';
   label: string;
-  quantityLabel: string;
   exchangeGroupName: string | null;
-  recipe: ClientRecipeSummary | null;
+  portion: ClientDietPortion;
+}
+
+export interface ClientDietFoodRow extends ClientDietIngredientRow {}
+
+export interface ClientDietRecipeCard {
+  id: string;
+  recipeId: number;
+  title: string;
+  imageUrl: string | null;
+  ingredientCount: number;
+  ingredients: ClientDietIngredientRow[];
 }
 
 export interface ClientDietMeal {
   id: string;
   name: string;
   totalCalories: number | null;
-  items: ClientDietItem[];
+  recipes: ClientDietRecipeCard[];
+  standaloneFoods: ClientDietFoodRow[];
+  totalEntries: number;
 }
 
 export interface ClientDietDay {
@@ -291,3 +314,4 @@ export interface ApiError {
   message: string;
   status?: number;
 }
+

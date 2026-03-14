@@ -31,6 +31,7 @@ export default function DietScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [renderVersion, setRenderVersion] = useState(0);
 
   const loadDiet = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -50,6 +51,7 @@ export default function DietScreen() {
 
         setDietDays(days);
         setError(null);
+        setRenderVersion((currentValue) => currentValue + 1);
         setSelectedDate((currentDate) => {
           if (days.some((day) => day.assignedDate === currentDate)) {
             return currentDate;
@@ -148,7 +150,7 @@ export default function DietScreen() {
                 {selectedDay.meals.length > 0 ? (
                   selectedDay.meals.map((meal, index) => (
                     <Animated.View
-                      key={meal.id}
+                      key={`${selectedDay.assignedDate}-${renderVersion}-${meal.id}`}
                       entering={FadeInDown.delay(280 + index * 60).duration(320)}
                     >
                       <DietMealCard meal={meal} />

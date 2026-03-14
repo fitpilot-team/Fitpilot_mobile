@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Dimensions, Switch } from 'react-native';
+import { View, Text, StyleSheet, Switch } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import Animated, {
   useSharedValue,
@@ -7,7 +7,7 @@ import Animated, {
   withTiming,
   withDelay,
   Easing,
-  SharedValue,
+  type SharedValue,
 } from 'react-native-reanimated';
 import { LinearGradient as ExpoGradient } from 'expo-linear-gradient';
 import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
@@ -15,29 +15,29 @@ import { ChartSkeleton } from '../common/Skeleton';
 import type { MuscleVolumeResponse } from '../../types';
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
+const MAX_MUSCLES_SHOWN = 6;
+const BAR_HEIGHT = 20;
 
 interface ActivityChartProps {
   muscleVolume: MuscleVolumeResponse | null;
   isLoading?: boolean;
   countSecondaryMuscles: boolean;
   onToggleSecondary: (value: boolean) => void;
+  contentWidth?: number;
 }
-
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const CHART_WIDTH = SCREEN_WIDTH - spacing.lg * 4;
-const MAX_MUSCLES_SHOWN = 6;
-const BAR_HEIGHT = 20;
-const BAR_GAP = 8;
-const LABEL_WIDTH = 100;
-const VALUE_WIDTH = 40;
 
 export const ActivityChart: React.FC<ActivityChartProps> = ({
   muscleVolume,
   isLoading = false,
   countSecondaryMuscles,
   onToggleSecondary,
+  contentWidth = 390,
 }) => {
   const animationProgress = useSharedValue(0);
+  const chartWidth = Math.max(280, contentWidth - spacing.lg * 2);
+  const labelWidth = chartWidth >= 720 ? 128 : chartWidth >= 560 ? 112 : 96;
+  const valueWidth = 48;
+  const barAreaWidth = Math.max(80, chartWidth - labelWidth - valueWidth - spacing.md);
 
   useEffect(() => {
     if (muscleVolume && !isLoading) {
@@ -47,16 +47,14 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
         withTiming(1, { duration: 800, easing: Easing.out(Easing.cubic) })
       );
     }
-  }, [muscleVolume, isLoading]);
+  }, [animationProgress, isLoading, muscleVolume]);
 
-  // Limitar a los primeros N músculos y calcular el máximo
   const { muscles, maxSets } = useMemo(() => {
-    const m = muscleVolume?.muscles?.slice(0, MAX_MUSCLES_SHOWN) || [];
-    const max = m.length > 0 ? Math.max(...m.map(item => item.effective_sets)) : 0;
-    return { muscles: m, maxSets: max };
+    const visibleMuscles = muscleVolume?.muscles?.slice(0, MAX_MUSCLES_SHOWN) || [];
+    const max = visibleMuscles.length > 0 ? Math.max(...visibleMuscles.map((item) => item.effective_sets)) : 0;
+    return { muscles: visibleMuscles, maxSets: max };
   }, [muscleVolume]);
 
-  // Mostrar skeleton mientras carga
   if (isLoading) {
     return (
       <View style={styles.skeletonWrapper}>
@@ -65,10 +63,8 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
     );
   }
 
-  // Total de series efectivas
   const totalSets = Math.round(muscleVolume?.total_effective_sets || 0);
 
-  // Si no hay datos, mostrar estado vacío
   if (!muscleVolume || muscles.length === 0) {
     return (
       <View style={styles.container}>
@@ -86,12 +82,8 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
     );
   }
 
-  // Calcular ancho del área de barras
-  const barAreaWidth = CHART_WIDTH - LABEL_WIDTH - VALUE_WIDTH - spacing.md;
-
   return (
     <View style={styles.container}>
-      {/* Fondo con gradiente de marca */}
       <ExpoGradient
         colors={[brandColors.navy, brandColors.sky]}
         start={{ x: 0, y: 0 }}
@@ -99,7 +91,6 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Header con título y badge */}
       <View style={styles.header}>
         <Text style={styles.title}>Volumen del entrenamiento</Text>
         <View style={styles.badge}>
@@ -107,7 +98,6 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
         </View>
       </View>
 
-      {/* Toggle para músculos secundarios */}
       <View style={styles.toggleRow}>
         <Text style={styles.toggleLabel}>Contar secundarios (0.5x)</Text>
         <Switch
@@ -118,13 +108,14 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
         />
       </View>
 
-      {/* Barras horizontales */}
       <View style={styles.chartContainer}>
         {muscles.map((muscle) => (
           <MuscleBar
             key={muscle.muscle_name}
             muscle={muscle}
             maxSets={maxSets}
+            labelWidth={labelWidth}
+            valueWidth={valueWidth}
             barAreaWidth={barAreaWidth}
             animationProgress={animationProgress}
           />
@@ -134,10 +125,11 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
   );
 };
 
-// Componente de barra individual para cada músculo
 interface MuscleBarProps {
   muscle: { muscle_name: string; display_name: string; effective_sets: number };
   maxSets: number;
+  labelWidth: number;
+  valueWidth: number;
   barAreaWidth: number;
   animationProgress: SharedValue<number>;
 }
@@ -145,6 +137,8 @@ interface MuscleBarProps {
 const MuscleBar: React.FC<MuscleBarProps> = ({
   muscle,
   maxSets,
+  labelWidth,
+  valueWidth,
   barAreaWidth,
   animationProgress,
 }) => {
@@ -156,12 +150,11 @@ const MuscleBar: React.FC<MuscleBarProps> = ({
 
   return (
     <View style={styles.barRow}>
-      <Text style={styles.muscleLabel} numberOfLines={1}>
+      <Text style={[styles.muscleLabel, { width: labelWidth }]} numberOfLines={1}>
         {muscle.display_name}
       </Text>
       <View style={styles.barContainer}>
         <Svg height={BAR_HEIGHT} width={barAreaWidth}>
-          {/* Barra de fondo */}
           <Rect
             x={0}
             y={4}
@@ -170,7 +163,6 @@ const MuscleBar: React.FC<MuscleBarProps> = ({
             rx={6}
             fill="rgba(255, 255, 255, 0.15)"
           />
-          {/* Barra animada */}
           <AnimatedRect
             x={0}
             y={4}
@@ -182,7 +174,7 @@ const MuscleBar: React.FC<MuscleBarProps> = ({
           />
         </Svg>
       </View>
-      <Text style={styles.valueLabel}>
+      <Text style={[styles.valueLabel, { width: valueWidth }]}>
         {muscle.effective_sets.toFixed(1)}
       </Text>
     </View>
@@ -207,8 +199,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+    gap: spacing.sm,
   },
   title: {
+    flex: 1,
     fontSize: fontSize.lg,
     fontWeight: '600',
     color: colors.white,
@@ -230,8 +224,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
     paddingVertical: spacing.xs,
+    gap: spacing.md,
   },
   toggleLabel: {
+    flex: 1,
     fontSize: fontSize.xs,
     color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: '500',
@@ -242,10 +238,9 @@ const styles = StyleSheet.create({
   barRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: BAR_GAP,
+    marginBottom: spacing.sm,
   },
   muscleLabel: {
-    width: LABEL_WIDTH,
     fontSize: fontSize.xs,
     color: colors.white,
     fontWeight: '500',
@@ -255,7 +250,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   valueLabel: {
-    width: VALUE_WIDTH,
     fontSize: fontSize.xs,
     color: colors.white,
     fontWeight: '600',

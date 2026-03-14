@@ -10,6 +10,7 @@ import type { ApiError, MetricSummary } from '../../types';
 
 interface MetricsSummaryProps {
   onPress?: () => void;
+  contentWidth?: number;
 }
 
 const metricConfig: Record<
@@ -25,7 +26,7 @@ const metricConfig: Record<
   thighs: { icon: 'walk', label: 'Piernas', color: '#06B6D4' },
 };
 
-export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress }) => {
+export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress, contentWidth = 390 }) => {
   const [metrics, setMetrics] = useState<MetricSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +60,7 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress }) => {
         <View style={styles.header}>
           <Text style={styles.title}>Mis metricas</Text>
         </View>
-        <View style={styles.metricsGrid}>
+        <View style={[styles.metricsGrid, contentWidth >= 720 ? styles.metricsGridTablet : null]}>
           <StatCardSkeleton />
           <View style={styles.metricGap} />
           <StatCardSkeleton />
@@ -87,7 +88,7 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress }) => {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.metricsGrid}>
+      <View style={[styles.metricsGrid, contentWidth >= 720 ? styles.metricsGridTablet : null]}>
         {displayMetrics.map((metric, index) => (
           <MetricCard key={metric.metric_type} metric={metric} index={index} />
         ))}
@@ -191,11 +192,15 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
+  metricsGridTablet: {
+    justifyContent: 'space-between',
+  },
   metricGap: {
     width: spacing.sm,
   },
   metricCard: {
     width: '48%',
+    maxWidth: 280,
     backgroundColor: colors.white,
     borderRadius: borderRadius.lg,
     padding: spacing.md,

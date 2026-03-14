@@ -9,6 +9,7 @@ interface UserHeaderProps {
   user: User;
   macrocycle?: Macrocycle | null;
   onMenuPress?: () => void;
+  contentWidth?: number;
 }
 
 // Mapeo de objetivos a textos en español
@@ -25,6 +26,7 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
   user,
   macrocycle,
   onMenuPress,
+  contentWidth,
 }) => {
   // Get initials for avatar
   const initials = user.displayName
@@ -40,7 +42,7 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
     : null;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, contentWidth && contentWidth >= 720 ? styles.containerTablet : null]}>
       {/* User Info - Avatar + Name + Goal */}
       <View style={styles.userInfo}>
         <View style={styles.avatar}>
@@ -84,6 +86,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+  },
+  containerTablet: {
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.lg,
   },
   userInfo: {
     flexDirection: 'row',

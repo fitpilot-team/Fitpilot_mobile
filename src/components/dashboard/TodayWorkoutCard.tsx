@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Pressable, ImageBackground } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, ImageBackground } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,64 +12,48 @@ import Animated, {
 } from 'react-native-reanimated';
 import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import { WorkoutCardSkeleton } from '../common/Skeleton';
-import type { TrainingDay } from '../../types';
+import type { NextWorkoutReason, TrainingDay } from '../../types';
 
-// Imagen local de workout
 const workoutImage = require('../../../assets/mock-image-workout.jpg');
 
-// Dimensiones de la tarjeta
-const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_MARGIN = spacing.lg;
-const CARD_WIDTH = SCREEN_WIDTH - (CARD_MARGIN * 2);
 const CARD_HEIGHT = 240;
 const CORNER_RADIUS = borderRadius.xl;
 
-// Dimensiones del corte diagonal (chamfer)
-const CHAMFER_HORIZONTAL = 95;  // Donde empieza la diagonal desde la derecha
-const CHAMFER_VERTICAL = 45;    // Altura donde termina la diagonal
-const HORIZONTAL_SEGMENT = 70;  // Longitud del segmento horizontal después de la diagonal
-const CHAMFER_RADIUS = 12;      // Radio de las esquinas del corte
+const getChamferHorizontal = (cardWidth: number) => Math.max(84, Math.min(110, cardWidth * 0.16));
+const getHorizontalSegment = (cardWidth: number) => Math.max(56, Math.min(88, cardWidth * 0.12));
+const CHAMFER_VERTICAL = 45;
+const CHAMFER_RADIUS = 12;
 
-// Función helper para generar el path SVG de la tarjeta con 6 esquinas redondeadas
 const getCardShapePath = (
-  w: number,      // width total
-  h: number,      // height total
-  r: number,      // corner radius (esquinas principales)
-  chamferH: number,  // donde empieza la diagonal desde la derecha
-  chamferV: number,  // altura del corte
-  hSegment: number,  // longitud del segmento horizontal
-  cr: number         // chamfer corner radius
+  w: number,
+  h: number,
+  r: number,
+  chamferH: number,
+  chamferV: number,
+  hSegment: number,
+  cr: number
 ) => {
-  // Puntos (sentido horario):
-  // (1) Superior izquierda
-  // (2) Inicio de la diagonal
-  // (3) Fin de la diagonal
-  // (4) Esquina derecha del corte (antes de bajar)
-  // (5) Inferior derecha
-  // (6) Inferior izquierda
+  const x2 = w - chamferH;
+  const x3 = w - hSegment;
+  const y3 = chamferV;
 
-  const x2 = w - chamferH;           // donde empieza la diagonal (punto 2)
-  const x3 = w - hSegment;           // donde termina la diagonal (punto 3)
-  const y3 = chamferV;               // altura del corte
-
-  // Calcular vector unitario de la diagonal para posicionar curvas correctamente
   const dx = x3 - x2;
   const dy = y3;
   const len = Math.sqrt(dx * dx + dy * dy);
-  const ux = dx / len;  // componente x del vector unitario
-  const uy = dy / len;  // componente y del vector unitario
+  const ux = dx / len;
+  const uy = dy / len;
 
-  // Puntos donde la diagonal conecta con las curvas
-  const diag_start_x = x2 + cr * ux;
-  const diag_start_y = cr * uy;
-  const diag_end_x = x3 - cr * ux;
-  const diag_end_y = y3 - cr * uy;
+  const diagStartX = x2 + cr * ux;
+  const diagStartY = cr * uy;
+  const diagEndX = x3 - cr * ux;
+  const diagEndY = y3 - cr * uy;
 
   return `
     M ${r},0
     L ${x2 - cr},0
-    Q ${x2},0 ${diag_start_x},${diag_start_y}
-    L ${diag_end_x},${diag_end_y}
+    Q ${x2},0 ${diagStartX},${diagStartY}
+    L ${diagEndX},${diagEndY}
     Q ${x3},${y3} ${x3 + cr},${y3}
     L ${w - cr},${y3}
     Q ${w},${y3} ${w},${y3 + cr}
@@ -83,15 +67,27 @@ const getCardShapePath = (
   `;
 };
 
-// Componente máscara para la tarjeta
-const CardMask = () => (
-  <Svg width={CARD_WIDTH} height={CARD_HEIGHT}>
-    <Path
-      d={getCardShapePath(CARD_WIDTH, CARD_HEIGHT, CORNER_RADIUS, CHAMFER_HORIZONTAL, CHAMFER_VERTICAL, HORIZONTAL_SEGMENT, CHAMFER_RADIUS)}
-      fill="black"
-    />
-  </Svg>
-);
+const CardMask: React.FC<{ cardWidth: number; cardHeight: number }> = ({ cardWidth, cardHeight }) => {
+  const chamferHorizontal = getChamferHorizontal(cardWidth);
+  const horizontalSegment = getHorizontalSegment(cardWidth);
+
+  return (
+    <Svg width={cardWidth} height={cardHeight}>
+      <Path
+        d={getCardShapePath(
+          cardWidth,
+          cardHeight,
+          CORNER_RADIUS,
+          chamferHorizontal,
+          CHAMFER_VERTICAL,
+          horizontalSegment,
+          CHAMFER_RADIUS
+        )}
+        fill="black"
+      />
+    </Svg>
+  );
+};
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -100,19 +96,46 @@ interface TodayWorkoutCardProps {
   position?: number | null;
   total?: number | null;
   allCompleted?: boolean;
+  nextWorkoutReason?: NextWorkoutReason | null;
   onStartPress: () => void;
   isLoading?: boolean;
+  contentWidth?: number;
 }
+
+const getEmptyStateCopy = (reason?: NextWorkoutReason | null) => {
+  switch (reason) {
+    case 'no_active_macrocycle':
+      return {
+        title: 'No tienes un programa activo',
+        subtitle: 'Tu entrenador aún no te asigna un programa vigente.',
+      };
+    case 'no_training_days':
+      return {
+        title: 'Tu programa no tiene días visibles',
+        subtitle: 'Revisa con tu entrenador la programación de esta semana.',
+      };
+    default:
+      return {
+        title: 'No pudimos encontrar tu próximo entrenamiento',
+        subtitle: 'Intenta refrescar o revisa con tu entrenador tu programación.',
+      };
+  }
+};
 
 export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   trainingDay,
   position,
   total,
   allCompleted,
+  nextWorkoutReason,
   onStartPress,
   isLoading,
+  contentWidth,
 }) => {
   const scale = useSharedValue(1);
+  const availableWidth = Math.max(320, (contentWidth ?? 0) - CARD_MARGIN * 2);
+  const cardWidth = availableWidth;
+  const chamferHorizontal = getChamferHorizontal(cardWidth);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -126,7 +149,6 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
     scale.value = withSpring(1, { damping: 15, stiffness: 400 });
   };
 
-  // Estado: Cargando
   if (isLoading) {
     return (
       <View style={styles.skeletonWrapper}>
@@ -135,14 +157,13 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
     );
   }
 
-  // Estado: Programa completado
   if (allCompleted) {
     return (
       <View style={styles.completedContainer}>
         <View style={styles.completedIconContainer}>
           <Ionicons name="trophy" size={40} color={colors.white} />
         </View>
-        <Text style={styles.completedTitle}>¡Programa completado!</Text>
+        <Text style={styles.completedTitle}>Programa completado</Text>
         <Text style={styles.completedSubtitle}>
           Felicitaciones, completaste {total} entrenamientos
         </Text>
@@ -150,20 +171,18 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
     );
   }
 
-  // Estado: Sin entrenamiento disponible
   if (!trainingDay) {
+    const emptyStateCopy = getEmptyStateCopy(nextWorkoutReason);
+
     return (
       <View style={styles.emptyContainer}>
         <Ionicons name="calendar-outline" size={48} color={colors.gray[300]} />
-        <Text style={styles.emptyTitle}>Sin programa activo</Text>
-        <Text style={styles.emptySubtitle}>
-          Contacta a tu entrenador para asignarte un programa
-        </Text>
+        <Text style={styles.emptyTitle}>{emptyStateCopy.title}</Text>
+        <Text style={styles.emptySubtitle}>{emptyStateCopy.subtitle}</Text>
       </View>
     );
   }
 
-  // Calcular duración estimada (3 min por serie)
   const totalSets = trainingDay.exercises.reduce((sum, ex) => sum + ex.sets, 0);
   const estimatedMinutes = Math.round(totalSets * 3);
   const hours = Math.floor(estimatedMinutes / 60);
@@ -177,47 +196,40 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
       onPressOut={handlePressOut}
       onPress={onStartPress}
     >
-      {/* Tarjeta con MaskedView para recorte de 6 lados */}
       <MaskedView
-        style={styles.cardContainer}
-        maskElement={<CardMask />}
+        style={[styles.cardContainer, { width: cardWidth, height: CARD_HEIGHT }]}
+        maskElement={<CardMask cardWidth={cardWidth} cardHeight={CARD_HEIGHT} />}
       >
         <ImageBackground
           source={workoutImage}
-          style={styles.maskedImage}
+          style={[styles.maskedImage, { width: cardWidth, height: CARD_HEIGHT }]}
           resizeMode="cover"
         >
-          {/* Overlay oscuro con gradiente */}
           <LinearGradient
             colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.5)']}
             style={styles.overlay}
           />
 
-          {/* Borde de vidrio sutil */}
           <View style={styles.glassBorder} pointerEvents="none" />
 
-          {/* Contenido superpuesto */}
           <View style={styles.content}>
-            {/* Header con posición */}
             {position && total && (
               <View style={styles.positionBadge}>
                 <BlurView intensity={40} tint="light" style={styles.positionBlur}>
                   <Text style={styles.positionText}>
-                    Día {position} de {total}
+                    Dia {position} de {total}
                   </Text>
                 </BlurView>
               </View>
             )}
 
-            {/* Título en la esquina superior izquierda */}
-            <View style={styles.titleArea}>
+            <View style={[styles.titleArea, { maxWidth: cardWidth - chamferHorizontal - spacing.lg }]}>
               <Text style={styles.title}>{trainingDay.name}</Text>
               {trainingDay.focus && (
                 <Text style={styles.focusText}>{trainingDay.focus}</Text>
               )}
             </View>
 
-            {/* Botón empezar con glassmorphism */}
             <TouchableOpacity
               style={styles.startButton}
               onPress={onStartPress}
@@ -234,9 +246,8 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
         </ImageBackground>
       </MaskedView>
 
-      {/* Contenido de duración en el área del corte */}
       <View style={styles.durationContainer}>
-        <Text style={styles.durationLabel}>Duración:</Text>
+        <Text style={styles.durationLabel}>Duracion:</Text>
         <Text style={styles.durationValue}>{durationText}</Text>
       </View>
     </AnimatedPressable>
@@ -273,15 +284,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   cardContainer: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
     overflow: 'hidden',
     borderRadius: CORNER_RADIUS,
     ...shadows.lg,
   },
   maskedImage: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
+    justifyContent: 'center',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -316,7 +324,6 @@ const styles = StyleSheet.create({
     color: colors.gray[800],
   },
   titleArea: {
-    maxWidth: CARD_WIDTH - CHAMFER_HORIZONTAL - spacing.lg,
     marginTop: spacing.xl,
   },
   title: {

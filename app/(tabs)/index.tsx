@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback, useState } from 'react';
-import { StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
+import { StyleSheet, ScrollView, RefreshControl, Alert, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -19,8 +19,12 @@ import {
 import { colors, spacing } from '../../src/constants/colors';
 import { getMuscleVolume } from '../../src/services/api';
 import type { MuscleVolumeResponse } from '../../src/types';
+import { getDashboardContentWidth, isTabletLayout } from '../../src/utils/layout';
 
 export default function HomeScreen() {
+  const { width, height } = useWindowDimensions();
+  const isTablet = isTabletLayout(width, height);
+  const contentWidth = getDashboardContentWidth(width);
   const { user } = useAuthStore();
   const {
     activeMacrocycle,
@@ -29,6 +33,7 @@ export default function HomeScreen() {
     workoutPosition,
     workoutTotal,
     allCompleted,
+    nextWorkoutReason,
     isLoading,
     isStartingWorkout,
     error,
@@ -44,11 +49,14 @@ export default function HomeScreen() {
   const [countSecondaryMuscles, setCountSecondaryMuscles] = useState(true);
 
   useEffect(() => {
-    loadDashboardData();
-    loadNextWorkout();
-  }, []);
+    const loadInitialDashboard = async () => {
+      await loadDashboardData();
+      await loadNextWorkout();
+    };
 
-  // Cargar volumen muscular cuando hay un entrenamiento disponible
+    void loadInitialDashboard();
+  }, [loadDashboardData, loadNextWorkout]);
+
   useEffect(() => {
     const loadMuscleVolume = async () => {
       if (todayTrainingDay?.id && !todayTrainingDay.rest_day) {
@@ -67,20 +75,20 @@ export default function HomeScreen() {
       }
     };
 
-    loadMuscleVolume();
+    void loadMuscleVolume();
   }, [todayTrainingDay?.id, countSecondaryMuscles]);
 
   useEffect(() => {
     if (error) {
       Alert.alert('Error', error, [{ text: 'OK', onPress: clearError }]);
     }
-  }, [error]);
+  }, [clearError, error]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadDashboardData();
     await loadNextWorkout();
-    // Recargar volumen muscular si hay entrenamiento
+
     if (todayTrainingDay?.id && !todayTrainingDay.rest_day) {
       try {
         const data = await getMuscleVolume(todayTrainingDay.id, countSecondaryMuscles);
@@ -89,8 +97,9 @@ export default function HomeScreen() {
         console.error('Error refreshing muscle volume:', err);
       }
     }
+
     setRefreshing(false);
-  }, [todayTrainingDay?.id, countSecondaryMuscles]);
+  }, [countSecondaryMuscles, loadDashboardData, loadNextWorkout, todayTrainingDay?.id, todayTrainingDay?.rest_day]);
 
   const handleStartWorkout = async () => {
     if (!todayTrainingDay) return;
@@ -121,7 +130,10 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          isTablet ? styles.scrollContentTablet : null,
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -131,70 +143,70 @@ export default function HomeScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* User Header con Logo */}
-        <Animated.View entering={FadeInDown.duration(400)}>
-          <UserHeader
-            user={user}
-            macrocycle={activeMacrocycle}
-          />
-        </Animated.View>
-
-        {/* Week Calendar */}
-        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-          <WeekCalendar weeklyProgress={weeklyProgress} />
-        </Animated.View>
-
-        {/* Quick Stats */}
-        <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-          <QuickStats
-            weeklyProgress={weeklyProgress}
-            workoutPosition={workoutPosition}
-            workoutTotal={workoutTotal}
-            isLoading={isLoading && !refreshing}
-          />
-        </Animated.View>
-
-        {/* Next Workout Card */}
-        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
-          <TodayWorkoutCard
-            trainingDay={todayTrainingDay}
-            position={workoutPosition}
-            total={workoutTotal}
-            allCompleted={allCompleted}
-            onStartPress={handleStartWorkout}
-            isLoading={isStartingWorkout}
-          />
-        </Animated.View>
-
-        {/* Activity Chart - Volumen por Músculo */}
-        <Animated.View entering={FadeInDown.delay(400).duration(400)}>
-          <ActivityChart
-            muscleVolume={muscleVolume}
-            isLoading={isLoadingVolume || (isLoading && !refreshing)}
-            countSecondaryMuscles={countSecondaryMuscles}
-            onToggleSecondary={handleToggleSecondary}
-          />
-        </Animated.View>
-
-        {/* Science Tips */}
-        <Animated.View entering={FadeInDown.delay(500).duration(400)}>
-          <ScienceTips />
-        </Animated.View>
-
-        {/* Metrics Summary */}
-        <Animated.View entering={FadeInDown.delay(600).duration(400)}>
-          <MetricsSummary />
-        </Animated.View>
-
-        {/* Upcoming Workouts */}
-        {weeklyProgress?.days && (
-          <Animated.View entering={FadeInDown.delay(700).duration(400)}>
-            <UpcomingWorkouts
-              days={weeklyProgress.days}
-              isLoading={isLoading && !refreshing}
+        <View style={[styles.contentColumn, { maxWidth: contentWidth }]}>
+          <Animated.View entering={FadeInDown.duration(400)}>
+            <UserHeader
+              user={user}
+              macrocycle={activeMacrocycle}
+              contentWidth={contentWidth}
             />
           </Animated.View>
-        )}
+
+          <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+            <WeekCalendar weeklyProgress={weeklyProgress} contentWidth={contentWidth} />
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+            <QuickStats
+              weeklyProgress={weeklyProgress}
+              workoutPosition={workoutPosition}
+              workoutTotal={workoutTotal}
+              isLoading={isLoading && !refreshing}
+              contentWidth={contentWidth}
+            />
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+            <TodayWorkoutCard
+              trainingDay={todayTrainingDay}
+              position={workoutPosition}
+              total={workoutTotal}
+              allCompleted={allCompleted}
+              nextWorkoutReason={nextWorkoutReason}
+              onStartPress={handleStartWorkout}
+              isLoading={isStartingWorkout || (isLoading && !todayTrainingDay && !allCompleted)}
+              contentWidth={contentWidth}
+            />
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(400).duration(400)}>
+            <ActivityChart
+              muscleVolume={muscleVolume}
+              isLoading={isLoadingVolume || (isLoading && !refreshing)}
+              countSecondaryMuscles={countSecondaryMuscles}
+              onToggleSecondary={handleToggleSecondary}
+              contentWidth={contentWidth}
+            />
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(500).duration(400)}>
+            <ScienceTips contentWidth={contentWidth} />
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(600).duration(400)}>
+            <MetricsSummary contentWidth={contentWidth} />
+          </Animated.View>
+
+          {weeklyProgress?.days?.length ? (
+            <Animated.View entering={FadeInDown.delay(700).duration(400)}>
+              <UpcomingWorkouts
+                days={weeklyProgress.days}
+                isLoading={isLoading && !refreshing}
+                contentWidth={contentWidth}
+              />
+            </Animated.View>
+          ) : null}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -209,6 +221,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: spacing.xxl + 60, // Extra padding for tab bar
+    paddingBottom: spacing.xxl + 60,
+  },
+  scrollContentTablet: {
+    paddingBottom: spacing.xxl,
+  },
+  contentColumn: {
+    width: '100%',
+    alignSelf: 'center',
   },
 });

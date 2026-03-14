@@ -1,5 +1,5 @@
-import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Card } from '../common';
@@ -10,7 +10,12 @@ import {
   fontSize,
   spacing,
 } from '../../constants/colors';
-import type { ClientDietItem, ClientDietMeal } from '../../types';
+import type {
+  ClientDietFoodRow,
+  ClientDietIngredientRow,
+  ClientDietMeal,
+  ClientDietRecipeCard,
+} from '../../types';
 
 interface DietMealCardProps {
   meal: ClientDietMeal;
@@ -28,8 +33,15 @@ const formatCalories = (value: number | null) => {
     return null;
   }
 
-  const rounded = Math.round(value);
-  return `${rounded} kcal`;
+  return `${Math.round(value)} kcal`;
+};
+
+const formatMeasureValue = (value: number | null, suffix: string) => {
+  if (value === null) {
+    return '—';
+  }
+
+  return `${Number.isInteger(value) ? value : Number(value.toFixed(2))} ${suffix}`;
 };
 
 const normalizeGroupName = (value: string | null | undefined) =>
@@ -133,10 +145,84 @@ const getFoodGroupVisual = (groupName: string | null): FoodGroupVisual => {
   };
 };
 
-const RecipeItemCard: React.FC<{ item: ClientDietItem }> = ({ item }) => (
+const PortionChips: React.FC<{ ingredient: ClientDietIngredientRow | ClientDietFoodRow }> = ({ ingredient }) => (
+  <View style={styles.portionGrid}>
+    <View style={styles.portionChip}>
+      <Text style={styles.portionChipLabel}>Unidad</Text>
+      <Text style={styles.portionChipValue}>{ingredient.portion.householdLabel || '—'}</Text>
+    </View>
+    <View style={styles.portionChip}>
+      <Text style={styles.portionChipLabel}>Equivalentes</Text>
+      <Text style={styles.portionChipValue}>
+        {formatMeasureValue(ingredient.portion.equivalents, 'eq')}
+      </Text>
+    </View>
+    <View style={styles.portionChip}>
+      <Text style={styles.portionChipLabel}>Gramos</Text>
+      <Text style={styles.portionChipValue}>
+        {formatMeasureValue(ingredient.portion.grams, 'g')}
+      </Text>
+    </View>
+  </View>
+);
+
+const IngredientRow: React.FC<{
+  ingredient: ClientDietIngredientRow | ClientDietFoodRow;
+  accent?: 'recipe' | 'food';
+}> = ({ ingredient, accent = 'food' }) => {
+  const foodGroupVisual = getFoodGroupVisual(ingredient.exchangeGroupName);
+
+  return (
+    <View
+      style={[
+        styles.foodRow,
+        { borderColor: accent === 'recipe' ? '#D8E7F4' : foodGroupVisual.borderColor },
+      ]}
+    >
+      <View style={[styles.foodIcon, { backgroundColor: foodGroupVisual.backgroundColor }]}>
+        <Ionicons name={foodGroupVisual.icon} size={18} color={foodGroupVisual.iconColor} />
+      </View>
+
+      <View style={styles.foodBody}>
+        <View style={styles.foodHeader}>
+          <View style={styles.foodText}>
+            <Text style={styles.foodLabel}>{ingredient.label}</Text>
+            {ingredient.exchangeGroupName ? (
+              <Text style={styles.foodSubtitle}>{ingredient.exchangeGroupName}</Text>
+            ) : null}
+          </View>
+        </View>
+
+        <PortionChips ingredient={ingredient} />
+      </View>
+    </View>
+  );
+};
+
+const SectionHeader: React.FC<{
+  title: string;
+  count: number;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+}> = ({ title, count, icon }) => (
+  <View style={styles.sectionHeader}>
+    <View style={styles.sectionTitleRow}>
+      <View style={styles.sectionIcon}>
+        <Ionicons name={icon} size={15} color={brandColors.navy} />
+      </View>
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+    <Text style={styles.sectionCount}>{count}</Text>
+  </View>
+);
+
+const RecipeCard: React.FC<{
+  recipe: ClientDietRecipeCard;
+  expanded: boolean;
+  onToggle: () => void;
+}> = ({ recipe, expanded, onToggle }) => (
   <View style={styles.recipeCard}>
-    {item.recipe?.imageUrl ? (
-      <Image source={{ uri: item.recipe.imageUrl }} style={styles.recipeImage} resizeMode="cover" />
+    {recipe.imageUrl ? (
+      <Image source={{ uri: recipe.imageUrl }} style={styles.recipeImage} resizeMode="cover" />
     ) : (
       <LinearGradient
         colors={['#E8EFF7', '#D8E7F4', '#C5DCF0']}
@@ -149,36 +235,65 @@ const RecipeItemCard: React.FC<{ item: ClientDietItem }> = ({ item }) => (
     )}
 
     <View style={styles.recipeContent}>
-      <View style={styles.recipeBadge}>
-        <Text style={styles.recipeBadgeText}>Receta</Text>
+      <View style={styles.recipeTopRow}>
+        <View style={styles.recipeBadge}>
+          <Text style={styles.recipeBadgeText}>Receta</Text>
+        </View>
+        <Text style={styles.recipeCount}>
+          {recipe.ingredientCount} ingrediente{recipe.ingredientCount === 1 ? '' : 's'}
+        </Text>
       </View>
-      <Text style={styles.recipeTitle}>{item.label}</Text>
-      {item.quantityLabel ? <Text style={styles.recipeSubtitle}>{item.quantityLabel}</Text> : null}
+
+      <Text style={styles.recipeTitle}>{recipe.title}</Text>
+      <Text style={styles.recipeSubtitle}>
+        Ingredientes y porciones de esta preparación dentro de tu plan.
+      </Text>
+
+      <Pressable style={styles.recipeToggle} onPress={onToggle}>
+        <Text style={styles.recipeToggleText}>
+          {expanded ? 'Ocultar ingredientes' : 'Ver ingredientes'}
+        </Text>
+        <Ionicons
+          name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+          size={18}
+          color={brandColors.navy}
+        />
+      </Pressable>
+
+      {expanded ? (
+        <View style={styles.recipeIngredients}>
+          {recipe.ingredients.map((ingredient) => (
+            <IngredientRow
+              key={ingredient.id}
+              ingredient={ingredient}
+              accent="recipe"
+            />
+          ))}
+        </View>
+      ) : null}
     </View>
   </View>
 );
 
-const FoodItemRow: React.FC<{ item: ClientDietItem }> = ({ item }) => {
-  const foodGroupVisual = getFoodGroupVisual(item.exchangeGroupName);
-
-  return (
-  <View style={[styles.foodRow, { borderColor: foodGroupVisual.borderColor }]}>
-    <View style={[styles.foodIcon, { backgroundColor: foodGroupVisual.backgroundColor }]}>
-      <Ionicons name={foodGroupVisual.icon} size={18} color={foodGroupVisual.iconColor} />
-    </View>
-
-    <View style={styles.foodText}>
-      <Text style={styles.foodLabel}>{item.label}</Text>
-      {item.exchangeGroupName ? <Text style={styles.foodSubtitle}>{item.exchangeGroupName}</Text> : null}
-    </View>
-
-    {item.quantityLabel ? <Text style={styles.foodQuantity}>{item.quantityLabel}</Text> : null}
-  </View>
-  );
-};
-
 export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
   const caloriesLabel = formatCalories(meal.totalCalories);
+  const [expandedRecipeIds, setExpandedRecipeIds] = useState<Record<string, boolean>>({});
+
+  const recipeKey = useMemo(
+    () => meal.recipes.map((recipe) => recipe.id).join('|'),
+    [meal.recipes],
+  );
+
+  useEffect(() => {
+    setExpandedRecipeIds({});
+  }, [meal.id, meal.totalEntries, recipeKey]);
+
+  const toggleRecipe = (recipeId: string) => {
+    setExpandedRecipeIds((currentState) => ({
+      ...currentState,
+      [recipeId]: !currentState[recipeId],
+    }));
+  };
 
   return (
     <Card style={styles.card} padding="none">
@@ -186,7 +301,7 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
         <View>
           <Text style={styles.mealName}>{meal.name}</Text>
           <Text style={styles.mealCount}>
-            {meal.items.length} {meal.items.length === 1 ? 'item' : 'items'}
+            {meal.totalEntries} {meal.totalEntries === 1 ? 'item' : 'items'}
           </Text>
         </View>
         {caloriesLabel ? (
@@ -197,13 +312,36 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
       </View>
 
       <View style={styles.content}>
-        {meal.items.map((item) =>
-          item.kind === 'recipe' && item.recipe ? (
-            <RecipeItemCard key={item.id} item={item} />
-          ) : (
-            <FoodItemRow key={item.id} item={item} />
-          ),
-        )}
+        {meal.recipes.length > 0 ? (
+          <View style={styles.sectionBlock}>
+            <SectionHeader title="Recetas" count={meal.recipes.length} icon="restaurant-outline" />
+            <View style={styles.sectionStack}>
+              {meal.recipes.map((recipe) => (
+                <RecipeCard
+                  key={recipe.id}
+                  recipe={recipe}
+                  expanded={Boolean(expandedRecipeIds[recipe.id])}
+                  onToggle={() => toggleRecipe(recipe.id)}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {meal.standaloneFoods.length > 0 ? (
+          <View style={styles.sectionBlock}>
+            <SectionHeader
+              title="Alimentos sueltos"
+              count={meal.standaloneFoods.length}
+              icon="nutrition-outline"
+            />
+            <View style={styles.sectionStack}>
+              {meal.standaloneFoods.map((food) => (
+                <IngredientRow key={food.id} ingredient={food} />
+              ))}
+            </View>
+          </View>
+        ) : null}
       </View>
     </Card>
   );
@@ -243,6 +381,40 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.lg,
+    gap: spacing.lg,
+  },
+  sectionBlock: {
+    gap: spacing.md,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  sectionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: `${brandColors.sky}20`,
+  },
+  sectionTitle: {
+    color: colors.gray[900],
+    fontSize: fontSize.base,
+    fontWeight: '800',
+  },
+  sectionCount: {
+    color: colors.gray[500],
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+  },
+  sectionStack: {
     gap: spacing.md,
   },
   recipeCard: {
@@ -265,6 +437,12 @@ const styles = StyleSheet.create({
   recipeContent: {
     padding: spacing.md,
   },
+  recipeTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
   recipeBadge: {
     alignSelf: 'flex-start',
     borderRadius: borderRadius.full,
@@ -279,6 +457,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
+  recipeCount: {
+    color: colors.gray[500],
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+  },
   recipeTitle: {
     marginTop: spacing.md,
     color: colors.gray[900],
@@ -289,16 +472,36 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     color: colors.gray[500],
     fontSize: fontSize.sm,
+    lineHeight: 20,
+  },
+  recipeToggle: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: '#D8E7F4',
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  recipeToggleText: {
+    color: brandColors.navy,
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+  },
+  recipeIngredients: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
   },
   foodRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: spacing.md,
     padding: spacing.md,
     borderRadius: borderRadius.lg,
     backgroundColor: '#FAFBFD',
     borderWidth: 1,
-    borderColor: colors.gray[200],
   },
   foodIcon: {
     width: 42,
@@ -306,6 +509,15 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 2,
+  },
+  foodBody: {
+    flex: 1,
+  },
+  foodHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
   },
   foodText: {
     flex: 1,
@@ -320,8 +532,31 @@ const styles = StyleSheet.create({
     color: colors.gray[500],
     fontSize: fontSize.sm,
   },
-  foodQuantity: {
-    color: brandColors.navy,
+  portionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  portionChip: {
+    minWidth: 88,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: '#E5EDF5',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  portionChipLabel: {
+    color: colors.gray[500],
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  portionChipValue: {
+    marginTop: 4,
+    color: colors.gray[900],
     fontSize: fontSize.sm,
     fontWeight: '700',
   },

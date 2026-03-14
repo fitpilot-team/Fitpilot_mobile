@@ -1,16 +1,14 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Dimensions,
   TouchableOpacity,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInRight } from 'react-native-reanimated';
 import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
@@ -20,39 +18,44 @@ interface ScienceTipsProps {
   tips?: ScienceTip[];
   autoScroll?: boolean;
   autoScrollInterval?: number;
+  contentWidth?: number;
 }
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2 - spacing.md;
-const CARD_MARGIN = spacing.sm;
-
 export const ScienceTips: React.FC<ScienceTipsProps> = ({
-  tips = scienceTips.slice(0, 5), // Mostrar 5 tips por defecto
+  tips = scienceTips.slice(0, 5),
   autoScroll = false,
   autoScrollInterval = 5000,
+  contentWidth = 390,
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // Auto-scroll opcional
+  const cardMetrics = useMemo(() => {
+    const availableWidth = Math.max(320, contentWidth - spacing.lg * 2);
+    const cardWidth = Math.min(availableWidth - spacing.md * 2, 420);
+    const snapInterval = cardWidth + spacing.sm * 2;
+
+    return { cardWidth, snapInterval };
+  }, [contentWidth]);
+
   useEffect(() => {
-    if (!autoScroll) return;
+    if (!autoScroll || tips.length === 0) return;
 
     const interval = setInterval(() => {
       const nextIndex = (activeIndex + 1) % tips.length;
       scrollViewRef.current?.scrollTo({
-        x: nextIndex * (CARD_WIDTH + CARD_MARGIN * 2),
+        x: nextIndex * cardMetrics.snapInterval,
         animated: true,
       });
       setActiveIndex(nextIndex);
     }, autoScrollInterval);
 
     return () => clearInterval(interval);
-  }, [autoScroll, activeIndex, tips.length, autoScrollInterval]);
+  }, [activeIndex, autoScroll, autoScrollInterval, cardMetrics.snapInterval, tips.length]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const contentOffset = event.nativeEvent.contentOffset.x;
-    const index = Math.round(contentOffset / (CARD_WIDTH + CARD_MARGIN * 2));
+    const index = Math.round(contentOffset / cardMetrics.snapInterval);
     if (index !== activeIndex && index >= 0 && index < tips.length) {
       setActiveIndex(index);
     }
@@ -60,11 +63,10 @@ export const ScienceTips: React.FC<ScienceTipsProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Ionicons name="bulb" size={20} color={brandColors.sky} />
-          <Text style={styles.title}>Tips Científicos</Text>
+          <Text style={styles.title}>Tips Cientificos</Text>
         </View>
         <TouchableOpacity style={styles.seeAllButton}>
           <Text style={styles.seeAllText}>Ver todos</Text>
@@ -72,24 +74,22 @@ export const ScienceTips: React.FC<ScienceTipsProps> = ({
         </TouchableOpacity>
       </View>
 
-      {/* Carrusel horizontal */}
       <ScrollView
         ref={scrollViewRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         pagingEnabled={false}
-        snapToInterval={CARD_WIDTH + CARD_MARGIN * 2}
+        snapToInterval={cardMetrics.snapInterval}
         decelerationRate="fast"
         contentContainerStyle={styles.scrollContent}
         onScroll={handleScroll}
         scrollEventThrottle={16}
       >
         {tips.map((tip, index) => (
-          <TipCard key={tip.id} tip={tip} index={index} />
+          <TipCard key={tip.id} tip={tip} index={index} cardWidth={cardMetrics.cardWidth} />
         ))}
       </ScrollView>
 
-      {/* Indicadores de página */}
       <View style={styles.pagination}>
         {tips.map((_, index) => (
           <View
@@ -105,22 +105,21 @@ export const ScienceTips: React.FC<ScienceTipsProps> = ({
   );
 };
 
-// Componente de tarjeta individual
 interface TipCardProps {
   tip: ScienceTip;
   index: number;
+  cardWidth: number;
 }
 
-const TipCard: React.FC<TipCardProps> = ({ tip, index }) => {
+const TipCard: React.FC<TipCardProps> = ({ tip, index, cardWidth }) => {
   const categoryColor = categoryColors[tip.category];
 
   return (
     <Animated.View
       entering={FadeInRight.delay(index * 100).duration(400)}
-      style={styles.cardWrapper}
+      style={[styles.cardWrapper, { width: cardWidth }]}
     >
       <View style={[styles.card, shadows.md]}>
-        {/* Fondo con gradiente sutil */}
         <LinearGradient
           colors={[`${categoryColor}15`, `${categoryColor}05`]}
           start={{ x: 0, y: 0 }}
@@ -128,13 +127,11 @@ const TipCard: React.FC<TipCardProps> = ({ tip, index }) => {
           style={StyleSheet.absoluteFill}
         />
 
-        {/* Contenido */}
         <View style={styles.cardContent}>
-          {/* Header de la tarjeta */}
           <View style={styles.cardHeader}>
             <View style={[styles.iconContainer, { backgroundColor: `${categoryColor}20` }]}>
               <Ionicons
-                name={tip.icon as any}
+                name={tip.icon as React.ComponentProps<typeof Ionicons>['name']}
                 size={20}
                 color={categoryColor}
               />
@@ -146,17 +143,14 @@ const TipCard: React.FC<TipCardProps> = ({ tip, index }) => {
             </View>
           </View>
 
-          {/* Título */}
           <Text style={styles.cardTitle} numberOfLines={1}>
             {tip.title}
           </Text>
 
-          {/* Contenido */}
           <Text style={styles.cardDescription} numberOfLines={3}>
             {tip.content}
           </Text>
 
-          {/* Fuente (si existe) */}
           {tip.source && (
             <View style={styles.sourceContainer}>
               <Ionicons name="document-text-outline" size={12} color={colors.gray[400]} />
@@ -171,13 +165,12 @@ const TipCard: React.FC<TipCardProps> = ({ tip, index }) => {
   );
 };
 
-// Helper para obtener label de categoría
 const getCategoryLabel = (category: string): string => {
   const labels: Record<string, string> = {
-    recovery: 'Recuperación',
-    nutrition: 'Nutrición',
-    technique: 'Técnica',
-    motivation: 'Motivación',
+    recovery: 'Recuperacion',
+    nutrition: 'Nutricion',
+    technique: 'Tecnica',
+    motivation: 'Motivacion',
     science: 'Ciencia',
   };
   return labels[category] || category;
@@ -218,8 +211,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   cardWrapper: {
-    width: CARD_WIDTH,
-    marginHorizontal: CARD_MARGIN,
+    marginHorizontal: spacing.sm,
   },
   card: {
     backgroundColor: colors.white,
@@ -236,6 +228,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
+    gap: spacing.sm,
   },
   iconContainer: {
     width: 36,

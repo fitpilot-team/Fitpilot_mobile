@@ -10,12 +10,14 @@ interface UpcomingWorkoutsProps {
   days: DayProgress[];
   isLoading?: boolean;
   onDayPress?: (day: DayProgress) => void;
+  contentWidth?: number;
 }
 
 export const UpcomingWorkouts: React.FC<UpcomingWorkoutsProps> = ({
   days,
   isLoading = false,
   onDayPress,
+  contentWidth,
 }) => {
   // Filtrar solo días futuros con entrenamiento
   const today = new Date().toISOString().split('T')[0];
@@ -45,7 +47,7 @@ export const UpcomingWorkouts: React.FC<UpcomingWorkoutsProps> = ({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, contentWidth && contentWidth >= 720 ? styles.containerTablet : null]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -130,6 +132,9 @@ const styles = StyleSheet.create({
   container: {
     marginVertical: spacing.md,
     paddingHorizontal: spacing.lg,
+  },
+  containerTablet: {
+    paddingBottom: spacing.md,
   },
   header: {
     flexDirection: 'row',

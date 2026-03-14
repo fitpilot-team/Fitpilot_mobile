@@ -20,6 +20,7 @@ interface QuickStatsProps {
   workoutPosition: number | null;
   workoutTotal: number | null;
   isLoading?: boolean;
+  contentWidth?: number;
 }
 
 interface StatItem {
@@ -35,6 +36,7 @@ export const QuickStats: React.FC<QuickStatsProps> = ({
   workoutPosition,
   workoutTotal,
   isLoading = false,
+  contentWidth = 390,
 }) => {
   const animationProgress = useSharedValue(0);
 
@@ -50,7 +52,7 @@ export const QuickStats: React.FC<QuickStatsProps> = ({
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <View style={styles.statsRow}>
+        <View style={[styles.statsRow, contentWidth >= 720 ? styles.statsRowTablet : null]}>
           <StatCardSkeleton />
           <View style={styles.statGap} />
           <StatCardSkeleton />
@@ -90,7 +92,7 @@ export const QuickStats: React.FC<QuickStatsProps> = ({
 
   return (
     <View style={styles.container}>
-      <View style={styles.statsRow}>
+      <View style={[styles.statsRow, contentWidth >= 720 ? styles.statsRowTablet : null]}>
         {stats.map((stat, index) => (
           <StatCard
             key={stat.label}
@@ -162,11 +164,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  statsRowTablet: {
+    gap: spacing.md,
+  },
   statGap: {
     width: spacing.sm,
   },
   statCard: {
     flex: 1,
+    minHeight: 146,
+    maxWidth: 280,
     backgroundColor: colors.white,
     borderRadius: borderRadius.lg,
     padding: spacing.md,
