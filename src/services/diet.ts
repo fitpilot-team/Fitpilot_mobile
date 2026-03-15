@@ -90,6 +90,11 @@ type NutritionMenuResponse = {
   menu_meals?: NutritionMenuMealResponse[];
 };
 
+type NutritionDailyBatchResponseItem = NutritionMenuResponse & {
+  assigned_date?: string | null;
+  menu_id_selected_client?: number | null;
+};
+
 type RecipeGroupAccumulator = {
   summary: ClientRecipeSummary;
   detail: NutritionEmbeddedRecipeDetailResponse | null;
@@ -448,39 +453,23 @@ export const getClientDietCalendar = async (
 
   const todayDate = getTodayDateKey();
   const anchorDate = normalizeDateKey(date) || todayDate;
-  const requestedDates = Array.from({ length: DIET_LOOKAHEAD_DAYS }, (_, offset) => {
-    const currentDate = new Date(`${anchorDate}T12:00:00`);
-    currentDate.setDate(currentDate.getDate() + offset);
-    return normalizeDateKey(currentDate.toISOString()) as string;
-  });
-
-  const dailyMenus = await Promise.all(
-    requestedDates.map(async (requestedDate) => {
-      const menu = await nutritionClient.get<NutritionMenuResponse | null>(
-        `/menus/daily?client_id=${numericClientId}&date=${requestedDate}`,
-        { skipErrorLogging: true },
-      );
-
-      return {
-        requestedDate,
-        menu,
-      };
-    }),
+  const dailyMenus = await nutritionClient.get<NutritionDailyBatchResponseItem[]>(
+    `/menus/daily/batch?client_id=${numericClientId}&date=${anchorDate}&days=${DIET_LOOKAHEAD_DAYS}`,
+    { skipErrorLogging: true },
   );
 
-  const recipeSummaryMap = await buildRecipeSummaryMap(
-    dailyMenus.flatMap(({ menu }) => (menu ? [menu] : [])),
-  );
+  const recipeSummaryMap = await buildRecipeSummaryMap(dailyMenus);
   const daysByDate = new Map<string, ClientDietDay>();
 
-  for (const { requestedDate, menu } of dailyMenus) {
-    if (!menu) {
+  for (const menu of dailyMenus) {
+    const assignedDate = normalizeDateKey(menu.assigned_date);
+    if (!assignedDate) {
       continue;
     }
 
     daysByDate.set(
-      requestedDate,
-      mapDietDay(menu, requestedDate, todayDate, recipeSummaryMap),
+      assignedDate,
+      mapDietDay(menu, assignedDate, todayDate, recipeSummaryMap),
     );
   }
 
