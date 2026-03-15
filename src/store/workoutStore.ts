@@ -14,6 +14,7 @@ import type {
   AbandonReason,
   ExerciseProgress,
 } from '../types';
+import { getTodayDateKey } from '../utils/date';
 
 interface WorkoutState {
   // Data
@@ -81,8 +82,6 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       restSeconds: dayExercise?.rest_seconds || 90,
     };
   };
-
-  const getTodayDateKey = () => new Date().toISOString().split('T')[0];
 
   const getWeeklyTrainingDayIds = (progress: WeeklyProgress | null): string[] =>
     progress?.days
@@ -323,7 +322,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
 
       try {
         // Find today's training day from the macrocycle
-        const today = new Date().toISOString().split('T')[0];
+        const today = getTodayDateKey();
 
         for (const mesocycle of activeMacrocycle.mesocycles) {
           for (const microcycle of mesocycle.microcycles) {

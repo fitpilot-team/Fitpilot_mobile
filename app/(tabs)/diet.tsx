@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,23 +14,41 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Button, Card, LoadingSpinner } from '../../src/components/common';
-import { DietDaySelector, DietHero, DietMealCard } from '../../src/components/diet';
+import {
+  DietHero,
+  DietMealCard,
+  DietMenuSelectorModal,
+  DietWeekCalendar,
+} from '../../src/components/diet';
 import { borderRadius, brandColors, colors, fontSize, spacing } from '../../src/constants/colors';
 import { useAuthStore } from '../../src/store/authStore';
-import { getClientDietCalendar, getTodayDietDateKey } from '../../src/services/diet';
-import type { ClientDietDay } from '../../src/types';
+import {
+  getClientDietCalendar,
+  getClientDietMenuPool,
+  getTodayDietDateKey,
+} from '../../src/services/diet';
+import { getDashboardContentWidth } from '../../src/utils/layout';
+import { formatLocalDate, getLocalWeekKey } from '../../src/utils/date';
+import type { ClientDietMenu, ClientDietWeekDay } from '../../src/types';
 
 const formatLongDate = (value: string) =>
-  new Intl.DateTimeFormat('es-MX', {
+  formatLocalDate(value, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
-  }).format(new Date(`${value}T12:00:00`));
+  });
 
 export default function DietScreen() {
+  const { width } = useWindowDimensions();
+  const contentWidth = getDashboardContentWidth(width);
   const { user } = useAuthStore();
-  const [dietDays, setDietDays] = useState<ClientDietDay[]>([]);
+  const [dietDays, setDietDays] = useState<ClientDietWeekDay[]>([]);
   const [selectedDate, setSelectedDate] = useState(getTodayDietDateKey());
+  const [previewMenuIdByDate, setPreviewMenuIdByDate] = useState<Record<string, number>>({});
+  const [menuPoolByDate, setMenuPoolByDate] = useState<Record<string, ClientDietMenu[]>>({});
+  const [menuPoolLoadingByDate, setMenuPoolLoadingByDate] = useState<Record<string, boolean>>({});
+  const [menuPoolErrorByDate, setMenuPoolErrorByDate] = useState<Record<string, string | null>>({});
+  const [isMenuSelectorVisible, setIsMenuSelectorVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,17 +71,29 @@ export default function DietScreen() {
         const today = getTodayDietDateKey();
 
         setDietDays(days);
+        setMenuPoolByDate({});
+        setMenuPoolLoadingByDate({});
+        setMenuPoolErrorByDate({});
+        setPreviewMenuIdByDate({});
         setError(null);
+        setIsMenuSelectorVisible(false);
         setRenderVersion((currentValue) => currentValue + 1);
         setSelectedDate((currentDate) => {
-          if (days.some((day) => day.assignedDate === currentDate)) {
+          if (
+            getLocalWeekKey(currentDate) === getLocalWeekKey(today) &&
+            days.some((day) => day.assignedDate === currentDate)
+          ) {
             return currentDate;
           }
 
-          return days.find((day) => day.assignedDate === today)?.assignedDate || days[0]?.assignedDate || today;
+          return days.find((day) => day.assignedDate === today)?.assignedDate || today;
         });
       } catch (loadError: any) {
         setDietDays([]);
+        setMenuPoolByDate({});
+        setMenuPoolLoadingByDate({});
+        setMenuPoolErrorByDate({});
+        setPreviewMenuIdByDate({});
         setError(loadError?.message || 'No se pudo cargar tu dieta.');
       } finally {
         if (mode === 'refresh') {
@@ -73,6 +106,53 @@ export default function DietScreen() {
     [user],
   );
 
+  const loadMenuPool = useCallback(
+    async (dateKey: string) => {
+      if (!user) {
+        return [];
+      }
+
+      if (menuPoolByDate[dateKey]) {
+        return menuPoolByDate[dateKey];
+      }
+
+      if (menuPoolLoadingByDate[dateKey]) {
+        return [];
+      }
+
+      setMenuPoolLoadingByDate((currentState) => ({
+        ...currentState,
+        [dateKey]: true,
+      }));
+
+      try {
+        const poolMenus = await getClientDietMenuPool(user.id, dateKey);
+        setMenuPoolByDate((currentState) => ({
+          ...currentState,
+          [dateKey]: poolMenus,
+        }));
+        setMenuPoolErrorByDate((currentState) => ({
+          ...currentState,
+          [dateKey]: null,
+        }));
+        return poolMenus;
+      } catch (loadError: any) {
+        const message = loadError?.message || 'No se pudo cargar el pool de menus.';
+        setMenuPoolErrorByDate((currentState) => ({
+          ...currentState,
+          [dateKey]: message,
+        }));
+        return [];
+      } finally {
+        setMenuPoolLoadingByDate((currentState) => ({
+          ...currentState,
+          [dateKey]: false,
+        }));
+      }
+    },
+    [menuPoolByDate, menuPoolLoadingByDate, user],
+  );
+
   useEffect(() => {
     loadDiet();
   }, [loadDiet]);
@@ -81,6 +161,87 @@ export default function DietScreen() {
     () => dietDays.find((day) => day.assignedDate === selectedDate) || null,
     [dietDays, selectedDate],
   );
+
+  const selectedPoolMenus = useMemo(
+    () => menuPoolByDate[selectedDate] ?? [],
+    [menuPoolByDate, selectedDate],
+  );
+
+  const selectedPreviewMenuId = previewMenuIdByDate[selectedDate] ?? null;
+
+  const visibleMenu = useMemo(() => {
+    if (!selectedDay) {
+      return null;
+    }
+
+    if (selectedPreviewMenuId !== null) {
+      return (
+        selectedPoolMenus.find((menu) => menu.menuId === selectedPreviewMenuId) ??
+        selectedDay.assignedMenu
+      );
+    }
+
+    return selectedDay.assignedMenu;
+  }, [selectedDay, selectedPoolMenus, selectedPreviewMenuId]);
+
+  const isPreviewMenu = Boolean(
+    visibleMenu &&
+    selectedDay?.assignedMenuId &&
+    visibleMenu.menuId !== selectedDay.assignedMenuId,
+  );
+
+  const hasLoadedPoolForSelectedDate = Object.prototype.hasOwnProperty.call(menuPoolByDate, selectedDate);
+  const hasAvailablePool = Boolean(selectedDay?.assignedMenuId) && (
+    !hasLoadedPoolForSelectedDate || selectedPoolMenus.length > 0
+  );
+  const selectorSubtitle = !selectedDay?.assignedMenuId
+    ? 'No hay menus disponibles para esta fecha.'
+    : isPreviewMenu
+      ? 'Vista previa local activa. No guarda cambios.'
+      : menuPoolErrorByDate[selectedDate]
+        ? menuPoolErrorByDate[selectedDate] || 'No se pudo cargar el pool.'
+        : hasLoadedPoolForSelectedDate
+          ? `${selectedPoolMenus.length} menu${selectedPoolMenus.length === 1 ? '' : 's'} disponibles en el pool.`
+          : 'Explora los menus disponibles para esta fecha.';
+
+  const handleOpenMenuSelector = useCallback(async () => {
+    if (!selectedDay?.assignedMenuId) {
+      return;
+    }
+
+    setIsMenuSelectorVisible(true);
+    if (!menuPoolByDate[selectedDate] && !menuPoolLoadingByDate[selectedDate]) {
+      await loadMenuPool(selectedDate);
+    }
+  }, [loadMenuPool, menuPoolByDate, menuPoolLoadingByDate, selectedDate, selectedDay?.assignedMenuId]);
+
+  const handleCloseMenuSelector = useCallback(() => {
+    setIsMenuSelectorVisible(false);
+  }, []);
+
+  const handleRetryMenuPool = useCallback(async () => {
+    await loadMenuPool(selectedDate);
+  }, [loadMenuPool, selectedDate]);
+
+  const handleSelectPreviewMenu = useCallback((menu: ClientDietMenu) => {
+    if (!selectedDay) {
+      return;
+    }
+
+    setPreviewMenuIdByDate((currentState) => {
+      const nextState = { ...currentState };
+
+      if (menu.menuId === selectedDay.assignedMenuId) {
+        delete nextState[selectedDay.assignedDate];
+      } else {
+        nextState[selectedDay.assignedDate] = menu.menuId;
+      }
+
+      return nextState;
+    });
+    setIsMenuSelectorVisible(false);
+    setRenderVersion((currentValue) => currentValue + 1);
+  }, [selectedDay]);
 
   if (!user) {
     router.replace('/login');
@@ -106,18 +267,25 @@ export default function DietScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View entering={FadeInDown.duration(350)} style={styles.header}>
-          <Text style={styles.eyebrow}>Nutrición</Text>
+          <Text style={styles.eyebrow}>Nutricion</Text>
           <Text style={styles.title}>Dieta</Text>
           <Text style={styles.subtitle}>
-            Consulta tu plan alimenticio del día y las recetas asignadas.
+            Consulta tu plan alimenticio del dia y las recetas asignadas.
           </Text>
         </Animated.View>
 
         {selectedDay ? (
           <>
-            <Animated.View entering={FadeInDown.delay(80).duration(350)} style={styles.heroSection}>
-              <DietHero day={selectedDay} />
-            </Animated.View>
+            {visibleMenu ? (
+              <Animated.View entering={FadeInDown.delay(80).duration(350)} style={styles.heroSection}>
+                <DietHero
+                  menu={visibleMenu}
+                  assignedDate={selectedDay.assignedDate}
+                  isToday={selectedDay.isToday}
+                  isPreview={isPreviewMenu}
+                />
+              </Animated.View>
+            ) : null}
 
             <Animated.View entering={FadeInDown.delay(140).duration(350)} style={styles.sectionHeader}>
               <View>
@@ -129,38 +297,82 @@ export default function DietScreen() {
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(180).duration(350)}>
-              <DietDaySelector
+              <DietWeekCalendar
                 days={dietDays}
                 selectedDate={selectedDate}
                 onSelect={setSelectedDate}
+                contentWidth={contentWidth}
               />
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(240).duration(350)} style={styles.mealsSection}>
+            <Animated.View entering={FadeInDown.delay(220).duration(350)} style={styles.selectorSection}>
+              <TouchableOpacity
+                style={[
+                  styles.selectorCard,
+                  !hasAvailablePool && styles.selectorCardDisabled,
+                ]}
+                onPress={handleOpenMenuSelector}
+                disabled={!hasAvailablePool}
+                activeOpacity={0.85}
+              >
+                <View style={styles.selectorCopy}>
+                  <Text style={styles.selectorEyebrow}>Menu visible</Text>
+                  <Text style={styles.selectorTitle}>
+                    {visibleMenu?.title || 'Sin menu asignado'}
+                  </Text>
+                  <Text style={styles.selectorSubtitle}>{selectorSubtitle}</Text>
+                </View>
+
+                <View style={styles.selectorAction}>
+                  {menuPoolLoadingByDate[selectedDate] ? (
+                    <ActivityIndicator size="small" color={brandColors.navy} />
+                  ) : (
+                    <Ionicons
+                      name={hasAvailablePool ? 'chevron-forward-outline' : 'remove-outline'}
+                      size={20}
+                      color={hasAvailablePool ? brandColors.navy : colors.gray[400]}
+                    />
+                  )}
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
+
+            <Animated.View entering={FadeInDown.delay(260).duration(350)} style={styles.mealsSection}>
               <View style={styles.sectionHeader}>
                 <View>
-                  <Text style={styles.sectionTitle}>Comidas del día</Text>
+                  <Text style={styles.sectionTitle}>Comidas del dia</Text>
                   <Text style={styles.sectionSubtitle}>
-                    {selectedDay.totalMeals} {selectedDay.totalMeals === 1 ? 'bloque' : 'bloques'} organizados para ti
+                    {visibleMenu
+                      ? `${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} organizados para ti`
+                      : 'No hay comidas programadas para esta fecha'}
                   </Text>
                 </View>
               </View>
 
               <View style={styles.mealList}>
-                {selectedDay.meals.length > 0 ? (
-                  selectedDay.meals.map((meal, index) => (
-                    <Animated.View
-                      key={`${selectedDay.assignedDate}-${renderVersion}-${meal.id}`}
-                      entering={FadeInDown.delay(280 + index * 60).duration(320)}
-                    >
-                      <DietMealCard meal={meal} />
-                    </Animated.View>
-                  ))
+                {visibleMenu ? (
+                  visibleMenu.meals.length > 0 ? (
+                    visibleMenu.meals.map((meal, index) => (
+                      <Animated.View
+                        key={`${selectedDay.assignedDate}-${visibleMenu.menuId}-${renderVersion}-${meal.id}`}
+                        entering={FadeInDown.delay(300 + index * 60).duration(320)}
+                      >
+                        <DietMealCard meal={meal} />
+                      </Animated.View>
+                    ))
+                  ) : (
+                    <Card style={styles.noMealsCard}>
+                      <Text style={styles.noMealsTitle}>Sin comidas cargadas</Text>
+                      <Text style={styles.noMealsText}>
+                        Tu menu fue encontrado, pero este dia todavia no contiene bloques de comida visibles.
+                      </Text>
+                    </Card>
+                  )
                 ) : (
                   <Card style={styles.noMealsCard}>
-                    <Text style={styles.noMealsTitle}>Sin comidas cargadas</Text>
+                    <Text style={styles.noMealsTitle}>Sin menu asignado</Text>
                     <Text style={styles.noMealsText}>
-                      Tu dieta fue encontrada, pero este día todavía no contiene bloques de comida visibles.
+                      No tienes un menu cargado para {formatLongDate(selectedDay.assignedDate)}.
                     </Text>
                   </Card>
                 )}
@@ -174,12 +386,12 @@ export default function DietScreen() {
                 <Ionicons name={error ? 'alert-circle-outline' : 'restaurant-outline'} size={30} color={brandColors.navy} />
               </View>
               <Text style={styles.emptyTitle}>
-                {error ? 'No pudimos cargar tu dieta' : 'Todavía no tienes una dieta asignada'}
+                {error ? 'No pudimos cargar tu dieta' : 'Todavia no tienes una dieta asignada'}
               </Text>
               <Text style={styles.emptyText}>
                 {error
                   ? error
-                  : 'Cuando tu nutriólogo publique un plan, aparecerá aquí con sus comidas y recetas.'}
+                  : 'Cuando tu nutriologo publique un plan, aparecera aqui con sus comidas y recetas.'}
               </Text>
               <Button
                 title="Reintentar"
@@ -191,6 +403,19 @@ export default function DietScreen() {
           </Animated.View>
         )}
       </ScrollView>
+
+      <DietMenuSelectorModal
+        visible={isMenuSelectorVisible && Boolean(selectedDay?.assignedMenuId)}
+        dateLabel={selectedDay ? formatLongDate(selectedDay.assignedDate) : ''}
+        menus={selectedPoolMenus}
+        selectedMenuId={visibleMenu?.menuId ?? selectedDay?.assignedMenuId ?? null}
+        assignedMenuId={selectedDay?.assignedMenuId ?? null}
+        isLoading={Boolean(menuPoolLoadingByDate[selectedDate])}
+        error={menuPoolErrorByDate[selectedDate]}
+        onClose={handleCloseMenuSelector}
+        onRetry={handleRetryMenuPool}
+        onSelect={handleSelectPreviewMenu}
+      />
     </SafeAreaView>
   );
 }
@@ -247,6 +472,54 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     color: colors.gray[500],
     fontSize: fontSize.sm,
+  },
+  selectorSection: {
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  selectorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    backgroundColor: colors.white,
+    padding: spacing.md,
+  },
+  selectorCardDisabled: {
+    opacity: 0.65,
+  },
+  selectorCopy: {
+    flex: 1,
+    paddingRight: spacing.md,
+  },
+  selectorEyebrow: {
+    color: brandColors.navy,
+    fontSize: fontSize.xs,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  selectorTitle: {
+    marginTop: spacing.xs,
+    color: colors.gray[900],
+    fontSize: fontSize.base,
+    fontWeight: '800',
+  },
+  selectorSubtitle: {
+    marginTop: spacing.xs,
+    color: colors.gray[500],
+    fontSize: fontSize.sm,
+    lineHeight: 20,
+  },
+  selectorAction: {
+    width: 34,
+    height: 34,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: `${brandColors.sky}14`,
   },
   mealsSection: {
     marginTop: spacing.lg,

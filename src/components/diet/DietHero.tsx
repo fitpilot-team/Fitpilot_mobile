@@ -3,22 +3,30 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { borderRadius, brandColors, colors, fontSize, spacing, shadows } from '../../constants/colors';
-import type { ClientDietDay } from '../../types';
+import type { ClientDietMenu } from '../../types';
+import { formatLocalDate } from '../../utils/date';
 
 interface DietHeroProps {
-  day: ClientDietDay;
+  menu: ClientDietMenu;
+  assignedDate: string;
+  isToday: boolean;
+  isPreview?: boolean;
 }
 
-const formatLongDate = (value: string) =>
-  new Intl.DateTimeFormat('es-MX', {
+export const DietHero: React.FC<DietHeroProps> = ({
+  menu,
+  assignedDate,
+  isToday,
+  isPreview = false,
+}) => {
+  const dateLabel = formatLocalDate(assignedDate, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
-  }).format(new Date(`${value}T12:00:00`));
-
-export const DietHero: React.FC<DietHeroProps> = ({ day }) => {
-  const dateLabel = formatLongDate(day.assignedDate);
-  const subtitle = day.description || `Plan activo para ${dateLabel}`;
+  });
+  const subtitle = menu.description || `Plan activo para ${dateLabel}`;
+  const badgeLabel = isPreview ? 'Vista previa' : isToday ? 'Hoy' : 'Plan del dia';
+  const badgeIcon = isPreview ? 'eye-outline' : isToday ? 'sparkles' : 'calendar-outline';
 
   return (
     <LinearGradient
@@ -29,25 +37,25 @@ export const DietHero: React.FC<DietHeroProps> = ({ day }) => {
     >
       <View style={styles.topRow}>
         <View style={styles.badge}>
-          <Ionicons name={day.isToday ? 'sparkles' : 'calendar-outline'} size={14} color={colors.white} />
-          <Text style={styles.badgeText}>{day.isToday ? 'Hoy' : 'Plan del día'}</Text>
+          <Ionicons name={badgeIcon} size={14} color={colors.white} />
+          <Text style={styles.badgeText}>{badgeLabel}</Text>
         </View>
       </View>
 
-      <Text style={styles.title}>{day.title}</Text>
+      <Text style={styles.title}>{menu.title}</Text>
       <Text style={styles.subtitle}>{subtitle}</Text>
 
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>{day.totalMeals}</Text>
+          <Text style={styles.statValue}>{menu.totalMeals}</Text>
           <Text style={styles.statLabel}>Comidas</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>{day.totalItems}</Text>
+          <Text style={styles.statValue}>{menu.totalItems}</Text>
           <Text style={styles.statLabel}>Items</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statValue}>{day.totalRecipes}</Text>
+          <Text style={styles.statValue}>{menu.totalRecipes}</Text>
           <Text style={styles.statLabel}>Recetas</Text>
         </View>
       </View>

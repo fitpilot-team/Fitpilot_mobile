@@ -142,7 +142,6 @@ export interface ExerciseSetLog {
   weight_kg?: number | null;
   effort_value?: number | null;
   completed_at: string;
-  notes?: string | null;
 }
 
 export interface WorkoutLog {
@@ -297,16 +296,26 @@ export interface ClientDietMeal {
   totalEntries: number;
 }
 
-export interface ClientDietDay {
+export interface ClientDietMenu {
   id: string;
+  menuId: number;
   assignedDate: string;
   title: string;
   description: string | null;
   meals: ClientDietMeal[];
-  isToday: boolean;
   totalMeals: number;
   totalItems: number;
   totalRecipes: number;
+}
+
+export type ClientDietDay = ClientDietMenu;
+
+export interface ClientDietWeekDay {
+  id: string;
+  assignedDate: string;
+  isToday: boolean;
+  assignedMenuId: number | null;
+  assignedMenu: ClientDietMenu | null;
 }
 
 // API types
@@ -314,4 +323,6 @@ export interface ApiError {
   message: string;
   status?: number;
 }
+
+export * from './measurements';
 

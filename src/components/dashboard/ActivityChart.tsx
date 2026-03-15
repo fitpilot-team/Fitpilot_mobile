@@ -17,6 +17,17 @@ import type { MuscleVolumeResponse } from '../../types';
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const MAX_MUSCLES_SHOWN = 6;
 const BAR_HEIGHT = 20;
+const SESSION_LANDMARK_MIN = 4;
+const SESSION_LANDMARK_MAX = 12;
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const getSessionLandmarkFillRatio = (effectiveSets: number) =>
+  clamp(
+    (effectiveSets - SESSION_LANDMARK_MIN) / (SESSION_LANDMARK_MAX - SESSION_LANDMARK_MIN),
+    0,
+    1
+  );
 
 interface ActivityChartProps {
   muscleVolume: MuscleVolumeResponse | null;
@@ -49,10 +60,9 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
     }
   }, [animationProgress, isLoading, muscleVolume]);
 
-  const { muscles, maxSets } = useMemo(() => {
+  const muscles = useMemo(() => {
     const visibleMuscles = muscleVolume?.muscles?.slice(0, MAX_MUSCLES_SHOWN) || [];
-    const max = visibleMuscles.length > 0 ? Math.max(...visibleMuscles.map((item) => item.effective_sets)) : 0;
-    return { muscles: visibleMuscles, maxSets: max };
+    return visibleMuscles;
   }, [muscleVolume]);
 
   if (isLoading) {
@@ -74,7 +84,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <Text style={styles.title}>Volumen del entrenamiento</Text>
+        <Text style={styles.title}>Volumen de entrenamiento por sesión</Text>
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>Sin datos de volumen</Text>
         </View>
@@ -108,12 +118,15 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
         />
       </View>
 
+      <Text style={styles.rangeLegend}>
+        Rango RP por sesion: {SESSION_LANDMARK_MIN}-{SESSION_LANDMARK_MAX} series efectivas
+      </Text>
+
       <View style={styles.chartContainer}>
         {muscles.map((muscle) => (
           <MuscleBar
             key={muscle.muscle_name}
             muscle={muscle}
-            maxSets={maxSets}
             labelWidth={labelWidth}
             valueWidth={valueWidth}
             barAreaWidth={barAreaWidth}
@@ -127,7 +140,6 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
 
 interface MuscleBarProps {
   muscle: { muscle_name: string; display_name: string; effective_sets: number };
-  maxSets: number;
   labelWidth: number;
   valueWidth: number;
   barAreaWidth: number;
@@ -136,13 +148,12 @@ interface MuscleBarProps {
 
 const MuscleBar: React.FC<MuscleBarProps> = ({
   muscle,
-  maxSets,
   labelWidth,
   valueWidth,
   barAreaWidth,
   animationProgress,
 }) => {
-  const barWidth = maxSets > 0 ? (muscle.effective_sets / maxSets) * barAreaWidth : 0;
+  const barWidth = getSessionLandmarkFillRatio(muscle.effective_sets) * barAreaWidth;
 
   const animatedProps = useAnimatedProps(() => ({
     width: barWidth * animationProgress.value,
@@ -234,6 +245,12 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
     marginTop: spacing.sm,
+  },
+  rangeLegend: {
+    fontSize: fontSize.xs,
+    color: 'rgba(255, 255, 255, 0.72)',
+    fontWeight: '500',
+    marginBottom: spacing.xs,
   },
   barRow: {
     flexDirection: 'row',

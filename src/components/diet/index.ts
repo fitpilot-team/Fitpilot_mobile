@@ -1,3 +1,4 @@
 export { DietHero } from './DietHero';
-export { DietDaySelector } from './DietDaySelector';
+export { DietMenuSelectorModal } from './DietMenuSelectorModal';
+export { DietWeekCalendar } from './DietWeekCalendar';
 export { DietMealCard } from './DietMealCard';

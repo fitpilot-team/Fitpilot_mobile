@@ -1,140 +1,531 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, fontSize, borderRadius, shadows } from '../../src/constants/colors';
+import { Button, Card, LoadingSpinner } from '../../src/components/common';
+import {
+  MeasurementDetailModal,
+  MeasurementFormModal,
+} from '../../src/components/measurements';
+import {
+  CALCULATION_METADATA,
+  PERIMETER_CARD_FIELDS,
+  RECENT_CALCULATION_CODES,
+  SUMMARY_METRICS,
+} from '../../src/constants/measurements';
+import {
+  borderRadius,
+  colors,
+  fontSize,
+  shadows,
+  spacing,
+} from '../../src/constants/colors';
+import {
+  createMyMeasurement,
+  getMyMeasurementDetail,
+  listMyMeasurements,
+} from '../../src/services/measurements';
+import type {
+  ApiError,
+  CreateOwnMeasurementPayload,
+  MeasurementDetail,
+  MeasurementHistoryItem,
+  MeasurementPagination,
+} from '../../src/types';
+import {
+  calculateMeasurementChange,
+  formatMeasurementDate,
+  formatMeasurementNumber,
+  getMeasurementDisplayDate,
+  parseMeasurementNumber,
+} from '../../src/utils/measurements';
 
-// Datos mock para medidas antropométricas
-const mockMeasurements = {
-  lastUpdate: '2024-12-01',
-  weight: { value: 78.5, unit: 'kg', change: -0.8 },
-  bodyFat: { value: 18.2, unit: '%', change: -0.5 },
-  muscle: { value: 42.1, unit: '%', change: +0.3 },
+const HISTORY_PAGE_SIZE = 20;
+
+const getChangeAppearance = (
+  change: number | null,
+  emphasizeDecrease: boolean,
+) => {
+  if (change === null || change === 0) {
+    return {
+      icon: 'remove-outline' as const,
+      color: colors.gray[400],
+    };
+  }
+
+  const isPositive = change > 0;
+  const isGoodChange = emphasizeDecrease ? !isPositive : isPositive;
+
+  return {
+    icon: isPositive ? ('arrow-up-outline' as const) : ('arrow-down-outline' as const),
+    color: isGoodChange ? colors.success : colors.warning,
+  };
 };
 
-const mockCircumferences = [
-  { name: 'Pecho', value: 102, unit: 'cm', icon: 'body-outline' },
-  { name: 'Cintura', value: 82, unit: 'cm', icon: 'body-outline' },
-  { name: 'Cadera', value: 98, unit: 'cm', icon: 'body-outline' },
-  { name: 'Brazo (D)', value: 36, unit: 'cm', icon: 'fitness-outline' },
-  { name: 'Brazo (I)', value: 35.5, unit: 'cm', icon: 'fitness-outline' },
-  { name: 'Muslo (D)', value: 58, unit: 'cm', icon: 'walk-outline' },
-  { name: 'Muslo (I)', value: 57.5, unit: 'cm', icon: 'walk-outline' },
-  { name: 'Pantorrilla', value: 38, unit: 'cm', icon: 'walk-outline' },
-];
-
 export default function MeasurementsScreen() {
+  const [measurements, setMeasurements] = useState<MeasurementHistoryItem[]>([]);
+  const [pagination, setPagination] = useState<MeasurementPagination | null>(null);
+  const [detailCache, setDetailCache] = useState<Record<string, MeasurementDetail>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isDetailVisible, setIsDetailVisible] = useState(false);
+  const [selectedMeasurementId, setSelectedMeasurementId] = useState<string | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const latestMeasurement = measurements[0] ?? null;
+  const latestMeasurementDetail = latestMeasurement
+    ? detailCache[latestMeasurement.id] ?? null
+    : null;
+  const selectedMeasurementDetail = selectedMeasurementId
+    ? detailCache[selectedMeasurementId] ?? null
+    : null;
+
+  const loadMeasurements = useCallback(
+    async ({ page = 1, append = false }: { page?: number; append?: boolean } = {}) => {
+      if (append) {
+        setIsLoadingMore(true);
+      } else {
+        setError(null);
+      }
+
+      try {
+        const response = await listMyMeasurements(page, HISTORY_PAGE_SIZE);
+
+        setMeasurements((currentMeasurements) =>
+          append ? [...currentMeasurements, ...response.data] : response.data,
+        );
+        setPagination(response.pagination);
+
+        if (!append) {
+          const latest = response.data[0];
+          setDetailCache({});
+
+          if (latest) {
+            const detail = await getMyMeasurementDetail(latest.id);
+            setDetailCache({ [latest.id]: detail });
+          }
+        }
+      } catch (loadError) {
+        const apiError = loadError as ApiError;
+        setError(apiError.message || 'No fue posible cargar tus medidas.');
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+        setIsLoadingMore(false);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    void loadMeasurements();
+  }, [loadMeasurements]);
+
+  const summaryMetrics = useMemo(() => {
+    if (!latestMeasurement) {
+      return [];
+    }
+
+    return SUMMARY_METRICS.map((metric) => ({
+      ...metric,
+      value: parseMeasurementNumber(latestMeasurement[metric.key]),
+      change: calculateMeasurementChange(measurements, metric.key),
+    }));
+  }, [latestMeasurement, measurements]);
+
+  const perimeterCards = useMemo(() => {
+    if (!latestMeasurement) {
+      return [];
+    }
+
+    return PERIMETER_CARD_FIELDS.map((field) => ({
+      ...field,
+      value: parseMeasurementNumber(latestMeasurement[field.key]),
+    })).filter((field) => field.value !== null);
+  }, [latestMeasurement]);
+
+  const recentCalculations = useMemo(() => {
+    if (!latestMeasurementDetail) {
+      return [];
+    }
+
+    return RECENT_CALCULATION_CODES.map((code) => {
+      const calculation = latestMeasurementDetail.calculations[code];
+
+      if (!calculation || calculation.status !== 'computed' || calculation.value === null) {
+        return null;
+      }
+
+      return {
+        code,
+        label: CALCULATION_METADATA[code]?.label ?? code,
+        value: calculation.value,
+        unit: calculation.unit,
+      };
+    }).filter(Boolean) as Array<{
+      code: string;
+      label: string;
+      value: number;
+      unit: string | null;
+    }>;
+  }, [latestMeasurementDetail]);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await loadMeasurements();
+  }, [loadMeasurements]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!pagination || measurements.length >= pagination.total || isLoadingMore) {
+      return;
+    }
+
+    await loadMeasurements({
+      page: pagination.page + 1,
+      append: true,
+    });
+  }, [isLoadingMore, loadMeasurements, measurements.length, pagination]);
+
+  const openMeasurementDetail = useCallback(async (measurementId: string) => {
+    setSelectedMeasurementId(measurementId);
+    setIsDetailVisible(true);
+
+    if (detailCache[measurementId]) {
+      return;
+    }
+
+    setIsDetailLoading(true);
+
+    try {
+      const detail = await getMyMeasurementDetail(measurementId);
+      setDetailCache((currentCache) => ({
+        ...currentCache,
+        [measurementId]: detail,
+      }));
+    } catch (detailError) {
+      const apiError = detailError as ApiError;
+      setIsDetailVisible(false);
+      Alert.alert('Error', apiError.message || 'No fue posible cargar el detalle.');
+    } finally {
+      setIsDetailLoading(false);
+    }
+  }, [detailCache]);
+
+  const handleCloseDetail = useCallback(() => {
+    setIsDetailVisible(false);
+    setSelectedMeasurementId(null);
+    setIsDetailLoading(false);
+  }, []);
+
+  const handleCreateMeasurement = useCallback(
+    async (payload: CreateOwnMeasurementPayload) => {
+      setIsSubmitting(true);
+
+      try {
+        await createMyMeasurement(payload);
+        setIsFormVisible(false);
+        await loadMeasurements();
+        Alert.alert('Medicion registrada', 'Tus medidas se actualizaron correctamente.');
+      } catch (saveError) {
+        const apiError = saveError as ApiError;
+        Alert.alert('Error', apiError.message || 'No fue posible guardar la medicion.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [loadMeasurements],
+  );
+
+  if (isLoading) {
+    return <LoadingSpinner fullScreen text="Cargando tus medidas..." />;
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.title}>Medidas</Text>
-        <Text style={styles.subtitle}>Control antropométrico</Text>
+        <View>
+          <Text style={styles.title}>Medidas</Text>
+          <Text style={styles.subtitle}>Control antropometrico con datos reales</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.headerAction}
+          onPress={() => setIsFormVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add-outline" size={22} color={colors.white} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary[500]}
+          />
+        }
       >
-        {/* Main Stats */}
-        <View style={styles.mainStatsContainer}>
-          <View style={[styles.mainStatCard, styles.weightCard]}>
-            <Ionicons name="scale-outline" size={24} color={colors.primary[500]} />
-            <Text style={styles.mainStatValue}>{mockMeasurements.weight.value}</Text>
-            <Text style={styles.mainStatUnit}>{mockMeasurements.weight.unit}</Text>
-            <View style={styles.changeContainer}>
-              <Ionicons
-                name={mockMeasurements.weight.change < 0 ? 'arrow-down' : 'arrow-up'}
-                size={12}
-                color={mockMeasurements.weight.change < 0 ? colors.success : colors.warning}
-              />
-              <Text style={[
-                styles.changeText,
-                { color: mockMeasurements.weight.change < 0 ? colors.success : colors.warning }
-              ]}>
-                {Math.abs(mockMeasurements.weight.change)} kg
-              </Text>
-            </View>
-          </View>
+        {error ? (
+          <Card style={styles.errorCard}>
+            <Text style={styles.errorTitle}>No fue posible cargar tus medidas</Text>
+            <Text style={styles.errorText}>{error}</Text>
+            <Button title="Reintentar" onPress={() => void loadMeasurements()} />
+          </Card>
+        ) : null}
 
-          <View style={styles.secondaryStats}>
-            <View style={styles.secondaryStatCard}>
-              <Text style={styles.secondaryStatLabel}>Grasa corporal</Text>
-              <Text style={styles.secondaryStatValue}>
-                {mockMeasurements.bodyFat.value}
-                <Text style={styles.secondaryStatUnit}>%</Text>
+        {!error && !latestMeasurement ? (
+          <Card style={styles.emptyCard}>
+            <Ionicons name="analytics-outline" size={44} color={colors.gray[300]} />
+            <Text style={styles.emptyTitle}>Todavia no tienes mediciones registradas</Text>
+            <Text style={styles.emptyText}>
+              Captura tu primer registro para empezar a ver peso, composicion y perimetros.
+            </Text>
+            <Button
+              title="Registrar mi primera medicion"
+              onPress={() => setIsFormVisible(true)}
+              icon={<Ionicons name="add-outline" size={18} color={colors.white} />}
+            />
+          </Card>
+        ) : null}
+
+        {latestMeasurement ? (
+          <>
+            <View style={styles.mainStatsContainer}>
+              {summaryMetrics.map((metric, index) => {
+                const appearance = getChangeAppearance(
+                  metric.change,
+                  metric.emphasizeDecrease ?? false,
+                );
+
+                return (
+                  <View
+                    key={metric.key}
+                    style={[
+                      styles.summaryCard,
+                      index === 0 ? styles.summaryCardLarge : null,
+                    ]}
+                  >
+                    <View style={styles.summaryIcon}>
+                      <Ionicons
+                        name={metric.icon as keyof typeof Ionicons.glyphMap}
+                        size={20}
+                        color={colors.primary[500]}
+                      />
+                    </View>
+                    <Text style={styles.summaryLabel}>{metric.label}</Text>
+                    <Text style={styles.summaryValue}>
+                      {metric.value === null
+                        ? '--'
+                        : formatMeasurementNumber(metric.value, metric.unit === '%' ? 1 : 1)}
+                      {metric.value !== null ? (
+                        <Text style={styles.summaryUnit}> {metric.unit}</Text>
+                      ) : null}
+                    </Text>
+                    {metric.change !== null ? (
+                      <View
+                        style={[
+                          styles.changeBadge,
+                          { backgroundColor: `${appearance.color}15` },
+                        ]}
+                      >
+                        <Ionicons
+                          name={appearance.icon}
+                          size={12}
+                          color={appearance.color}
+                        />
+                        <Text style={[styles.changeText, { color: appearance.color }]}>
+                          {formatMeasurementNumber(Math.abs(metric.change), 2)} {metric.unit}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.noChangeText}>Sin comparativo previo</Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+
+            <Text style={styles.lastUpdate}>
+              Ultima actualizacion: {formatMeasurementDate(
+                getMeasurementDisplayDate(latestMeasurement),
+                'long',
+              )}
+            </Text>
+
+            {latestMeasurementDetail ? (
+              <Card style={styles.sectionCard}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionHeaderContent}>
+                    <Text style={styles.sectionTitle}>Indicadores calculados</Text>
+                    <Text style={styles.sectionDescription}>
+                      Resumen derivado del registro mas reciente.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.sectionHeaderAction}
+                    onPress={() => void openMeasurementDetail(latestMeasurement.id)}
+                  >
+                    <Text style={styles.sectionLink}>Ver detalle</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.calculationGrid}>
+                  {recentCalculations.map((calculation) => (
+                    <View key={calculation.code} style={styles.calculationChip}>
+                      <Text style={styles.calculationChipLabel}>{calculation.label}</Text>
+                      <Text style={styles.calculationChipValue}>
+                        {formatMeasurementNumber(
+                          calculation.value,
+                          calculation.unit ? 2 : 3,
+                        )}
+                        {calculation.unit ? (
+                          <Text style={styles.calculationChipUnit}> {calculation.unit}</Text>
+                        ) : null}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                <View style={styles.analysisMeta}>
+                  <Text style={styles.analysisMetaText}>
+                    Estado: {latestMeasurementDetail.calculationRun?.status ?? 'sin calculo'}
+                  </Text>
+                  <Text style={styles.analysisMetaText}>
+                    Advertencias: {latestMeasurementDetail.warnings.length}
+                  </Text>
+                </View>
+              </Card>
+            ) : null}
+
+            <Card style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Perimetros corporales</Text>
+              <Text style={styles.sectionDescription}>
+                Se muestran unicamente las medidas disponibles del ultimo registro.
               </Text>
-              <View style={styles.changeContainerSmall}>
-                <Ionicons
-                  name="arrow-down"
-                  size={10}
-                  color={colors.success}
-                />
-                <Text style={[styles.changeTextSmall, { color: colors.success }]}>
-                  {Math.abs(mockMeasurements.bodyFat.change)}%
-                </Text>
+              <View style={styles.perimeterGrid}>
+                {perimeterCards.map((field) => (
+                  <View key={field.key} style={styles.perimeterCard}>
+                    <Ionicons
+                      name={(field.icon ?? 'body-outline') as keyof typeof Ionicons.glyphMap}
+                      size={18}
+                      color={colors.gray[400]}
+                    />
+                    <Text style={styles.perimeterLabel}>{field.label}</Text>
+                    <Text style={styles.perimeterValue}>
+                      {formatMeasurementNumber(field.value, 1)}
+                      <Text style={styles.perimeterUnit}> {field.unit}</Text>
+                    </Text>
+                  </View>
+                ))}
               </View>
-            </View>
+            </Card>
 
-            <View style={styles.secondaryStatCard}>
-              <Text style={styles.secondaryStatLabel}>Masa muscular</Text>
-              <Text style={styles.secondaryStatValue}>
-                {mockMeasurements.muscle.value}
-                <Text style={styles.secondaryStatUnit}>%</Text>
-              </Text>
-              <View style={styles.changeContainerSmall}>
-                <Ionicons
-                  name="arrow-up"
-                  size={10}
-                  color={colors.success}
-                />
-                <Text style={[styles.changeTextSmall, { color: colors.success }]}>
-                  {mockMeasurements.muscle.change}%
-                </Text>
+            <Card style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderContent}>
+                  <Text style={styles.sectionTitle}>Historial</Text>
+                  <Text style={styles.sectionDescription}>
+                    {pagination?.total ?? measurements.length} registros disponibles.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.sectionHeaderAction}
+                  onPress={() => setIsFormVisible(true)}
+                >
+                  <Text style={styles.sectionLink}>Registrar nueva</Text>
+                </TouchableOpacity>
               </View>
-            </View>
-          </View>
-        </View>
 
-        {/* Last Update */}
-        <Text style={styles.lastUpdate}>
-          Última actualización: {new Date(mockMeasurements.lastUpdate).toLocaleDateString('es-ES', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-          })}
-        </Text>
+              <View style={styles.historyList}>
+                {measurements.map((measurement) => (
+                  <TouchableOpacity
+                    key={measurement.id}
+                    style={styles.historyCard}
+                    activeOpacity={0.8}
+                    onPress={() => void openMeasurementDetail(measurement.id)}
+                  >
+                    <View style={styles.historyHeader}>
+                      <Text style={styles.historyDate}>
+                        {formatMeasurementDate(
+                          getMeasurementDisplayDate(measurement),
+                          'short',
+                        )}
+                      </Text>
+                      <Ionicons
+                        name="chevron-forward-outline"
+                        size={18}
+                        color={colors.gray[400]}
+                      />
+                    </View>
 
-        {/* Circumferences */}
-        <Text style={styles.sectionTitle}>Circunferencias</Text>
+                    <View style={styles.historyMetricsRow}>
+                      {SUMMARY_METRICS.map((metric) => {
+                        const value = parseMeasurementNumber(measurement[metric.key]);
 
-        <View style={styles.circumferencesGrid}>
-          {mockCircumferences.map((item, index) => (
-            <View key={index} style={styles.circumferenceCard}>
-              <Ionicons name={item.icon as any} size={18} color={colors.gray[400]} />
-              <Text style={styles.circumferenceName}>{item.name}</Text>
-              <Text style={styles.circumferenceValue}>
-                {item.value}
-                <Text style={styles.circumferenceUnit}> {item.unit}</Text>
-              </Text>
-            </View>
-          ))}
-        </View>
+                        if (value === null) {
+                          return null;
+                        }
 
-        {/* Add Measurement Button Placeholder */}
-        <View style={styles.addButtonPlaceholder}>
-          <Ionicons name="add-circle-outline" size={24} color={colors.primary[400]} />
-          <Text style={styles.addButtonText}>Registrar nuevas medidas</Text>
-        </View>
+                        return (
+                          <View key={`${measurement.id}-${metric.key}`} style={styles.historyMetric}>
+                            <Text style={styles.historyMetricLabel}>{metric.label}</Text>
+                            <Text style={styles.historyMetricValue}>
+                              {formatMeasurementNumber(value, metric.unit === '%' ? 1 : 1)}
+                              <Text style={styles.historyMetricUnit}> {metric.unit}</Text>
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
 
-        {/* Placeholder message */}
-        <View style={styles.placeholderContainer}>
-          <Ionicons name="construct-outline" size={40} color={colors.gray[300]} />
-          <Text style={styles.placeholderText}>
-            Gráficos de evolución próximamente
-          </Text>
-        </View>
+                    {measurement.notes ? (
+                      <Text style={styles.historyNote} numberOfLines={2}>
+                        {measurement.notes}
+                      </Text>
+                    ) : null}
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {pagination && measurements.length < pagination.total ? (
+                <Button
+                  title="Cargar mas"
+                  onPress={() => void handleLoadMore()}
+                  variant="secondary"
+                  isLoading={isLoadingMore}
+                />
+              ) : null}
+            </Card>
+          </>
+        ) : null}
       </ScrollView>
+
+      <MeasurementDetailModal
+        visible={isDetailVisible}
+        detail={selectedMeasurementDetail}
+        isLoading={isDetailLoading}
+        onClose={handleCloseDetail}
+      />
+
+      <MeasurementFormModal
+        visible={isFormVisible}
+        isSubmitting={isSubmitting}
+        onClose={() => setIsFormVisible(false)}
+        onSubmit={handleCreateMeasurement}
+      />
     </SafeAreaView>
   );
 }
@@ -145,19 +536,31 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
   title: {
     fontSize: fontSize['2xl'],
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: colors.gray[900],
   },
   subtitle: {
+    marginTop: spacing.xs,
     fontSize: fontSize.sm,
     color: colors.gray[500],
-    marginTop: spacing.xs,
+  },
+  headerAction: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary[500],
+    ...shadows.md,
   },
   scrollView: {
     flex: 1,
@@ -166,144 +569,248 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl + 60,
   },
-  mainStatsContainer: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  mainStatCard: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    alignItems: 'center',
-    ...shadows.md,
-  },
-  weightCard: {
-    flex: 1.2,
-  },
-  mainStatValue: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: colors.gray[900],
-    marginTop: spacing.sm,
-  },
-  mainStatUnit: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  changeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xs,
-    gap: 2,
-  },
-  changeText: {
-    fontSize: fontSize.xs,
-    fontWeight: '500',
-  },
-  secondaryStats: {
-    flex: 1,
-    gap: spacing.sm,
-  },
-  secondaryStatCard: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    ...shadows.sm,
-  },
-  secondaryStatLabel: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  secondaryStatValue: {
-    fontSize: fontSize.xl,
-    fontWeight: 'bold',
-    color: colors.gray[900],
-    marginTop: 2,
-  },
-  secondaryStatUnit: {
-    fontSize: fontSize.sm,
-    fontWeight: 'normal',
-    color: colors.gray[500],
-  },
-  changeContainerSmall: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-    gap: 2,
-  },
-  changeTextSmall: {
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  lastUpdate: {
-    fontSize: fontSize.xs,
-    color: colors.gray[400],
-    textAlign: 'center',
-    marginBottom: spacing.lg,
-  },
-  sectionTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    color: colors.gray[800],
+  errorCard: {
     marginBottom: spacing.md,
   },
-  circumferencesGrid: {
+  errorTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  errorText: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+    fontSize: fontSize.sm,
+    color: colors.gray[600],
+  },
+  emptyCard: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    gap: spacing.md,
+  },
+  emptyTitle: {
+    fontSize: fontSize.xl,
+    fontWeight: '700',
+    color: colors.gray[900],
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: fontSize.sm,
+    color: colors.gray[500],
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  mainStatsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  circumferenceCard: {
+  summaryCard: {
     width: '48%',
     backgroundColor: colors.white,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.lg,
     padding: spacing.md,
-    ...shadows.sm,
+    ...shadows.md,
   },
-  circumferenceName: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-    marginTop: spacing.xs,
+  summaryCardLarge: {
+    width: '100%',
   },
-  circumferenceValue: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    color: colors.gray[800],
-    marginTop: 2,
-  },
-  circumferenceUnit: {
-    fontSize: fontSize.xs,
-    fontWeight: 'normal',
-    color: colors.gray[400],
-  },
-  addButtonPlaceholder: {
-    flexDirection: 'row',
+  summaryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary[50],
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginTop: spacing.lg,
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.primary[200],
-    borderStyle: 'dashed',
   },
-  addButtonText: {
+  summaryLabel: {
+    marginTop: spacing.sm,
     fontSize: fontSize.sm,
-    fontWeight: '500',
+    color: colors.gray[500],
+  },
+  summaryValue: {
+    marginTop: spacing.xs,
+    fontSize: 30,
+    fontWeight: '700',
+    color: colors.gray[900],
+  },
+  summaryUnit: {
+    fontSize: fontSize.base,
+    fontWeight: '400',
+    color: colors.gray[500],
+  },
+  changeBadge: {
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
+  },
+  changeText: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+  },
+  noChangeText: {
+    marginTop: spacing.sm,
+    fontSize: fontSize.xs,
+    color: colors.gray[400],
+  },
+  lastUpdate: {
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+    fontSize: fontSize.xs,
+    color: colors.gray[400],
+  },
+  sectionCard: {
+    marginBottom: spacing.md,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  sectionHeaderContent: {
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
+  sectionHeaderAction: {
+    flexShrink: 0,
+    alignSelf: 'flex-start',
+  },
+  sectionTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  sectionDescription: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.sm,
+    color: colors.gray[500],
+  },
+  sectionLink: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
     color: colors.primary[600],
   },
-  placeholderContainer: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-    marginTop: spacing.md,
+  calculationGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
-  placeholderText: {
+  calculationChip: {
+    width: '48%',
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.gray[50],
+  },
+  calculationChipLabel: {
+    fontSize: fontSize.xs,
+    color: colors.gray[500],
+  },
+  calculationChipValue: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+    color: colors.gray[900],
+  },
+  calculationChipUnit: {
     fontSize: fontSize.sm,
+    fontWeight: '400',
+    color: colors.gray[500],
+  },
+  analysisMeta: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  analysisMetaText: {
+    fontSize: fontSize.xs,
+    color: colors.gray[500],
+  },
+  perimeterGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  perimeterCard: {
+    width: '48%',
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.gray[50],
+  },
+  perimeterLabel: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.xs,
+    color: colors.gray[500],
+  },
+  perimeterValue: {
+    marginTop: 2,
+    fontSize: fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[800],
+  },
+  perimeterUnit: {
+    fontSize: fontSize.xs,
+    fontWeight: '400',
     color: colors.gray[400],
+  },
+  historyList: {
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  historyCard: {
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.gray[50],
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  historyDate: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[800],
+  },
+  historyMetricsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
     marginTop: spacing.sm,
+  },
+  historyMetric: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.white,
+  },
+  historyMetricLabel: {
+    fontSize: 10,
+    color: colors.gray[500],
+  },
+  historyMetricValue: {
+    marginTop: 2,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  historyMetricUnit: {
+    fontSize: fontSize.xs,
+    fontWeight: '400',
+    color: colors.gray[500],
+  },
+  historyNote: {
+    marginTop: spacing.sm,
+    fontSize: fontSize.xs,
+    color: colors.gray[500],
   },
 });

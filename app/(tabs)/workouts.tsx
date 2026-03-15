@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, fontSize, borderRadius, shadows } from '../../src/constants/colors';
+import { formatLocalDate } from '../../src/utils/date';
 
 // Datos mock para historial de entrenamientos
 const mockWorkoutHistory = [
@@ -85,11 +86,11 @@ export default function WorkoutsScreen() {
               <View style={styles.workoutInfo}>
                 <Text style={styles.workoutName}>{workout.name}</Text>
                 <Text style={styles.workoutDate}>
-                  {new Date(workout.date).toLocaleDateString('es-ES', {
+                  {formatLocalDate(workout.date, {
                     weekday: 'long',
                     day: 'numeric',
                     month: 'short',
-                  })}
+                  }, 'es-ES')}
                 </Text>
               </View>
               <View style={styles.completedBadge}>

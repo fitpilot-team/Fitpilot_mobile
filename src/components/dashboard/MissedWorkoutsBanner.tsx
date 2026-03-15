@@ -9,6 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import type { MissedWorkout } from '../../types';
+import { formatLocalDate, getCalendarDayDiff, getTodayDateKey } from '../../utils/date';
 
 interface MissedWorkoutsBannerProps {
   missedWorkouts: MissedWorkout[];
@@ -16,39 +17,43 @@ interface MissedWorkoutsBannerProps {
   onDismiss?: () => void;
 }
 
+const getRelativeDateLabel = (dateString: string) => {
+  const diffDays = getCalendarDayDiff(dateString, getTodayDateKey());
+
+  if (diffDays === 0) {
+    return 'Hoy';
+  }
+
+  if (diffDays === 1) {
+    return 'Ayer';
+  }
+
+  if (diffDays < 7) {
+    return `Hace ${diffDays} dias`;
+  }
+
+  return formatLocalDate(dateString, { day: 'numeric', month: 'short' }, 'es-ES');
+};
+
+const getUrgencyColor = (dateString: string) => {
+  const diffDays = getCalendarDayDiff(dateString, getTodayDateKey());
+
+  if (diffDays <= 2) return colors.warning;
+  if (diffDays <= 5) return '#F97316';
+  return colors.error;
+};
+
 export const MissedWorkoutsBanner: React.FC<MissedWorkoutsBannerProps> = ({
   missedWorkouts,
   onWorkoutPress,
   onDismiss,
 }) => {
-  if (missedWorkouts.length === 0) return null;
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const diffTime = today.getTime() - date.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Hoy';
-    if (diffDays === 1) return 'Ayer';
-    if (diffDays < 7) return `Hace ${diffDays} días`;
-
-    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-  };
-
-  const getUrgencyColor = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const diffDays = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays <= 2) return colors.warning; // Reciente - amarillo
-    if (diffDays <= 5) return '#F97316'; // Medio - naranja
-    return colors.error; // Urgente - rojo
-  };
+  if (missedWorkouts.length === 0) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.iconContainer}>
@@ -61,18 +66,17 @@ export const MissedWorkoutsBanner: React.FC<MissedWorkoutsBannerProps> = ({
                 : `Tienes ${missedWorkouts.length} entrenamientos pendientes`}
             </Text>
             <Text style={styles.subtitle}>
-              No dejes que se acumulen. ¡Ponte al día!
+              No dejes que se acumulen. Ponte al dia.
             </Text>
           </View>
         </View>
-        {onDismiss && (
+        {onDismiss ? (
           <TouchableOpacity onPress={onDismiss} style={styles.dismissButton}>
             <Ionicons name="close" size={20} color={colors.gray[400]} />
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
 
-      {/* Missed workouts list */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -80,6 +84,7 @@ export const MissedWorkoutsBanner: React.FC<MissedWorkoutsBannerProps> = ({
       >
         {missedWorkouts.slice(0, 5).map((workout) => {
           const urgencyColor = getUrgencyColor(workout.scheduled_date);
+
           return (
             <TouchableOpacity
               key={workout.training_day_id}
@@ -89,15 +94,15 @@ export const MissedWorkoutsBanner: React.FC<MissedWorkoutsBannerProps> = ({
             >
               <View style={[styles.urgencyIndicator, { backgroundColor: urgencyColor }]} />
               <View style={styles.workoutContent}>
-                <Text style={styles.workoutDate}>{formatDate(workout.scheduled_date)}</Text>
+                <Text style={styles.workoutDate}>{getRelativeDateLabel(workout.scheduled_date)}</Text>
                 <Text style={styles.workoutName} numberOfLines={1}>
                   {workout.training_day_name}
                 </Text>
-                {workout.training_day_focus && (
+                {workout.training_day_focus ? (
                   <Text style={styles.workoutFocus} numberOfLines={1}>
                     {workout.training_day_focus}
                   </Text>
-                )}
+                ) : null}
                 <View style={styles.workoutMeta}>
                   <Ionicons name="barbell-outline" size={12} color={colors.gray[400]} />
                   <Text style={styles.workoutMetaText}>
@@ -112,15 +117,14 @@ export const MissedWorkoutsBanner: React.FC<MissedWorkoutsBannerProps> = ({
           );
         })}
 
-        {missedWorkouts.length > 5 && (
+        {missedWorkouts.length > 5 ? (
           <View style={styles.moreCard}>
             <Text style={styles.moreText}>+{missedWorkouts.length - 5}</Text>
-            <Text style={styles.moreLabel}>más</Text>
+            <Text style={styles.moreLabel}>mas</Text>
           </View>
-        )}
+        ) : null}
       </ScrollView>
 
-      {/* Action tip */}
       <View style={styles.tipContainer}>
         <Ionicons name="bulb-outline" size={14} color={colors.primary[500]} />
         <Text style={styles.tipText}>
@@ -133,10 +137,10 @@ export const MissedWorkoutsBanner: React.FC<MissedWorkoutsBannerProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFBEB', // amber-50
+    backgroundColor: '#FFFBEB',
     borderRadius: borderRadius.lg,
     borderWidth: 1,
-    borderColor: '#FDE68A', // amber-200
+    borderColor: '#FDE68A',
     marginHorizontal: spacing.md,
     marginBottom: spacing.md,
     overflow: 'hidden',
@@ -158,19 +162,19 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#FEF3C7', // amber-100
+    backgroundColor: '#FEF3C7',
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
     fontSize: fontSize.sm,
     fontWeight: '700',
-    color: '#92400E', // amber-800
+    color: '#92400E',
     marginBottom: 2,
   },
   subtitle: {
     fontSize: fontSize.xs,
-    color: '#B45309', // amber-700
+    color: '#B45309',
   },
   dismissButton: {
     padding: spacing.xs,
@@ -250,10 +254,12 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    backgroundColor: '#FEF3C7', // amber-100
+    backgroundColor: '#FEF3C7',
   },
   tipText: {
     fontSize: fontSize.xs,
     color: colors.gray[600],
   },
 });
+
+export default MissedWorkoutsBanner;

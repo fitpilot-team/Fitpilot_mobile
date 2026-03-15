@@ -5,6 +5,13 @@ import Animated, { FadeInRight } from 'react-native-reanimated';
 import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import { ListItemSkeleton } from '../common/Skeleton';
 import type { DayProgress } from '../../types';
+import {
+  formatLocalDate,
+  getLocalDayNumber,
+  getTodayDateKey,
+  getTomorrowDateKey,
+  toLocalDateKey,
+} from '../../utils/date';
 
 interface UpcomingWorkoutsProps {
   days: DayProgress[];
@@ -19,18 +26,17 @@ export const UpcomingWorkouts: React.FC<UpcomingWorkoutsProps> = ({
   onDayPress,
   contentWidth,
 }) => {
-  // Filtrar solo días futuros con entrenamiento
-  const today = new Date().toISOString().split('T')[0];
-  const upcomingDays = days.filter(
-    d => d.date > today && d.has_workout && !d.is_rest_day
-  );
+  const today = getTodayDateKey();
+  const upcomingDays = days.filter((day) => {
+    const dateKey = toLocalDateKey(day.date) ?? day.date;
+    return dateKey > today && day.has_workout && !day.is_rest_day;
+  });
 
-  // Si está cargando, mostrar skeletons
   if (isLoading) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title}>Próximos entrenamientos</Text>
+          <Text style={styles.title}>Proximos entrenamientos</Text>
         </View>
         <View style={styles.content}>
           <ListItemSkeleton />
@@ -41,22 +47,19 @@ export const UpcomingWorkouts: React.FC<UpcomingWorkoutsProps> = ({
     );
   }
 
-  // Si no hay próximos entrenamientos, no mostrar nada
   if (upcomingDays.length === 0) {
     return null;
   }
 
   return (
     <View style={[styles.container, contentWidth && contentWidth >= 720 ? styles.containerTablet : null]}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Ionicons name="calendar" size={20} color={brandColors.navy} />
-          <Text style={styles.title}>Próximos entrenamientos</Text>
+          <Text style={styles.title}>Proximos entrenamientos</Text>
         </View>
       </View>
 
-      {/* Lista de días */}
       <View style={styles.content}>
         {upcomingDays.slice(0, 3).map((day, index) => (
           <WorkoutDayRow
@@ -78,14 +81,10 @@ interface WorkoutDayRowProps {
 }
 
 const WorkoutDayRow: React.FC<WorkoutDayRowProps> = ({ day, index, onPress }) => {
-  const date = new Date(day.date);
-  const dayNumber = date.getDate();
-  const monthName = date.toLocaleDateString('es-ES', { month: 'short' });
-
-  // Determinar si es mañana
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const isTomorrow = day.date === tomorrow.toISOString().split('T')[0];
+  const dateKey = toLocalDateKey(day.date) ?? day.date;
+  const dayNumber = getLocalDayNumber(day.date);
+  const monthName = formatLocalDate(day.date, { month: 'short' }, 'es-ES');
+  const isTomorrow = dateKey === getTomorrowDateKey();
 
   return (
     <Animated.View entering={FadeInRight.delay(index * 100).duration(400)}>
@@ -94,7 +93,6 @@ const WorkoutDayRow: React.FC<WorkoutDayRowProps> = ({ day, index, onPress }) =>
         onPress={onPress}
         activeOpacity={0.7}
       >
-        {/* Fecha */}
         <View style={styles.dateContainer}>
           <View style={[styles.dateCircle, isTomorrow && styles.dateCircleTomorrow]}>
             <Text style={[styles.dateNumber, isTomorrow && styles.dateNumberTomorrow]}>
@@ -104,24 +102,22 @@ const WorkoutDayRow: React.FC<WorkoutDayRowProps> = ({ day, index, onPress }) =>
           <Text style={styles.monthText}>{monthName}</Text>
         </View>
 
-        {/* Info del día */}
         <View style={styles.dayInfo}>
           <View style={styles.dayNameRow}>
             <Text style={styles.dayName}>
-              {day.training_day_name || `Día ${day.day_number}`}
+              {day.training_day_name || `Dia ${day.day_number}`}
             </Text>
-            {isTomorrow && (
+            {isTomorrow ? (
               <View style={styles.tomorrowBadge}>
-                <Text style={styles.tomorrowText}>Mañana</Text>
+                <Text style={styles.tomorrowText}>Manana</Text>
               </View>
-            )}
+            ) : null}
           </View>
           <Text style={styles.dayDescription}>
-            {day.day_name} • {day.total_sets} series
+            {formatLocalDate(day.date, { weekday: 'long' })} - {day.total_sets} series
           </Text>
         </View>
 
-        {/* Chevron */}
         <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
       </TouchableOpacity>
     </Animated.View>

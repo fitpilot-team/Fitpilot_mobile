@@ -1,13 +1,21 @@
 import { nutritionClient } from './api';
 import type {
-  ClientDietDay,
   ClientDietFoodRow,
   ClientDietIngredientRow,
+  ClientDietMenu,
   ClientDietMeal,
   ClientDietPortion,
   ClientDietRecipeCard,
+  ClientDietWeekDay,
   ClientRecipeSummary,
 } from '../types';
+import {
+  compareDateKeys,
+  getLocalWeekDateKeys,
+  getStartOfLocalWeekDateKey,
+  getTodayDateKey,
+  toLocalDateKey,
+} from '../utils/date';
 
 type NutritionPortionResponse = {
   household_label?: string | null;
@@ -125,13 +133,7 @@ const roundValue = (value: number | null) => {
   return Math.round(value * 100) / 100;
 };
 
-const getTodayDateKey = () => {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-};
-
-const normalizeDateKey = (value: string | null | undefined) => value?.slice(0, 10) ?? null;
+const normalizeDateKey = (value: string | null | undefined) => toLocalDateKey(value);
 
 const normalizeUnit = (value: string | null | undefined) =>
   (value || '')
@@ -416,23 +418,22 @@ const mapDietMeal = (
   };
 };
 
-const mapDietDay = (
+const mapDietMenu = (
   menu: NutritionMenuResponse,
   assignedDate: string,
-  todayDate: string,
   recipeSummaryMap: Map<number, ClientRecipeSummary>,
-): ClientDietDay => {
+): ClientDietMenu => {
   const meals = (menu.menu_meals ?? []).map((meal) => mapDietMeal(meal, recipeSummaryMap));
   const totalItems = meals.reduce((count, meal) => count + meal.totalEntries, 0);
   const totalRecipes = meals.reduce((count, meal) => count + meal.recipes.length, 0);
 
   return {
     id: `${menu.id}-${assignedDate}`,
+    menuId: menu.id,
     assignedDate,
     title: menu.title?.trim() || 'Tu dieta',
     description: menu.description_?.trim() || null,
     meals,
-    isToday: assignedDate === todayDate,
     totalMeals: meals.length,
     totalItems,
     totalRecipes,
@@ -444,7 +445,7 @@ export const getTodayDietDateKey = getTodayDateKey;
 export const getClientDietCalendar = async (
   clientId: string,
   date: string = getTodayDateKey(),
-): Promise<ClientDietDay[]> => {
+): Promise<ClientDietWeekDay[]> => {
   const numericClientId = Number(clientId);
 
   if (!Number.isInteger(numericClientId)) {
@@ -453,13 +454,15 @@ export const getClientDietCalendar = async (
 
   const todayDate = getTodayDateKey();
   const anchorDate = normalizeDateKey(date) || todayDate;
+  const weekStartDate = getStartOfLocalWeekDateKey(anchorDate) || todayDate;
+  const weekDateKeys = getLocalWeekDateKeys(anchorDate);
   const dailyMenus = await nutritionClient.get<NutritionDailyBatchResponseItem[]>(
-    `/menus/daily/batch?client_id=${numericClientId}&date=${anchorDate}&days=${DIET_LOOKAHEAD_DAYS}`,
+    `/menus/daily/batch?client_id=${numericClientId}&date=${weekStartDate}&days=${DIET_LOOKAHEAD_DAYS}`,
     { skipErrorLogging: true },
   );
 
   const recipeSummaryMap = await buildRecipeSummaryMap(dailyMenus);
-  const daysByDate = new Map<string, ClientDietDay>();
+  const menusByDate = new Map<string, ClientDietMenu>();
 
   for (const menu of dailyMenus) {
     const assignedDate = normalizeDateKey(menu.assigned_date);
@@ -467,13 +470,50 @@ export const getClientDietCalendar = async (
       continue;
     }
 
-    daysByDate.set(
+    if (!weekDateKeys.includes(assignedDate) || menusByDate.has(assignedDate)) {
+      continue;
+    }
+
+    menusByDate.set(
       assignedDate,
-      mapDietDay(menu, assignedDate, todayDate, recipeSummaryMap),
+      mapDietMenu(menu, assignedDate, recipeSummaryMap),
     );
   }
 
-  return Array.from(daysByDate.values()).sort((left, right) =>
-    left.assignedDate.localeCompare(right.assignedDate),
+  return weekDateKeys.map((assignedDate) => {
+    const assignedMenu = menusByDate.get(assignedDate) ?? null;
+
+    return {
+      id: assignedDate,
+      assignedDate,
+      isToday: assignedDate === todayDate,
+      assignedMenuId: assignedMenu?.menuId ?? null,
+      assignedMenu,
+    };
+  });
+};
+
+export const getClientDietMenuPool = async (
+  clientId: string,
+  date: string,
+): Promise<ClientDietMenu[]> => {
+  const numericClientId = Number(clientId);
+  const targetDate = normalizeDateKey(date);
+
+  if (!Number.isInteger(numericClientId) || !targetDate) {
+    throw new Error('No se pudo resolver el cliente autenticado para cargar el pool de menus.');
+  }
+
+  const poolMenus = await nutritionClient.get<NutritionDailyBatchResponseItem[]>(
+    `/menus/pool?client_id=${numericClientId}&date=${targetDate}`,
+    { skipErrorLogging: true },
   );
+
+  const dedupedPoolMenus = Array.from(
+    new Map(poolMenus.map((menu) => [menu.id, menu])).values(),
+  ).sort((left, right) => compareDateKeys(left.assigned_date ?? targetDate, right.assigned_date ?? targetDate));
+
+  const recipeSummaryMap = await buildRecipeSummaryMap(dedupedPoolMenus);
+
+  return dedupedPoolMenus.map((menu) => mapDietMenu(menu, targetDate, recipeSummaryMap));
 };
