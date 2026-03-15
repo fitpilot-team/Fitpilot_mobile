@@ -148,7 +148,7 @@ const getFoodGroupVisual = (groupName: string | null): FoodGroupVisual => {
 const PortionChips: React.FC<{ ingredient: ClientDietIngredientRow | ClientDietFoodRow }> = ({ ingredient }) => (
   <View style={styles.portionGrid}>
     <View style={styles.portionChip}>
-      <Text style={styles.portionChipLabel}>Unidad</Text>
+      <Text style={styles.portionChipLabel}>Unidad casera</Text>
       <Text style={styles.portionChipValue}>{ingredient.portion.householdLabel || '—'}</Text>
     </View>
     <View style={styles.portionChip}>
