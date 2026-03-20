@@ -131,6 +131,19 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="diet"
+        options={{
+          title: 'Dieta',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? 'restaurant' : 'restaurant-outline'}
+              size={size}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="workouts"
         options={{
           title: isTablet ? 'Entreno' : 'Entrenamientos',
@@ -150,19 +163,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
               name={focused ? 'body' : 'body-outline'}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="diet"
-        options={{
-          title: 'Dieta',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'restaurant' : 'restaurant-outline'}
               size={size}
               color={color}
             />

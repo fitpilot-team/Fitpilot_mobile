@@ -44,6 +44,10 @@ export default function RootLayout() {
         {/* Login screen outside of tabs */}
         <Stack.Screen name="login" />
 
+        {/* Profile detail screens outside of tabs */}
+        <Stack.Screen name="profile/personal-info" />
+        <Stack.Screen name="profile/change-password" />
+
         {/* Workout session as modal over tabs */}
         <Stack.Screen
           name="workout/[id]"

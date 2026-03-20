@@ -276,8 +276,17 @@ export default function DietScreen() {
 
         {selectedDay ? (
           <>
+            <Animated.View entering={FadeInDown.delay(80).duration(350)}>
+              <DietWeekCalendar
+                days={dietDays}
+                selectedDate={selectedDate}
+                onSelect={setSelectedDate}
+                contentWidth={contentWidth}
+              />
+            </Animated.View>
+
             {visibleMenu ? (
-              <Animated.View entering={FadeInDown.delay(80).duration(350)} style={styles.heroSection}>
+              <Animated.View entering={FadeInDown.delay(140).duration(350)} style={styles.heroSection}>
                 <DietHero
                   menu={visibleMenu}
                   assignedDate={selectedDay.assignedDate}
@@ -287,25 +296,7 @@ export default function DietScreen() {
               </Animated.View>
             ) : null}
 
-            <Animated.View entering={FadeInDown.delay(140).duration(350)} style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Calendario</Text>
-                <Text style={styles.sectionSubtitle}>
-                  {formatLongDate(selectedDay.assignedDate)}
-                </Text>
-              </View>
-            </Animated.View>
-
-            <Animated.View entering={FadeInDown.delay(180).duration(350)}>
-              <DietWeekCalendar
-                days={dietDays}
-                selectedDate={selectedDate}
-                onSelect={setSelectedDate}
-                contentWidth={contentWidth}
-              />
-            </Animated.View>
-
-            <Animated.View entering={FadeInDown.delay(220).duration(350)} style={styles.selectorSection}>
+            <Animated.View entering={FadeInDown.delay(180).duration(350)} style={styles.selectorSection}>
               <TouchableOpacity
                 style={[
                   styles.selectorCard,
@@ -337,7 +328,7 @@ export default function DietScreen() {
               </TouchableOpacity>
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(260).duration(350)} style={styles.mealsSection}>
+            <Animated.View entering={FadeInDown.delay(220).duration(350)} style={styles.mealsSection}>
               <View style={styles.sectionHeader}>
                 <View>
                   <Text style={styles.sectionTitle}>Comidas del dia</Text>
@@ -455,7 +446,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   heroSection: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     paddingHorizontal: spacing.lg,
   },
   sectionHeader: {

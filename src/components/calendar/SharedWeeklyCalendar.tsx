@@ -153,9 +153,10 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
     const usableWidth = Math.max(320, contentWidth - spacing.lg * 2);
     const isCompact = usableWidth < 390;
     const isTablet = usableWidth >= 720;
-    const dayGap = isTablet ? 8 : isCompact ? 4 : 6;
+    const dayGap = isTablet ? 9 : isCompact ? 5 : 7;
+    const minDayWidth = isCompact ? 41 : 42;
     const maxDayWidth = isTablet ? 74 : isCompact ? 44 : 56;
-    const dayColumnWidth = Math.max(42, Math.min(maxDayWidth, (usableWidth - dayGap * 6) / 7));
+    const dayColumnWidth = Math.max(minDayWidth, Math.min(maxDayWidth, (usableWidth - dayGap * 6) / 7));
     const shapeSize = Math.max(dayColumnWidth + 54, Math.min(isTablet ? 144 : 136, dayColumnWidth + 92));
     const circleRadius = Math.max(16, Math.min(20, shapeSize * 0.125));
     const scale = shapeSize / SVG_ORIGINAL_WIDTH;
@@ -295,7 +296,7 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: spacing.md,
+    paddingVertical: 12,
     overflow: 'visible',
   },
   daysRow: {

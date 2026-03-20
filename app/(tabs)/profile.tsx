@@ -140,12 +140,12 @@ export default function ProfileScreen() {
           <MenuItem
             icon="person-outline"
             label="Información personal"
-            onPress={() => handleNotImplemented('Información personal')}
+            onPress={() => router.push('/profile/personal-info')}
           />
           <MenuItem
             icon="lock-closed-outline"
             label="Cambiar contraseña"
-            onPress={() => handleNotImplemented('Cambiar contraseña')}
+            onPress={() => router.push('/profile/change-password')}
           />
           <MenuItem
             icon="notifications-outline"

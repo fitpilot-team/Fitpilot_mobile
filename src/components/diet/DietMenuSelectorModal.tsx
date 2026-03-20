@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,121 +37,127 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
   onClose,
   onRetry,
   onSelect,
-}) => (
-  <Modal
-    visible={visible}
-    transparent
-    animationType="slide"
-    statusBarTranslucent
-    onRequestClose={onClose}
-  >
-    <View style={styles.overlay}>
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.headerCopy}>
-            <Text style={styles.title}>Menus del pool</Text>
-            <Text style={styles.subtitle}>{dateLabel}</Text>
-            <Text style={styles.supportingText}>
-              Esta seleccion solo cambia la vista de esta pantalla.
-            </Text>
+}) => {
+  const { height } = useWindowDimensions();
+  const availableHeight = Math.max(240, height - spacing.lg);
+  const sheetHeight = Math.min(Math.max(height * 0.82, 320), availableHeight);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        <View style={[styles.container, { height: sheetHeight }]}>
+          <View style={styles.header}>
+            <View style={styles.headerCopy}>
+              <Text style={styles.title}>Menus del pool</Text>
+              <Text style={styles.subtitle}>{dateLabel}</Text>
+              <Text style={styles.supportingText}>
+                Esta seleccion solo cambia la vista de esta pantalla.
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <Ionicons name="close-outline" size={24} color={colors.gray[600]} />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Ionicons name="close-outline" size={24} color={colors.gray[600]} />
-          </TouchableOpacity>
+
+          {isLoading ? (
+            <View style={styles.loadingState}>
+              <LoadingSpinner text="Cargando menus..." />
+            </View>
+          ) : error && menus.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="alert-circle-outline" size={36} color={colors.gray[400]} />
+              <Text style={styles.emptyTitle}>No pudimos cargar el pool</Text>
+              <Text style={styles.emptyText}>{error}</Text>
+              {onRetry ? (
+                <Button
+                  title="Reintentar"
+                  onPress={onRetry}
+                  variant="primary"
+                  style={styles.retryButton}
+                />
+              ) : null}
+            </View>
+          ) : menus.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="restaurant-outline" size={36} color={colors.gray[400]} />
+              <Text style={styles.emptyTitle}>Sin menus disponibles</Text>
+              <Text style={styles.emptyText}>
+                Esta fecha no tiene alternativas visibles en el pool.
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              style={styles.content}
+              contentContainerStyle={styles.contentContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              {menus.map((menu) => {
+                const isSelected = menu.menuId === selectedMenuId;
+                const isAssigned = menu.menuId === assignedMenuId;
+
+                return (
+                  <TouchableOpacity
+                    key={menu.id}
+                    style={[styles.optionCard, isSelected && styles.optionCardSelected]}
+                    onPress={() => onSelect(menu)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.optionHeader}>
+                      <View style={styles.optionCopy}>
+                        <Text style={styles.optionTitle}>{menu.title}</Text>
+                        <Text style={styles.optionSubtitle} numberOfLines={2}>
+                          {menu.description || 'Sin descripcion adicional.'}
+                        </Text>
+                      </View>
+                      <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
+                        <Ionicons
+                          name={isSelected ? 'checkmark' : 'ellipse-outline'}
+                          size={18}
+                          color={isSelected ? colors.white : colors.gray[400]}
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.metaRow}>
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>{menu.totalMeals} comidas</Text>
+                      </View>
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>{menu.totalItems} items</Text>
+                      </View>
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>{menu.totalRecipes} recetas</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.badgeRow}>
+                      {isAssigned ? (
+                        <View style={[styles.badge, styles.assignedBadge]}>
+                          <Text style={[styles.badgeText, styles.assignedBadgeText]}>Asignado</Text>
+                        </View>
+                      ) : null}
+                      {isSelected && !isAssigned ? (
+                        <View style={[styles.badge, styles.previewBadge]}>
+                          <Text style={[styles.badgeText, styles.previewBadgeText]}>Vista previa</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
-
-        {isLoading ? (
-          <View style={styles.loadingState}>
-            <LoadingSpinner text="Cargando menus..." />
-          </View>
-        ) : error && menus.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="alert-circle-outline" size={36} color={colors.gray[400]} />
-            <Text style={styles.emptyTitle}>No pudimos cargar el pool</Text>
-            <Text style={styles.emptyText}>{error}</Text>
-            {onRetry ? (
-              <Button
-                title="Reintentar"
-                onPress={onRetry}
-                variant="primary"
-                style={styles.retryButton}
-              />
-            ) : null}
-          </View>
-        ) : menus.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="restaurant-outline" size={36} color={colors.gray[400]} />
-            <Text style={styles.emptyTitle}>Sin menus disponibles</Text>
-            <Text style={styles.emptyText}>
-              Esta fecha no tiene alternativas visibles en el pool.
-            </Text>
-          </View>
-        ) : (
-          <ScrollView
-            style={styles.content}
-            contentContainerStyle={styles.contentContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            {menus.map((menu) => {
-              const isSelected = menu.menuId === selectedMenuId;
-              const isAssigned = menu.menuId === assignedMenuId;
-
-              return (
-                <TouchableOpacity
-                  key={menu.id}
-                  style={[styles.optionCard, isSelected && styles.optionCardSelected]}
-                  onPress={() => onSelect(menu)}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.optionHeader}>
-                    <View style={styles.optionCopy}>
-                      <Text style={styles.optionTitle}>{menu.title}</Text>
-                      <Text style={styles.optionSubtitle} numberOfLines={2}>
-                        {menu.description || 'Sin descripcion adicional.'}
-                      </Text>
-                    </View>
-                    <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
-                      <Ionicons
-                        name={isSelected ? 'checkmark' : 'ellipse-outline'}
-                        size={18}
-                        color={isSelected ? colors.white : colors.gray[400]}
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.metaRow}>
-                    <View style={styles.metaChip}>
-                      <Text style={styles.metaChipText}>{menu.totalMeals} comidas</Text>
-                    </View>
-                    <View style={styles.metaChip}>
-                      <Text style={styles.metaChipText}>{menu.totalItems} items</Text>
-                    </View>
-                    <View style={styles.metaChip}>
-                      <Text style={styles.metaChipText}>{menu.totalRecipes} recetas</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.badgeRow}>
-                    {isAssigned ? (
-                      <View style={[styles.badge, styles.assignedBadge]}>
-                        <Text style={[styles.badgeText, styles.assignedBadgeText]}>Asignado</Text>
-                      </View>
-                    ) : null}
-                    {isSelected && !isAssigned ? (
-                      <View style={[styles.badge, styles.previewBadge]}>
-                        <Text style={[styles.badgeText, styles.previewBadgeText]}>Vista previa</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
       </View>
-    </View>
-  </Modal>
-);
+    </Modal>
+  );
+};
 
 const styles = StyleSheet.create({
   overlay: {
@@ -159,7 +166,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
   },
   container: {
-    maxHeight: '82%',
     backgroundColor: colors.white,
     borderTopLeftRadius: borderRadius.xl,
     borderTopRightRadius: borderRadius.xl,
@@ -205,10 +211,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray[100],
   },
   loadingState: {
+    flex: 1,
     minHeight: 220,
     justifyContent: 'center',
   },
   emptyState: {
+    flex: 1,
     minHeight: 220,
     alignItems: 'center',
     justifyContent: 'center',
@@ -237,6 +245,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: spacing.lg,
+    paddingBottom: spacing.xl,
     gap: spacing.md,
   },
   optionCard: {

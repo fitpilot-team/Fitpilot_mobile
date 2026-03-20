@@ -16,17 +16,12 @@ import type {
   ClientDietMeal,
   ClientDietRecipeCard,
 } from '../../types';
+import { getSmaeGroupVisual } from '../../constants/smaeIcons';
+import { SmaeGroupIcon } from './SmaeGroupIcon';
 
 interface DietMealCardProps {
   meal: ClientDietMeal;
 }
-
-type FoodGroupVisual = {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  iconColor: string;
-  backgroundColor: string;
-  borderColor: string;
-};
 
 const formatCalories = (value: number | null) => {
   if (value === null || value <= 0) {
@@ -42,107 +37,6 @@ const formatMeasureValue = (value: number | null, suffix: string) => {
   }
 
   return `${Number.isInteger(value) ? value : Number(value.toFixed(2))} ${suffix}`;
-};
-
-const normalizeGroupName = (value: string | null | undefined) =>
-  (value || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-
-const getFoodGroupVisual = (groupName: string | null): FoodGroupVisual => {
-  const normalizedGroup = normalizeGroupName(groupName);
-
-  if (normalizedGroup.includes('verdura') || normalizedGroup.includes('vegetal')) {
-    return {
-      icon: 'leaf-outline',
-      iconColor: '#15803D',
-      backgroundColor: '#DCFCE7',
-      borderColor: '#BBF7D0',
-    };
-  }
-
-  if (normalizedGroup.includes('fruta')) {
-    return {
-      icon: 'flower-outline',
-      iconColor: '#EA580C',
-      backgroundColor: '#FFEDD5',
-      borderColor: '#FED7AA',
-    };
-  }
-
-  if (
-    normalizedGroup.includes('cereal') ||
-    normalizedGroup.includes('tuberculo') ||
-    normalizedGroup.includes('pan') ||
-    normalizedGroup.includes('arroz')
-  ) {
-    return {
-      icon: 'cafe-outline',
-      iconColor: '#92400E',
-      backgroundColor: '#FEF3C7',
-      borderColor: '#FDE68A',
-    };
-  }
-
-  if (normalizedGroup.includes('leguminosa') || normalizedGroup.includes('frijol')) {
-    return {
-      icon: 'ellipse-outline',
-      iconColor: '#7C3AED',
-      backgroundColor: '#EDE9FE',
-      borderColor: '#DDD6FE',
-    };
-  }
-
-  if (
-    normalizedGroup.includes('animal') ||
-    normalizedGroup.includes('prote') ||
-    normalizedGroup.includes('carne') ||
-    normalizedGroup.includes('pollo') ||
-    normalizedGroup.includes('pescado')
-  ) {
-    return {
-      icon: 'fish-outline',
-      iconColor: '#1D4ED8',
-      backgroundColor: '#DBEAFE',
-      borderColor: '#BFDBFE',
-    };
-  }
-
-  if (normalizedGroup.includes('leche') || normalizedGroup.includes('lacteo')) {
-    return {
-      icon: 'water-outline',
-      iconColor: '#0891B2',
-      backgroundColor: '#CFFAFE',
-      borderColor: '#A5F3FC',
-    };
-  }
-
-  if (normalizedGroup.includes('grasa') || normalizedGroup.includes('aceite')) {
-    return {
-      icon: 'water',
-      iconColor: '#D97706',
-      backgroundColor: '#FEF3C7',
-      borderColor: '#FCD34D',
-    };
-  }
-
-  if (normalizedGroup.includes('azucar') || normalizedGroup.includes('dulce')) {
-    return {
-      icon: 'ice-cream-outline',
-      iconColor: '#DB2777',
-      backgroundColor: '#FCE7F3',
-      borderColor: '#FBCFE8',
-    };
-  }
-
-  return {
-    icon: 'restaurant-outline',
-    iconColor: brandColors.navy,
-    backgroundColor: '#E8F0F8',
-    borderColor: '#D8E7F4',
-  };
 };
 
 const PortionChips: React.FC<{ ingredient: ClientDietIngredientRow | ClientDietFoodRow }> = ({ ingredient }) => (
@@ -170,7 +64,7 @@ const IngredientRow: React.FC<{
   ingredient: ClientDietIngredientRow | ClientDietFoodRow;
   accent?: 'recipe' | 'food';
 }> = ({ ingredient, accent = 'food' }) => {
-  const foodGroupVisual = getFoodGroupVisual(ingredient.exchangeGroupName);
+  const foodGroupVisual = getSmaeGroupVisual(ingredient.exchangeGroupName);
 
   return (
     <View
@@ -180,7 +74,12 @@ const IngredientRow: React.FC<{
       ]}
     >
       <View style={[styles.foodIcon, { backgroundColor: foodGroupVisual.backgroundColor }]}>
-        <Ionicons name={foodGroupVisual.icon} size={18} color={foodGroupVisual.iconColor} />
+        <SmaeGroupIcon
+          groupName={ingredient.exchangeGroupName}
+          size={18}
+          strokeWidth={2}
+          withContainer={false}
+        />
       </View>
 
       <View style={styles.foodBody}>

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getCurrentUser } from '../services/account';
 import {
   clearSessionTokens,
   getAccessToken,
@@ -12,9 +13,7 @@ import { useWorkoutStore } from './workoutStore';
 import type {
   LoginCredentials,
   LoginResponse,
-  NutritionAuthUserResponse,
   User,
-  UserRole,
 } from '../types';
 
 interface AuthState {
@@ -27,66 +26,10 @@ interface AuthState {
   initialize: () => Promise<void>;
   login: (credentials: LoginCredentials) => Promise<boolean>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<User | null>;
   uploadAvatar: (uri: string) => Promise<void>;
   clearError: () => void;
 }
-
-const normalizeRole = (role: string | null | undefined): UserRole => {
-  const normalizedRole = role?.trim().toLowerCase();
-
-  if (normalizedRole === 'admin' || normalizedRole === 'administrator') {
-    return 'admin';
-  }
-
-  if (normalizedRole === 'professional' || normalizedRole === 'trainer') {
-    return 'trainer';
-  }
-
-  return 'client';
-};
-
-const normalizeProfessionalRoles = (
-  professionalRole: NutritionAuthUserResponse['professional_role'],
-): string[] => {
-  if (Array.isArray(professionalRole)) {
-    return professionalRole.filter((role): role is string => typeof role === 'string');
-  }
-
-  if (typeof professionalRole === 'string' && professionalRole.trim()) {
-    return [professionalRole.trim()];
-  }
-
-  return [];
-};
-
-const mapNutritionUserToUser = (payload: NutritionAuthUserResponse): User => {
-  const firstName = payload.name?.trim() || null;
-  const lastName = payload.lastname?.trim() || null;
-  const displayName = [firstName, lastName].filter(Boolean).join(' ').trim() || payload.email;
-
-  return {
-    id: String(payload.id),
-    email: payload.email,
-    displayName,
-    firstName,
-    lastName,
-    role: normalizeRole(payload.role),
-    phoneNumber: payload.phone_number ?? null,
-    isPhoneVerified: payload.is_phone_verified ?? false,
-    onboardingStatus: payload.onboarding_status ?? null,
-    profilePictureUrl: payload.profile_picture ?? null,
-    professionalRoles: normalizeProfessionalRoles(payload.professional_role),
-    currentSubscription: payload.current_subscription ?? null,
-    hasSubscription: payload.has_subscription ?? false,
-    hasActiveSubscription: payload.has_active_subscription ?? false,
-    subscriptionVigency: payload.subscription_vigency ?? null,
-  };
-};
-
-const fetchCurrentUser = async () => {
-  const payload = await nutritionClient.get<NutritionAuthUserResponse>('/auth/me');
-  return mapNutritionUserToUser(payload);
-};
 
 export const useAuthStore = create<AuthState>((set, get) => {
   const clearAuthenticatedState = async (error: string | null = null) => {
@@ -99,6 +42,17 @@ export const useAuthStore = create<AuthState>((set, get) => {
       isInitialized: true,
       error,
     });
+  };
+
+  const ensureClientUser = async (user: User) => {
+    if (user.role !== 'client') {
+      await clearAuthenticatedState(
+        'Esta aplicacion es solo para clientes. Los profesionales deben usar la aplicacion web.',
+      );
+      return null;
+    }
+
+    return user;
   };
 
   const authStore: AuthState = {
@@ -126,10 +80,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
           console.log('[Auth] init: access token found');
         }
 
-        const user = await fetchCurrentUser();
-
-        if (user.role !== 'client') {
-          await clearAuthenticatedState('Esta aplicacion es solo para clientes');
+        const user = await ensureClientUser(await getCurrentUser());
+        if (!user) {
           return;
         }
 
@@ -178,12 +130,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
           refreshToken: response.refresh_token,
         });
 
-        const user = await fetchCurrentUser();
-
-        if (user.role !== 'client') {
-          await clearAuthenticatedState(
-            'Esta aplicacion es solo para clientes. Los profesionales deben usar la aplicacion web.',
-          );
+        const user = await ensureClientUser(await getCurrentUser());
+        if (!user) {
           return false;
         }
 
@@ -234,6 +182,34 @@ export const useAuthStore = create<AuthState>((set, get) => {
       }
     },
 
+    refreshUser: async () => {
+      try {
+        const user = await ensureClientUser(await getCurrentUser());
+        if (!user) {
+          return null;
+        }
+
+        set({
+          user,
+          isAuthenticated: true,
+          isInitialized: true,
+          error: null,
+        });
+
+        return user;
+      } catch (error: any) {
+        if (__DEV__) {
+          console.warn('[Auth] refreshUser error', error?.message || error);
+        }
+
+        set({
+          error: error.message || 'No fue posible actualizar tu perfil',
+        });
+
+        throw error;
+      }
+    },
+
     uploadAvatar: async (uri: string) => {
       set({ isLoading: true, error: null });
 
@@ -251,10 +227,15 @@ export const useAuthStore = create<AuthState>((set, get) => {
           },
         });
 
-        const user = await fetchCurrentUser();
+        const user = await ensureClientUser(await getCurrentUser());
+        if (!user) {
+          return;
+        }
 
         set({
           user,
+          isAuthenticated: true,
+          isInitialized: true,
           isLoading: false,
           error: null,
         });

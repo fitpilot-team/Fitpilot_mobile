@@ -46,6 +46,23 @@ export interface LoginResponse {
   refresh_token: string;
 }
 
+export interface UpdateCurrentUserPayload {
+  name?: string;
+  lastname?: string;
+  phone_number?: string;
+  onboarding_status?: string;
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ApiMessageResponse {
+  message: string;
+  sessions_closed?: number;
+}
+
 // Training hierarchy types
 export type MesocycleStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type IntensityLevel = 'low' | 'medium' | 'high' | 'deload';
