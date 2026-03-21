@@ -150,7 +150,7 @@ export default function ProfileScreen() {
           <MenuItem
             icon="notifications-outline"
             label="Notificaciones"
-            onPress={() => handleNotImplemented('Notificaciones')}
+            onPress={() => router.push('/profile/notifications-settings')}
           />
         </View>
 
@@ -183,22 +183,32 @@ export default function ProfileScreen() {
           <MenuItem
             icon="help-circle-outline"
             label="Ayuda"
-            onPress={() => handleNotImplemented('Ayuda')}
+            onPress={() => router.push('/profile/help')}
           />
           <MenuItem
             icon="chatbubble-outline"
             label="Contactar soporte"
-            onPress={() => handleNotImplemented('Contactar soporte')}
+            onPress={() => router.push('/profile/contact-support')}
           />
           <MenuItem
             icon="document-text-outline"
             label="Términos y condiciones"
-            onPress={() => handleNotImplemented('Términos y condiciones')}
+            onPress={() =>
+              router.push({
+                pathname: '/profile/legal/[document]',
+                params: { document: 'terms' },
+              })
+            }
           />
           <MenuItem
             icon="shield-checkmark-outline"
             label="Política de privacidad"
-            onPress={() => handleNotImplemented('Política de privacidad')}
+            onPress={() =>
+              router.push({
+                pathname: '/profile/legal/[document]',
+                params: { document: 'privacy' },
+              })
+            }
           />
         </View>
 

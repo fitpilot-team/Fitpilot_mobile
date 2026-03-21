@@ -111,8 +111,8 @@ const getEmptyStateCopy = (reason?: NextWorkoutReason | null) => {
       };
     case 'no_training_days':
       return {
-        title: 'Tu programa no tiene días visibles',
-        subtitle: 'Revisa con tu entrenador la programación de esta semana.',
+        title: 'Tu programa no tiene sesiones visibles',
+        subtitle: 'Revisa con tu entrenador la programacion del microciclo activo.',
       };
     default:
       return {
@@ -188,6 +188,9 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   const hours = Math.floor(estimatedMinutes / 60);
   const minutes = estimatedMinutes % 60;
   const durationText = hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
+  const sessionCaption = trainingDay.session_label?.trim()
+    ? `Sesion ${trainingDay.session_index} · ${trainingDay.session_label.trim()}`
+    : `Sesion ${trainingDay.session_index}`;
 
   return (
     <AnimatedPressable
@@ -217,13 +220,16 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
               <View style={styles.positionBadge}>
                 <BlurView intensity={40} tint="light" style={styles.positionBlur}>
                   <Text style={styles.positionText}>
-                    Dia {position} de {total}
+                    Sesion {position} de {total}
                   </Text>
                 </BlurView>
               </View>
             )}
 
             <View style={[styles.titleArea, { maxWidth: cardWidth - chamferHorizontal - spacing.lg }]}>
+              <View style={styles.sessionPill}>
+                <Text style={styles.sessionPillText}>{sessionCaption}</Text>
+              </View>
               <Text style={styles.title}>{trainingDay.name}</Text>
               {trainingDay.focus && (
                 <Text style={styles.focusText}>{trainingDay.focus}</Text>
@@ -325,6 +331,22 @@ const styles = StyleSheet.create({
   },
   titleArea: {
     marginTop: spacing.xl,
+  },
+  sessionPill: {
+    alignSelf: 'flex-start',
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+  },
+  sessionPillText: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.white,
+    letterSpacing: 0.3,
   },
   title: {
     fontSize: fontSize['2xl'],

@@ -47,6 +47,10 @@ export default function RootLayout() {
         {/* Profile detail screens outside of tabs */}
         <Stack.Screen name="profile/personal-info" />
         <Stack.Screen name="profile/change-password" />
+        <Stack.Screen name="profile/notifications-settings" />
+        <Stack.Screen name="profile/help" />
+        <Stack.Screen name="profile/contact-support" />
+        <Stack.Screen name="profile/legal/[document]" />
 
         {/* Workout session as modal over tabs */}
         <Stack.Screen
@@ -54,6 +58,13 @@ export default function RootLayout() {
           options={{
             presentation: 'card',
             animation: 'slide_from_bottom',
+          }}
+        />
+        <Stack.Screen
+          name="workouts/exercises/[exerciseId]"
+          options={{
+            presentation: 'card',
+            animation: 'slide_from_right',
           }}
         />
       </Stack>

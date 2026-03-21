@@ -1,35 +1,52 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
   Dimensions,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import Svg, { Path } from 'react-native-svg';
-import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
+import {
+  borderRadius,
+  brandColors,
+  colors,
+  fontSize,
+  shadows,
+  spacing,
+} from '../../constants/colors';
 import { getAssetUrl, getVideoThumbnailUrl } from '../../services/api';
-import { VideoPlayerModal } from '../video';
 import type { DayExercise, ExerciseProgress } from '../../types';
+import {
+  formatDistanceMeters,
+  formatDurationSeconds,
+  formatEffortValue,
+  formatZoneLabel,
+  getCardioSummaryLabel,
+  isCardioExercise,
+  isEditableEffortType,
+  shouldShowStrengthEffort,
+} from '../../utils/formatters';
+import { VideoPlayerModal, YouTubePlayerModal } from '../video';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
-const CARD_HEIGHT = 260;
+const CARD_HEIGHT = 312;
+const YOUTUBE_RED = '#FF0000';
 
-// Dimensiones para la imagen con diagonal
 const IMAGE_WIDTH = CARD_WIDTH * 0.55;
 const IMAGE_HEIGHT = CARD_HEIGHT;
-const DIAGONAL_WIDTH = 80;  // Aumentado para diagonal más pronunciada (~17°)
+const DIAGONAL_WIDTH = 80;
 const IMAGE_CORNER_RADIUS = borderRadius.xl;
 const INFO_WIDTH = CARD_WIDTH - IMAGE_WIDTH + DIAGONAL_WIDTH;
 
-// Path SVG para imagen con diagonal en el lado izquierdo
-// La diagonal va desde (dw, 0) arriba hasta (0, height) abajo
 const getImageShapePath = (
   width: number,
   height: number,
@@ -50,7 +67,6 @@ const getImageShapePath = (
   `;
 };
 
-// Componente máscara para la imagen
 const ImageMask = () => (
   <Svg width={IMAGE_WIDTH} height={IMAGE_HEIGHT}>
     <Path
@@ -60,9 +76,6 @@ const ImageMask = () => (
   </Svg>
 );
 
-// Path SVG para infoArea con diagonal en el lado derecho
-// La diagonal va desde (width, 0) arriba hasta (width - dw, height) abajo
-// Esto coincide con la dirección de la diagonal de la imagen
 const getInfoShapePath = (
   width: number,
   height: number,
@@ -83,7 +96,6 @@ const getInfoShapePath = (
   `;
 };
 
-// Componente máscara para el infoArea
 const InfoMask = () => (
   <Svg width={INFO_WIDTH} height={CARD_HEIGHT}>
     <Path
@@ -99,15 +111,64 @@ interface ExerciseCardProps {
   currentSetNumber: number;
   currentReps: number;
   currentWeight: number;
+  currentEffortValue: number | null;
   isActive: boolean;
   exerciseNumber: number;
   totalExercises: number;
   setInProgress: boolean;
   isSavingSet?: boolean;
+  readOnly?: boolean;
+  onActivateExercise?: () => void;
   onRepsChange: (delta: number) => void;
+  onRepsCommit?: (value: number) => void;
   onWeightChange: (delta: number) => void;
+  onWeightCommit?: (value: number) => void;
+  onEffortChange?: (delta: number) => void;
   onNextSet: () => void;
+  onSelectSet?: (setNumber: number) => void;
+  onDeleteSet?: (setNumber: number) => void;
   onVideoPress?: () => void;
+}
+
+type EditingField = 'reps' | 'weight' | null;
+
+function formatEditableNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '0';
+  }
+
+  return Number.isInteger(value) ? `${value}` : value.toString().replace(/\.0+$/, '');
+}
+
+function sanitizeIntegerDraft(value: string): string {
+  return value.replace(/[^\d]/g, '');
+}
+
+function sanitizeDecimalDraft(value: string): string {
+  const normalized = value.replace(/,/g, '.').replace(/[^\d.]/g, '');
+  const [whole = '', ...decimalParts] = normalized.split('.');
+
+  return decimalParts.length ? `${whole}.${decimalParts.join('')}` : whole;
+}
+
+function parseIntegerDraft(value: string): number | null {
+  const normalized = sanitizeIntegerDraft(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseDecimalDraft(value: string): number | null {
+  const normalized = sanitizeDecimalDraft(value);
+  if (!normalized || normalized === '.') {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export const ExerciseCard: React.FC<ExerciseCardProps> = ({
@@ -116,31 +177,151 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   currentSetNumber,
   currentReps,
   currentWeight,
+  currentEffortValue,
+  isActive,
   exerciseNumber,
   totalExercises,
   setInProgress,
   isSavingSet = false,
+  readOnly = false,
+  onActivateExercise,
   onRepsChange,
+  onRepsCommit,
   onWeightChange,
+  onWeightCommit,
+  onEffortChange,
   onNextSet,
+  onSelectSet,
+  onDeleteSet,
   onVideoPress,
 }) => {
-  const isCompleted = progress.is_completed;
   const [isEditing, setIsEditing] = useState(false);
+  const [editingField, setEditingField] = useState<EditingField>(null);
+  const [repsDraft, setRepsDraft] = useState(() => formatEditableNumber(currentReps));
+  const [weightDraft, setWeightDraft] = useState(() => formatEditableNumber(currentWeight));
   const [showVideoModal, setShowVideoModal] = useState(false);
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+  const repsInputRef = useRef<TextInput>(null);
+  const weightInputRef = useRef<TextInput>(null);
+  const skipBlurFieldRef = useRef<EditingField>(null);
+  const wasActiveRef = useRef(isActive);
 
   const exercise = dayExercise.exercise;
   const exerciseName = exercise?.name_es || exercise?.name_en || 'Ejercicio';
-
-  // Get media URLs - thumbnail generado desde el video de Cloudinary
   const videoUrl = getAssetUrl(exercise?.video_url);
   const thumbnailUrl = getVideoThumbnailUrl(videoUrl);
   const hasVideo = !!videoUrl;
   const hasThumbnail = !!thumbnailUrl;
-
-  // Show edit mode if completed but user tapped to edit
+  const isCompleted = progress.is_completed;
   const showControls = !isCompleted || isEditing;
   const controlsDisabled = !showControls || isSavingSet;
+  const canEditCompletedExercise = isCompleted && !readOnly;
+  const isCardio = isCardioExercise(dayExercise);
+  const showStrengthEffort = shouldShowStrengthEffort(dayExercise);
+  const isEffortEditable = showStrengthEffort && isEditableEffortType(dayExercise.effort_type);
+  const currentEffortLabel = formatEffortValue(
+    dayExercise.effort_type,
+    currentEffortValue ?? dayExercise.effort_value,
+  );
+  const targetEffortLabel = formatEffortValue(dayExercise.effort_type, dayExercise.effort_value);
+  const showCurrentSetChip = !isCompleted && (isActive || setInProgress);
+  const unitLabel = isCardio ? 'bloque' : 'serie';
+  const currentUnitLabel = isCardio ? 'Bloque' : 'Serie';
+  const cardioSummaryLabel = getCardioSummaryLabel(dayExercise);
+  const cardioProtocolLabel = exercise?.cardio_subclass?.toUpperCase() || 'CARDIO';
+  const cardioZoneLabel = formatZoneLabel(dayExercise.intensity_zone ?? exercise?.intensity_zone);
+  const cardioMetrics = useMemo(() => {
+    const metrics: Array<{ key: string; label: string; value: string }> = [];
+
+    const durationLabel = dayExercise.duration_seconds == null
+      ? null
+      : formatDurationSeconds(dayExercise.duration_seconds);
+    if (durationLabel) {
+      metrics.push({ key: 'duration', label: 'Duracion', value: durationLabel });
+    }
+
+    if (cardioZoneLabel) {
+      metrics.push({ key: 'zone', label: 'Zona', value: cardioZoneLabel });
+    }
+
+    const distanceLabel = dayExercise.distance_meters == null
+      ? null
+      : formatDistanceMeters(dayExercise.distance_meters);
+    if (distanceLabel) {
+      metrics.push({ key: 'distance', label: 'Distancia', value: distanceLabel });
+    }
+
+    if (dayExercise.target_calories != null) {
+      metrics.push({
+        key: 'calories',
+        label: 'Calorias',
+        value: `${dayExercise.target_calories} cal`,
+      });
+    }
+
+    if (dayExercise.intervals && dayExercise.work_seconds) {
+      const intervalLabel = dayExercise.interval_rest_seconds
+        ? `${dayExercise.intervals} x ${formatDurationSeconds(dayExercise.work_seconds)} / ${formatDurationSeconds(dayExercise.interval_rest_seconds)}`
+        : `${dayExercise.intervals} x ${formatDurationSeconds(dayExercise.work_seconds)}`;
+      metrics.push({ key: 'intervals', label: 'Intervalos', value: intervalLabel });
+    }
+
+    return metrics.slice(0, 4);
+  }, [
+    dayExercise.distance_meters,
+    dayExercise.duration_seconds,
+    dayExercise.interval_rest_seconds,
+    dayExercise.intervals,
+    dayExercise.target_calories,
+    dayExercise.work_seconds,
+    cardioZoneLabel,
+  ]);
+
+  const setLogsByNumber = useMemo(() => {
+    const logs = new Map<number, (typeof progress.sets_data)[number]>();
+    progress.sets_data.forEach((setLog) => {
+      logs.set(setLog.set_number, setLog);
+    });
+    return logs;
+  }, [progress.sets_data]);
+
+  useEffect(() => {
+    if (editingField !== 'reps') {
+      setRepsDraft(formatEditableNumber(currentReps));
+    }
+  }, [currentReps, editingField]);
+
+  useEffect(() => {
+    if (editingField !== 'weight') {
+      setWeightDraft(formatEditableNumber(currentWeight));
+    }
+  }, [currentWeight, editingField]);
+
+  useEffect(() => {
+    if (wasActiveRef.current && !isActive && editingField) {
+      setEditingField(null);
+      skipBlurFieldRef.current = null;
+    }
+
+    wasActiveRef.current = isActive;
+  }, [editingField, isActive]);
+
+  useEffect(() => {
+    if (!isActive || !editingField) {
+      return;
+    }
+
+    const focusTimer = setTimeout(() => {
+      if (editingField === 'reps') {
+        repsInputRef.current?.focus();
+        return;
+      }
+
+      weightInputRef.current?.focus();
+    }, 0);
+
+    return () => clearTimeout(focusTimer);
+  }, [editingField, isActive]);
 
   const handleVideoPress = () => {
     if (hasVideo) {
@@ -150,10 +331,125 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
     }
   };
 
+  const handleStartEditing = useCallback((field: Exclude<EditingField, null>) => {
+    if (controlsDisabled) {
+      return;
+    }
+
+    onActivateExercise?.();
+
+    if (field === 'reps') {
+      setRepsDraft(formatEditableNumber(currentReps));
+    } else {
+      setWeightDraft(formatEditableNumber(currentWeight));
+    }
+
+    setEditingField(field);
+  }, [controlsDisabled, currentReps, currentWeight, onActivateExercise]);
+
+  const markSkipBlur = useCallback((field: Exclude<EditingField, null>) => {
+    skipBlurFieldRef.current = field;
+
+    setTimeout(() => {
+      if (skipBlurFieldRef.current === field) {
+        skipBlurFieldRef.current = null;
+      }
+    }, 0);
+  }, []);
+
+  const finalizeRepsDraft = useCallback(() => {
+    if (editingField !== 'reps') {
+      return;
+    }
+
+    const parsedValue = parseIntegerDraft(repsDraft);
+    if (parsedValue == null) {
+      setRepsDraft(formatEditableNumber(currentReps));
+      setEditingField(null);
+      return;
+    }
+
+    const nextReps = Math.max(1, parsedValue);
+    setRepsDraft(formatEditableNumber(nextReps));
+    setEditingField(null);
+    onRepsCommit?.(nextReps);
+  }, [currentReps, editingField, onRepsCommit, repsDraft]);
+
+  const handleRepsBlur = useCallback(() => {
+    if (skipBlurFieldRef.current === 'reps') {
+      skipBlurFieldRef.current = null;
+      return;
+    }
+
+    finalizeRepsDraft();
+  }, [finalizeRepsDraft]);
+
+  const handleRepsSubmit = useCallback(() => {
+    markSkipBlur('reps');
+    finalizeRepsDraft();
+  }, [finalizeRepsDraft, markSkipBlur]);
+
+  const finalizeWeightDraft = useCallback(() => {
+    if (editingField !== 'weight') {
+      return;
+    }
+
+    const parsedValue = parseDecimalDraft(weightDraft);
+    if (parsedValue == null) {
+      setWeightDraft(formatEditableNumber(currentWeight));
+      setEditingField(null);
+      return;
+    }
+
+    const nextWeight = Math.max(0, parsedValue);
+    setWeightDraft(formatEditableNumber(nextWeight));
+    setEditingField(null);
+    onWeightCommit?.(nextWeight);
+  }, [currentWeight, editingField, onWeightCommit, weightDraft]);
+
+  const handleWeightBlur = useCallback(() => {
+    if (skipBlurFieldRef.current === 'weight') {
+      skipBlurFieldRef.current = null;
+      return;
+    }
+
+    finalizeWeightDraft();
+  }, [finalizeWeightDraft]);
+
+  const handleWeightSubmit = useCallback(() => {
+    markSkipBlur('weight');
+    finalizeWeightDraft();
+  }, [finalizeWeightDraft, markSkipBlur]);
+
+  const handleRepsStep = useCallback((delta: number) => {
+    if (editingField === 'reps') {
+      markSkipBlur('reps');
+      const nextReps = Math.max(1, (parseIntegerDraft(repsDraft) ?? currentReps) + delta);
+      setRepsDraft(formatEditableNumber(nextReps));
+      setEditingField(null);
+      onRepsCommit?.(nextReps);
+      return;
+    }
+
+    onRepsChange(delta);
+  }, [currentReps, editingField, markSkipBlur, onRepsChange, onRepsCommit, repsDraft]);
+
+  const handleWeightStep = useCallback((delta: number) => {
+    if (editingField === 'weight') {
+      markSkipBlur('weight');
+      const nextWeight = Math.max(0, (parseDecimalDraft(weightDraft) ?? currentWeight) + delta);
+      setWeightDraft(formatEditableNumber(nextWeight));
+      setEditingField(null);
+      onWeightCommit?.(nextWeight);
+      return;
+    }
+
+    onWeightChange(delta);
+  }, [currentWeight, editingField, markSkipBlur, onWeightChange, onWeightCommit, weightDraft]);
+
   return (
     <View style={styles.container}>
       <View style={styles.cardBase}>
-        {/* Media area - imagen con diagonal usando MaskedView */}
         <View style={styles.mediaArea}>
           <MaskedView
             style={styles.imageMaskContainer}
@@ -166,29 +462,33 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 resizeMode="cover"
               />
             ) : (
-              <View style={styles.imagePlaceholder}>
-                <Ionicons name="fitness-outline" size={40} color={colors.gray[300]} />
-              </View>
+              <Image
+                source={require('../../../assets/exercise-placeholder.png')}
+                style={styles.exerciseImage}
+                resizeMode="cover"
+              />
             )}
           </MaskedView>
         </View>
 
-        {/* Play button - positioned above everything, only shown if has video */}
-        {hasVideo && (
+        {hasVideo ? (
           <TouchableOpacity
             style={styles.playButton}
             onPress={handleVideoPress}
             activeOpacity={0.8}
           >
-            <Ionicons
-              name="play"
-              size={18}
-              color={colors.white}
-            />
+            <Ionicons name="play" size={18} color={colors.white} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.playButton, styles.youtubeButton]}
+            onPress={() => setShowYouTubeModal(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="logo-youtube" size={20} color={colors.white} />
           </TouchableOpacity>
         )}
 
-        {/* Info area background with diagonal - usando MaskedView */}
         <View style={styles.infoAreaContainer}>
           <MaskedView
             style={styles.infoMaskContainer}
@@ -198,88 +498,201 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
           </MaskedView>
         </View>
 
-        {/* Info area content (left side) */}
         <View style={styles.infoArea}>
-          {/* Content */}
           <View style={styles.infoContent}>
-            {/* Exercise order badge */}
             <View style={styles.orderBadge}>
               <Text style={styles.orderBadgeText}>{exerciseNumber}/{totalExercises}</Text>
             </View>
 
-            {/* Exercise name */}
             <Text style={styles.exerciseName} numberOfLines={2}>
               {exerciseName}
             </Text>
 
-            {/* Reps control */}
-            <View style={styles.controlRow}>
-              <TouchableOpacity
-                onPress={() => onRepsChange(-1)}
-                style={styles.controlButton}
-                disabled={controlsDisabled}
-              >
-                <Ionicons
-                  name="chevron-down"
-                  size={22}
-                  color={controlsDisabled ? colors.gray[300] : colors.gray[600]}
-                />
-              </TouchableOpacity>
-              <View style={styles.valueContainer}>
-                <Text style={[styles.valueNumber, !showControls && styles.valueDimmed]}>
-                  {currentReps}
-                </Text>
-                <Text style={styles.valueLabel}>
-                  Rep {dayExercise.reps_min} a {dayExercise.reps_max}
-                </Text>
+            {isCardio ? (
+              <View style={styles.cardioSection}>
+                <View style={styles.cardioBadgeRow}>
+                  <View style={styles.cardioBadge}>
+                    <Ionicons name="pulse-outline" size={12} color={colors.primary[700]} />
+                    <Text style={styles.cardioBadgeText}>{cardioProtocolLabel}</Text>
+                  </View>
+                  {cardioZoneLabel ? (
+                    <View style={styles.cardioZoneBadge}>
+                      <Text style={styles.cardioZoneBadgeText}>{cardioZoneLabel}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <Text style={styles.cardioSummary}>{cardioSummaryLabel}</Text>
+
+                <View style={styles.cardioMetrics}>
+                  {cardioMetrics.map((metric) => (
+                    <View key={metric.key} style={styles.cardioMetricRow}>
+                      <Text style={styles.cardioMetricLabel}>{metric.label}</Text>
+                      <Text style={styles.cardioMetricValue}>{metric.value}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
-              <TouchableOpacity
-                onPress={() => onRepsChange(1)}
-                style={styles.controlButton}
-                disabled={controlsDisabled}
-              >
-                <Ionicons
-                  name="chevron-up"
-                  size={22}
-                  color={controlsDisabled ? colors.gray[300] : colors.gray[600]}
-                />
-              </TouchableOpacity>
-            </View>
+            ) : (
+              <>
+                <View style={styles.controlRow}>
+                  <TouchableOpacity
+                    onPress={() => handleRepsStep(-1)}
+                    style={styles.controlButton}
+                    disabled={controlsDisabled}
+                  >
+                    <Ionicons
+                      name="chevron-down"
+                      size={22}
+                      color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                    />
+                  </TouchableOpacity>
+                  {editingField === 'reps' && isActive ? (
+                    <View style={[styles.valueContainer, styles.valueContainerEditing]}>
+                      <TextInput
+                        ref={repsInputRef}
+                        value={repsDraft}
+                        onChangeText={(value) => setRepsDraft(sanitizeIntegerDraft(value))}
+                        style={styles.valueInput}
+                        keyboardType="number-pad"
+                        returnKeyType="done"
+                        blurOnSubmit
+                        onBlur={handleRepsBlur}
+                        onSubmitEditing={handleRepsSubmit}
+                        selectTextOnFocus
+                      />
+                      <Text style={styles.valueLabel}>
+                        Rep {dayExercise.reps_min} a {dayExercise.reps_max}
+                      </Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.valueContainer, styles.editableValueContainer]}
+                      activeOpacity={0.8}
+                      onPress={() => handleStartEditing('reps')}
+                      disabled={controlsDisabled}
+                    >
+                      <Text style={[styles.valueNumber, !showControls && styles.valueDimmed]}>
+                        {currentReps}
+                      </Text>
+                      <Text style={styles.valueLabel}>
+                        Rep {dayExercise.reps_min} a {dayExercise.reps_max}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    onPress={() => handleRepsStep(1)}
+                    style={styles.controlButton}
+                    disabled={controlsDisabled}
+                  >
+                    <Ionicons
+                      name="chevron-up"
+                      size={22}
+                      color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                    />
+                  </TouchableOpacity>
+                </View>
 
-            <View style={styles.divider} />
+                <View style={styles.divider} />
 
-            {/* Weight control */}
-            <View style={styles.controlRow}>
-              <TouchableOpacity
-                onPress={() => onWeightChange(-2.5)}
-                style={styles.controlButton}
-                disabled={controlsDisabled}
-              >
-                <Ionicons
-                  name="chevron-down"
-                  size={22}
-                  color={controlsDisabled ? colors.gray[300] : colors.gray[600]}
-                />
-              </TouchableOpacity>
-              <View style={styles.valueContainer}>
-                <Text style={[styles.valueNumber, !showControls && styles.valueDimmed]}>
-                  {currentWeight} kg
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => onWeightChange(2.5)}
-                style={styles.controlButton}
-                disabled={controlsDisabled}
-              >
-                <Ionicons
-                  name="chevron-up"
-                  size={22}
-                  color={controlsDisabled ? colors.gray[300] : colors.gray[600]}
-                />
-              </TouchableOpacity>
-            </View>
+                <View style={styles.controlRow}>
+                  <TouchableOpacity
+                    onPress={() => handleWeightStep(-2.5)}
+                    style={styles.controlButton}
+                    disabled={controlsDisabled}
+                  >
+                    <Ionicons
+                      name="chevron-down"
+                      size={22}
+                      color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                    />
+                  </TouchableOpacity>
+                  {editingField === 'weight' && isActive ? (
+                    <View style={[styles.valueContainer, styles.valueContainerEditing]}>
+                      <TextInput
+                        ref={weightInputRef}
+                        value={weightDraft}
+                        onChangeText={(value) => setWeightDraft(sanitizeDecimalDraft(value))}
+                        style={styles.valueInput}
+                        keyboardType={Platform.OS === 'ios' ? 'decimal-pad' : 'numeric'}
+                        returnKeyType="done"
+                        blurOnSubmit
+                        onBlur={handleWeightBlur}
+                        onSubmitEditing={handleWeightSubmit}
+                        selectTextOnFocus
+                      />
+                      <Text style={styles.valueLabel}>Peso (kg)</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.valueContainer, styles.editableValueContainer]}
+                      activeOpacity={0.8}
+                      onPress={() => handleStartEditing('weight')}
+                      disabled={controlsDisabled}
+                    >
+                      <Text style={[styles.valueNumber, !showControls && styles.valueDimmed]}>
+                        {formatEditableNumber(currentWeight)} kg
+                      </Text>
+                      <Text style={styles.valueLabel}>Peso (kg)</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    onPress={() => handleWeightStep(2.5)}
+                    style={styles.controlButton}
+                    disabled={controlsDisabled}
+                  >
+                    <Ionicons
+                      name="chevron-up"
+                      size={22}
+                      color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                    />
+                  </TouchableOpacity>
+                </View>
 
-            {/* Next button */}
+                <View style={styles.divider} />
+
+                {isEffortEditable ? (
+                  <View style={styles.controlRow}>
+                    <TouchableOpacity
+                      onPress={() => onEffortChange?.(-0.5)}
+                      style={styles.controlButton}
+                      disabled={controlsDisabled || !onEffortChange}
+                    >
+                      <Ionicons
+                        name="chevron-down"
+                        size={22}
+                        color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                      />
+                    </TouchableOpacity>
+                    <View style={styles.valueContainer}>
+                      <Text style={[styles.effortValueText, !showControls && styles.valueDimmed]}>
+                        {currentEffortLabel}
+                      </Text>
+                      <Text style={styles.valueLabel}>Intensidad de la serie</Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => onEffortChange?.(0.5)}
+                      style={styles.controlButton}
+                      disabled={controlsDisabled || !onEffortChange}
+                    >
+                      <Ionicons
+                        name="chevron-up"
+                        size={22}
+                        color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={[styles.controlRow, styles.readOnlyControlRow]}>
+                    <View style={styles.readOnlyValueContainer}>
+                      <Text style={styles.effortValueText}>{targetEffortLabel}</Text>
+                      <Text style={styles.valueLabel}>Intensidad objetivo</Text>
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
+
             {showControls && (
               <TouchableOpacity onPress={onNextSet} activeOpacity={0.8} disabled={controlsDisabled}>
                 <LinearGradient
@@ -294,12 +707,14 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                       const isLastSet = currentSetNumber >= dayExercise.sets;
 
                       if (!setInProgress) {
-                        // Serie no iniciada
-                        return isFirstSet ? 'Iniciar ejercicio' : `Iniciar serie ${currentSetNumber}`;
-                      } else {
-                        // Serie en progreso
-                        return isLastSet ? 'Finalizar ejercicio' : `Finalizar serie ${currentSetNumber}`;
+                        return isFirstSet
+                          ? 'Iniciar ejercicio'
+                          : `Iniciar ${unitLabel} ${currentSetNumber}`;
                       }
+
+                      return isLastSet
+                        ? 'Finalizar ejercicio'
+                        : `Finalizar ${unitLabel} ${currentSetNumber}`;
                     })()}
                   </Text>
                 </LinearGradient>
@@ -307,8 +722,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
             )}
           </View>
 
-          {/* Completed overlay with blur - only over info area */}
-          {isCompleted && !isEditing && (
+          {canEditCompletedExercise && !isEditing && (
             <TouchableOpacity
               style={styles.completedOverlayTouchable}
               activeOpacity={0.9}
@@ -326,8 +740,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
             </TouchableOpacity>
           )}
 
-          {/* Editing badge when completed but editing */}
-          {isCompleted && isEditing && (
+          {canEditCompletedExercise && isEditing && (
             <TouchableOpacity
               style={styles.editingBadge}
               onPress={() => setIsEditing(false)}
@@ -339,36 +752,91 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
         </View>
       </View>
 
-      {/* Set progress bars - BELOW the card */}
-      <View style={styles.setBarContainer}>
-        <View style={styles.setBars}>
-          {Array.from({ length: dayExercise.sets }, (_, i) => {
-            const setNum = i + 1;
-            const isSetCompleted = setNum <= progress.completed_sets;
+      <View style={styles.setChipSection}>
+        <View style={styles.setChipList}>
+          {Array.from({ length: dayExercise.sets }, (_, index) => {
+            const setNumber = index + 1;
+            const setLog = setLogsByNumber.get(setNumber);
+            const isSetCompleted = setNumber <= progress.completed_sets;
+            const isCurrentSet = showCurrentSetChip && setNumber === currentSetNumber;
+            const chipLabel = isCardio
+              ? cardioSummaryLabel
+              : isSetCompleted
+                ? formatEffortValue(
+                    dayExercise.effort_type,
+                    setLog?.effort_value ?? dayExercise.effort_value,
+                  )
+                : isCurrentSet
+                  ? currentEffortLabel
+                  : targetEffortLabel;
 
             return (
-              <View
-                key={setNum}
+              <TouchableOpacity
+                key={setNumber}
                 style={[
-                  styles.setBar,
-                  isSetCompleted && styles.setBarCompleted,
+                  styles.setChip,
+                  isSetCompleted && styles.setChipCompleted,
+                  isCurrentSet && styles.setChipCurrent,
+                  isCurrentSet && setInProgress && styles.setChipInProgress,
                 ]}
-              />
+                activeOpacity={0.85}
+                disabled={!onSelectSet}
+                onPress={() => onSelectSet?.(setNumber)}
+                onLongPress={() => {
+                  if (isSetCompleted && !readOnly) {
+                    onDeleteSet?.(setNumber);
+                  }
+                }}
+              >
+                <View style={styles.setChipHeader}>
+                  <Text
+                    style={[
+                      styles.setChipTitle,
+                      isSetCompleted && styles.setChipTitleCompleted,
+                      isCurrentSet && styles.setChipTitleCurrent,
+                    ]}
+                  >
+                    {isCardio ? `B${setNumber}` : `S${setNumber}`}
+                  </Text>
+                  {isSetCompleted ? (
+                    <Ionicons name="checkmark-circle" size={14} color={colors.primary[500]} />
+                  ) : isCurrentSet && setInProgress ? (
+                    <Ionicons name="timer-outline" size={14} color={brandColors.navy} />
+                  ) : null}
+                </View>
+                <Text
+                  style={[
+                    styles.setChipEffort,
+                    isSetCompleted && styles.setChipEffortCompleted,
+                    isCurrentSet && styles.setChipEffortCurrent,
+                  ]}
+                >
+                  {chipLabel}
+                </Text>
+              </TouchableOpacity>
             );
           })}
         </View>
         <Text style={styles.setIndicatorText}>
-          Serie {currentSetNumber}/{dayExercise.sets}
+          {currentUnitLabel} {currentSetNumber}/{dayExercise.sets}
         </Text>
       </View>
 
-      {/* Video Player Modal */}
       {hasVideo && videoUrl && (
         <VideoPlayerModal
           visible={showVideoModal}
           videoUri={videoUrl}
           exerciseName={exerciseName}
           onClose={() => setShowVideoModal(false)}
+        />
+      )}
+
+      {!hasVideo && (
+        <YouTubePlayerModal
+          visible={showYouTubeModal}
+          exerciseName={exerciseName}
+          searchName={exercise?.name_en}
+          onClose={() => setShowYouTubeModal(false)}
         />
       )}
     </View>
@@ -386,10 +854,9 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xl,
     overflow: 'hidden',
     backgroundColor: colors.gray[100],
-    ...shadows.md,
     position: 'relative',
+    ...shadows.md,
   },
-  // Media area - positioned on the right side
   mediaArea: {
     position: 'absolute',
     top: 0,
@@ -406,27 +873,22 @@ const styles = StyleSheet.create({
     width: IMAGE_WIDTH,
     height: IMAGE_HEIGHT,
   },
-  imagePlaceholder: {
-    width: IMAGE_WIDTH,
-    height: IMAGE_HEIGHT,
-    backgroundColor: colors.gray[200],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   playButton: {
     position: 'absolute',
     right: spacing.md,
-    bottom: spacing.md + 50, // Above the set bar container
+    bottom: spacing.md,
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.primary[500],
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 100, // Above everything
-    elevation: 5, // Android shadow
+    backgroundColor: colors.primary[500],
+    zIndex: 100,
+    elevation: 5,
   },
-  // Info area background container with diagonal mask
+  youtubeButton: {
+    backgroundColor: YOUTUBE_RED,
+  },
   infoAreaContainer: {
     position: 'absolute',
     top: 0,
@@ -444,7 +906,6 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT,
     backgroundColor: colors.white,
   },
-  // Info area content - transparent, above the masked background
   infoArea: {
     position: 'absolute',
     top: 0,
@@ -459,12 +920,12 @@ const styles = StyleSheet.create({
     paddingRight: spacing.xl,
   },
   orderBadge: {
-    backgroundColor: colors.gray[100],
+    alignSelf: 'flex-start',
+    marginBottom: spacing.xs,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: borderRadius.sm,
-    alignSelf: 'flex-start',
-    marginBottom: spacing.xs,
+    backgroundColor: colors.gray[100],
   },
   orderBadgeText: {
     fontSize: fontSize.xs,
@@ -472,51 +933,85 @@ const styles = StyleSheet.create({
     color: colors.gray[500],
   },
   exerciseName: {
+    maxWidth: '85%',
+    marginBottom: spacing.xs,
     fontSize: fontSize.lg,
     fontWeight: '600',
     color: colors.gray[900],
-    marginBottom: spacing.xs,
-    maxWidth: '85%',
   },
-  setIndicator: {
-    backgroundColor: colors.gray[100],
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-    alignSelf: 'flex-start',
-    marginBottom: spacing.sm,
+  cardioSection: {
+    flex: 1,
+    paddingTop: spacing.xs,
   },
-  // Set progress bars - below card
-  setBarContainer: {
-    paddingHorizontal: spacing.xs,
-    marginTop: spacing.sm,
+  cardioBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
   },
-  setBars: {
+  cardioBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary[50],
   },
-  setBar: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.gray[200],
-  },
-  setBarCompleted: {
-    backgroundColor: colors.primary[500],
-  },
-  setIndicatorText: {
+  cardioBadgeText: {
     fontSize: fontSize.xs,
-    color: colors.gray[600],
-    fontWeight: '500',
-    marginTop: spacing.xs,
-    textAlign: 'center',
+    fontWeight: '700',
+    color: colors.primary[700],
+  },
+  cardioZoneBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.gray[100],
+  },
+  cardioZoneBadgeText: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.gray[700],
+  },
+  cardioSummary: {
+    marginTop: spacing.sm,
+    fontSize: fontSize.base,
+    fontWeight: '700',
+    color: brandColors.navy,
+  },
+  cardioMetrics: {
+    marginTop: spacing.md,
+    gap: spacing.xs,
+  },
+  cardioMetricRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[100],
+  },
+  cardioMetricLabel: {
+    fontSize: fontSize.xs,
+    color: colors.gray[500],
+  },
+  cardioMetricValue: {
+    marginLeft: spacing.sm,
+    flex: 1,
+    textAlign: 'right',
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.gray[800],
   },
   controlRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingVertical: spacing.xs,
+  },
+  readOnlyControlRow: {
+    justifyContent: 'center',
   },
   controlButton: {
     width: 36,
@@ -526,43 +1021,71 @@ const styles = StyleSheet.create({
   },
   valueContainer: {
     alignItems: 'center',
-    minWidth: 70,
+    minWidth: 84,
+  },
+  editableValueContainer: {
+    paddingHorizontal: spacing.xs,
+    borderRadius: borderRadius.md,
+  },
+  valueContainerEditing: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.gray[50],
+    borderWidth: 1,
+    borderColor: colors.primary[200],
+    borderRadius: borderRadius.md,
+  },
+  readOnlyValueContainer: {
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  valueInput: {
+    minWidth: 72,
+    paddingVertical: 0,
+    fontSize: fontSize.xl,
+    fontWeight: '600',
+    color: colors.gray[900],
+    textAlign: 'center',
   },
   valueNumber: {
     fontSize: fontSize.xl,
     fontWeight: '600',
     color: colors.gray[900],
   },
+  effortValueText: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+    color: colors.gray[900],
+  },
   valueDimmed: {
     color: colors.gray[400],
   },
   valueLabel: {
+    marginTop: 1,
     fontSize: fontSize.xs,
     color: colors.gray[500],
-    marginTop: 1,
   },
   divider: {
-    height: 1,
-    backgroundColor: colors.gray[200],
-    marginVertical: spacing.xs,
     width: '70%',
+    height: 1,
+    marginVertical: spacing.xs,
+    backgroundColor: colors.gray[200],
   },
   nextButton: {
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
     alignSelf: 'flex-start',
     marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.md,
   },
   nextButtonDisabled: {
     opacity: 0.6,
   },
   nextButtonText: {
-    color: colors.white,
     fontSize: fontSize.sm,
     fontWeight: '600',
+    color: colors.white,
   },
-  // Completed overlay styles
   completedOverlayTouchable: {
     position: 'absolute',
     top: 0,
@@ -570,15 +1093,15 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 10,
+    overflow: 'hidden',
     borderTopLeftRadius: borderRadius.xl,
     borderBottomLeftRadius: borderRadius.xl,
-    overflow: 'hidden',
   },
   blurView: {
     flex: 1,
-    backgroundColor: 'rgba(59, 130, 246, 0.65)',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.65)',
   },
   completedOverlayContent: {
     alignItems: 'center',
@@ -586,39 +1109,103 @@ const styles = StyleSheet.create({
   checkCircle: {
     width: 56,
     height: 56,
+    marginBottom: spacing.sm,
     borderRadius: 28,
-    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.sm,
+    backgroundColor: colors.white,
   },
   completedText: {
-    color: colors.white,
     fontSize: fontSize.lg,
     fontWeight: '600',
+    color: colors.white,
   },
   tapToEditText: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: fontSize.xs,
     marginTop: spacing.xs,
+    fontSize: fontSize.xs,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
-  // Editing badge
   editingBadge: {
     position: 'absolute',
     top: spacing.sm,
     right: spacing.xl,
+    zIndex: 15,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primary[500],
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
-    zIndex: 15,
+    backgroundColor: colors.primary[500],
   },
   editingBadgeText: {
-    color: colors.white,
+    marginLeft: 4,
     fontSize: fontSize.xs,
     fontWeight: '500',
-    marginLeft: 4,
+    color: colors.white,
+  },
+  setChipSection: {
+    marginTop: spacing.sm,
+  },
+  setChipList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  setChip: {
+    minWidth: 72,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    ...shadows.sm,
+  },
+  setChipCompleted: {
+    backgroundColor: colors.primary[50],
+    borderColor: colors.primary[200],
+  },
+  setChipCurrent: {
+    backgroundColor: colors.white,
+    borderColor: brandColors.navy,
+  },
+  setChipInProgress: {
+    backgroundColor: colors.primary[100],
+    borderColor: colors.primary[400],
+  },
+  setChipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.xs,
+  },
+  setChipTitle: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.gray[600],
+  },
+  setChipTitleCompleted: {
+    color: colors.primary[700],
+  },
+  setChipTitleCurrent: {
+    color: brandColors.navy,
+  },
+  setChipEffort: {
+    marginTop: 2,
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    color: colors.gray[800],
+  },
+  setChipEffortCompleted: {
+    color: colors.primary[700],
+  },
+  setChipEffortCurrent: {
+    color: brandColors.navy,
+  },
+  setIndicatorText: {
+    marginTop: spacing.sm,
+    fontSize: fontSize.xs,
+    fontWeight: '500',
+    color: colors.gray[600],
   },
 });

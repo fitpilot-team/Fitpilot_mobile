@@ -15,6 +15,7 @@ import type {
   LoginResponse,
   User,
 } from '../types';
+import { registerForPushNotificationsAsync, sendPushTokenToBackend } from '../services/notifications';
 
 interface AuthState {
   user: User | null;
@@ -95,6 +96,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
           isInitialized: true,
           error: null,
         });
+
+        // Register push token silently if possible
+        registerForPushNotificationsAsync().then((token) => {
+          if (token) sendPushTokenToBackend(token);
+        });
       } catch (error) {
         if (__DEV__) {
           console.warn('[Auth] init error', error);
@@ -146,6 +152,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
         if (__DEV__) {
           console.log('[Auth] login success', user.email);
         }
+
+        // Generate and register push token
+        registerForPushNotificationsAsync().then((token) => {
+          if (token) sendPushTokenToBackend(token);
+        });
 
         return true;
       } catch (error: any) {

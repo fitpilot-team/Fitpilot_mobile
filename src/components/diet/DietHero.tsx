@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { borderRadius, brandColors, colors, fontSize, spacing, shadows } from '../../constants/colors';
+import { borderRadius, nutritionTheme, colors, fontSize, spacing, shadows } from '../../constants/colors';
 import type { ClientDietMenu } from '../../types';
 import { formatLocalDate } from '../../utils/date';
 
@@ -30,7 +30,7 @@ export const DietHero: React.FC<DietHeroProps> = ({
 
   return (
     <LinearGradient
-      colors={[brandColors.navy, '#27466D', brandColors.sky]}
+      colors={[nutritionTheme.heroGradientStart, nutritionTheme.heroGradientMiddle, nutritionTheme.heroGradientEnd]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.container}

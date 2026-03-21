@@ -3,10 +3,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleProp,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  ViewStyle,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +26,8 @@ interface ProfileDetailScreenProps {
   subtitle?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  scrollEnabled?: boolean;
+  contentStyle?: StyleProp<ViewStyle>;
 }
 
 export const ProfileDetailScreen: React.FC<ProfileDetailScreenProps> = ({
@@ -31,6 +35,8 @@ export const ProfileDetailScreen: React.FC<ProfileDetailScreenProps> = ({
   subtitle,
   children,
   footer,
+  scrollEnabled = true,
+  contentStyle,
 }) => (
   <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
     <KeyboardAvoidingView
@@ -52,17 +58,30 @@ export const ProfileDetailScreen: React.FC<ProfileDetailScreenProps> = ({
         </View>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          footer ? styles.scrollContentWithFooter : null,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {children}
-      </ScrollView>
+      {scrollEnabled ? (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            footer ? styles.scrollContentWithFooter : null,
+            contentStyle,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View
+          style={[
+            styles.staticContent,
+            footer ? styles.staticContentWithFooter : null,
+            contentStyle,
+          ]}
+        >
+          {children}
+        </View>
+      )}
 
       {footer ? <View style={styles.footer}>{footer}</View> : null}
     </KeyboardAvoidingView>
@@ -117,6 +136,14 @@ const styles = StyleSheet.create({
   },
   scrollContentWithFooter: {
     paddingBottom: spacing.xl,
+  },
+  staticContent: {
+    flex: 1,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  staticContentWithFooter: {
+    paddingBottom: spacing.lg,
   },
   footer: {
     paddingHorizontal: spacing.lg,

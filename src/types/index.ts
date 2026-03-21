@@ -68,6 +68,16 @@ export type MesocycleStatus = 'draft' | 'active' | 'completed' | 'archived';
 export type IntensityLevel = 'low' | 'medium' | 'high' | 'deload';
 export type EffortType = 'RIR' | 'RPE' | 'percentage';
 export type ExercisePhase = 'warmup' | 'main' | 'cooldown';
+export type ExerciseClass =
+  | 'strength'
+  | 'cardio'
+  | 'plyometric'
+  | 'flexibility'
+  | 'mobility'
+  | 'warmup'
+  | 'conditioning'
+  | 'balance';
+export type CardioSubclass = 'liss' | 'hiit' | 'miss';
 
 export interface Exercise {
   id: string;
@@ -82,6 +92,12 @@ export interface Exercise {
   image_url?: string | null;
   equipment_needed?: string | null;
   difficulty_level?: 'beginner' | 'intermediate' | 'advanced' | null;
+  exercise_class?: ExerciseClass | null;
+  cardio_subclass?: CardioSubclass | null;
+  intensity_zone?: number | null;
+  target_heart_rate_min?: number | null;
+  target_heart_rate_max?: number | null;
+  calories_per_minute?: number | null;
 }
 
 export interface DayExercise {
@@ -98,6 +114,14 @@ export interface DayExercise {
   effort_type: EffortType;
   effort_value: number;
   tempo?: string | null;
+  set_type?: string | null;
+  duration_seconds?: number | null;
+  intensity_zone?: number | null;
+  distance_meters?: number | null;
+  target_calories?: number | null;
+  intervals?: number | null;
+  work_seconds?: number | null;
+  interval_rest_seconds?: number | null;
   notes?: string | null;
 }
 
@@ -106,6 +130,8 @@ export interface TrainingDay {
   microcycle_id: string;
   day_number: number;
   date: string;
+  session_index: number;
+  session_label?: string | null;
   name: string;
   focus?: string | null;
   rest_day: boolean;
@@ -167,6 +193,8 @@ export interface WorkoutLog {
   training_day_id: string;
   started_at: string;
   completed_at?: string | null;
+  performed_on_date: string;
+  is_authoritative: boolean;
   status: WorkoutStatus;
   notes?: string | null;
   abandon_reason?: AbandonReason | null;
@@ -188,28 +216,6 @@ export interface MissedWorkout {
   exercises_count?: number;
 }
 
-export interface DayProgress {
-  date: string;
-  day_number: number;
-  day_name: string;
-  training_day_id?: string | null;
-  training_day_name?: string | null;
-  total_sets: number;
-  completed_sets: number;
-  completion_percentage: number;
-  has_workout: boolean;
-  is_rest_day: boolean;
-}
-
-export interface WeeklyProgress {
-  week_start: string;
-  week_end: string;
-  days: DayProgress[];
-  total_workouts_planned: number;
-  total_workouts_completed: number;
-  overall_completion_percentage: number;
-}
-
 export interface ExerciseProgress {
   day_exercise_id: string;
   exercise_name: string;
@@ -221,6 +227,7 @@ export interface ExerciseProgress {
 
 export interface CurrentWorkoutState {
   workout_log: WorkoutLog;
+  training_day: TrainingDay;
   training_day_name: string;
   training_day_focus?: string | null;
   total_exercises: number;
@@ -231,6 +238,10 @@ export interface CurrentWorkoutState {
 // Next Workout (Sistema Secuencial)
 export interface NextWorkoutTrainingDay {
   id: string;
+  microcycle_id: string;
+  date: string;
+  session_index: number;
+  session_label?: string | null;
   name: string;
   focus?: string | null;
   day_number: number;
@@ -248,6 +259,136 @@ export interface NextWorkoutResponse {
   total: number | null;     // Total de entrenamientos en el programa
   all_completed: boolean;   // True si completó todo el programa
   reason?: NextWorkoutReason | null;
+}
+
+export type PlannedSessionStatus = 'pending' | 'partial' | 'completed' | 'rest';
+export type ActualSessionStatus = 'not_started' | 'in_progress' | 'completed' | 'abandoned';
+export type MicrocycleMode = 'planned' | 'actual';
+
+export interface MicrocycleSessionProgress {
+  training_day_id: string;
+  workout_log_id?: string | null;
+  session_index: number;
+  session_label?: string | null;
+  name: string;
+  focus?: string | null;
+  planned_status: PlannedSessionStatus;
+  actual_status: ActualSessionStatus;
+  completion_percentage: number;
+  performed_on_date?: string | null;
+}
+
+export interface MicrocycleDayProgress {
+  date: string;
+  day_number?: number | null;
+  planned_sessions: number;
+  completed_planned_sessions: number;
+  actual_logs_count: number;
+  has_partial_session: boolean;
+  is_rest_day: boolean;
+  is_planned_date: boolean;
+  sessions: MicrocycleSessionProgress[];
+}
+
+export interface PlannedMicrocycleMetrics {
+  total_planned_sessions: number;
+  completed_planned_sessions: number;
+  next_session_position?: number | null;
+  completion_percentage: number;
+}
+
+export interface ActualMicrocycleMetrics {
+  executed_sessions: number;
+  active_days: number;
+  double_session_days: number;
+}
+
+export interface MicrocycleProgress {
+  microcycle_id?: string | null;
+  microcycle_name?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  planned_metrics: PlannedMicrocycleMetrics;
+  actual_metrics: ActualMicrocycleMetrics;
+  days: MicrocycleDayProgress[];
+}
+
+export type WorkoutAnalyticsRange = '4w' | '8w' | '12w' | '24w' | 'all';
+export type WorkoutAnalyticsColorToken = 'navy' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet';
+
+export interface RepRangeBucket {
+  id: string;
+  label: string;
+  min_reps: number;
+  max_reps: number | null;
+  color_token: WorkoutAnalyticsColorToken;
+}
+
+export interface WorkoutAnalyticsPreferences {
+  rep_ranges: RepRangeBucket[];
+}
+
+export interface WorkoutAnalyticsSummary {
+  total_sessions: number;
+  sessions_in_range: number;
+  active_days: number;
+  total_volume_kg: number;
+  avg_duration_minutes: number;
+}
+
+export interface RepRangeChartPoint {
+  week_start: string;
+  totals: Record<string, number>;
+}
+
+export interface ExerciseTrendSummary {
+  exercise_id: string;
+  exercise_name: string;
+  sessions_count: number;
+  last_performed_on?: string | null;
+  latest_best_weight_kg?: number | null;
+  best_weight_delta_kg?: number | null;
+  sparkline_points: number[];
+}
+
+export interface RecentWorkoutHistoryItem {
+  workout_log_id: string;
+  training_day_name: string;
+  performed_on_date: string;
+  duration_minutes?: number | null;
+  exercises_count: number;
+  volume_kg: number;
+  status: WorkoutStatus;
+}
+
+export interface WorkoutAnalyticsDashboard {
+  summary: WorkoutAnalyticsSummary;
+  rep_range_chart: RepRangeChartPoint[];
+  exercise_summaries: ExerciseTrendSummary[];
+  recent_history: RecentWorkoutHistoryItem[];
+  preferences: WorkoutAnalyticsPreferences;
+}
+
+export interface ExerciseTrendPoint {
+  performed_on_date: string;
+  best_weight_kg?: number | null;
+  volume_kg: number;
+  reps_bucket_id?: string | null;
+}
+
+export interface ExerciseTrendDetailSummary {
+  personal_best_kg?: number | null;
+  total_sessions: number;
+  first_logged_at?: string | null;
+  last_logged_at?: string | null;
+}
+
+export interface ExerciseTrendDetail {
+  exercise_id: string;
+  exercise_name: string;
+  summary: ExerciseTrendDetailSummary;
+  series: ExerciseTrendPoint[];
+  preferences: WorkoutAnalyticsPreferences;
 }
 
 // Muscle Volume types (from GET /api/training-days/{id}/muscle-volume)

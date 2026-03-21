@@ -20,7 +20,7 @@ import {
   DietMenuSelectorModal,
   DietWeekCalendar,
 } from '../../src/components/diet';
-import { borderRadius, brandColors, colors, fontSize, spacing } from '../../src/constants/colors';
+import { borderRadius, brandColors, colors, fontSize, spacing, nutritionTheme } from '../../src/constants/colors';
 import { useAuthStore } from '../../src/store/authStore';
 import {
   getClientDietCalendar,
@@ -316,12 +316,12 @@ export default function DietScreen() {
 
                 <View style={styles.selectorAction}>
                   {menuPoolLoadingByDate[selectedDate] ? (
-                    <ActivityIndicator size="small" color={brandColors.navy} />
+                    <ActivityIndicator size="small" color={nutritionTheme.accentStrong} />
                   ) : (
                     <Ionicons
                       name={hasAvailablePool ? 'chevron-forward-outline' : 'remove-outline'}
                       size={20}
-                      color={hasAvailablePool ? brandColors.navy : colors.gray[400]}
+                      color={hasAvailablePool ? nutritionTheme.accentStrong : colors.gray[400]}
                     />
                   )}
                 </View>
@@ -374,7 +374,7 @@ export default function DietScreen() {
           <Animated.View entering={FadeInDown.delay(80).duration(350)} style={styles.emptyStateWrapper}>
             <Card style={styles.emptyCard}>
               <View style={styles.emptyIcon}>
-                <Ionicons name={error ? 'alert-circle-outline' : 'restaurant-outline'} size={30} color={brandColors.navy} />
+                <Ionicons name={error ? 'alert-circle-outline' : 'restaurant-outline'} size={30} color={nutritionTheme.accentStrong} />
               </View>
               <Text style={styles.emptyTitle}>
                 {error ? 'No pudimos cargar tu dieta' : 'Todavia no tienes una dieta asignada'}
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   eyebrow: {
-    color: brandColors.navy,
+    color: nutritionTheme.accentStrong,
     fontSize: fontSize.xs,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
     paddingRight: spacing.md,
   },
   selectorEyebrow: {
-    color: brandColors.navy,
+    color: nutritionTheme.accentStrong,
     fontSize: fontSize.xs,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: `${brandColors.sky}14`,
+    backgroundColor: nutritionTheme.accentSoft,
   },
   mealsSection: {
     marginTop: spacing.lg,
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: `${brandColors.sky}22`,
+    backgroundColor: nutritionTheme.accentSoft,
   },
   emptyTitle: {
     marginTop: spacing.lg,

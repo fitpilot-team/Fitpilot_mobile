@@ -3,6 +3,8 @@ import { ConfigContext, ExpoConfig } from '@expo/config';
 type PublicExtra = {
   nutritionApiUrl?: string;
   trainingApiUrl?: string;
+  termsUrl?: string;
+  privacyUrl?: string;
 };
 
 const resolveRequiredUrl = (
@@ -21,6 +23,14 @@ const resolveRequiredUrl = (
   return resolved.replace(/\/+$/, '');
 };
 
+const resolveOptionalValue = (
+  envValue: string | undefined,
+  configValue: string | undefined,
+) => {
+  const resolved = envValue?.trim() || configValue?.trim();
+  return resolved || undefined;
+};
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appEnv = process.env.APP_ENV || 'development';
   const extra = (config.extra ?? {}) as PublicExtra;
@@ -33,6 +43,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     process.env.EXPO_PUBLIC_TRAINING_API_URL,
     extra.trainingApiUrl,
     'EXPO_PUBLIC_TRAINING_API_URL',
+  );
+  const termsUrl = resolveOptionalValue(
+    process.env.EXPO_PUBLIC_TERMS_URL,
+    extra.termsUrl,
+  );
+  const privacyUrl = resolveOptionalValue(
+    process.env.EXPO_PUBLIC_PRIVACY_URL,
+    extra.privacyUrl,
   );
   const isProd = appEnv === 'production';
 
@@ -81,6 +99,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ...config.extra,
       nutritionApiUrl,
       trainingApiUrl,
+      termsUrl,
+      privacyUrl,
       appEnv,
     },
   };
