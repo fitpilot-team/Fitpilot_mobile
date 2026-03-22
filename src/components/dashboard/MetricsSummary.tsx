@@ -7,6 +7,12 @@ import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '.
 import { StatCardSkeleton } from '../common/Skeleton';
 import { nutritionClient } from '../../services/api';
 import type { ApiError, MetricSummary } from '../../types';
+import {
+  type MeasurementPreference,
+  useMeasurementPreferenceStore,
+} from '../../store/measurementPreferenceStore';
+import { convertMeasurementUnitValue } from '../../utils/measurementUnits';
+import { formatMeasurementNumber } from '../../utils/measurements';
 
 interface MetricsSummaryProps {
   onPress?: () => void;
@@ -30,10 +36,16 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress, content
   const [metrics, setMetrics] = useState<MetricSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
+  const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
 
   useEffect(() => {
     void loadMetrics();
   }, []);
+
+  useEffect(() => {
+    void initializeMeasurementPreference();
+  }, [initializeMeasurementPreference]);
 
   const loadMetrics = async () => {
     try {
@@ -90,7 +102,12 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress, content
 
       <View style={[styles.metricsGrid, contentWidth >= 720 ? styles.metricsGridTablet : null]}>
         {displayMetrics.map((metric, index) => (
-          <MetricCard key={metric.metric_type} metric={metric} index={index} />
+          <MetricCard
+            key={metric.metric_type}
+            metric={metric}
+            index={index}
+            measurementPreference={measurementPreference}
+          />
         ))}
       </View>
     </Animated.View>
@@ -100,14 +117,27 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress, content
 interface MetricCardProps {
   metric: MetricSummary;
   index: number;
+  measurementPreference: MeasurementPreference;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ metric, index }) => {
+const MetricCard: React.FC<MetricCardProps> = ({ metric, index, measurementPreference }) => {
   const config = metricConfig[metric.metric_type] || {
     icon: 'analytics' as React.ComponentProps<typeof Ionicons>['name'],
     label: metric.metric_type,
     color: brandColors.sky,
   };
+  const convertedMetric = convertMeasurementUnitValue(
+    metric.latest_value,
+    metric.unit,
+    measurementPreference,
+  );
+  const convertedChange = metric.change_from_previous === null
+    ? null
+    : convertMeasurementUnitValue(
+        Math.abs(metric.change_from_previous),
+        metric.unit,
+        measurementPreference,
+      );
 
   const hasChange = metric.change_from_previous !== null;
   const isPositive = metric.change_from_previous && metric.change_from_previous > 0;
@@ -134,8 +164,13 @@ const MetricCard: React.FC<MetricCardProps> = ({ metric, index }) => {
       </View>
 
       <View style={styles.metricValueRow}>
-        <Text style={styles.metricValue}>{metric.latest_value}</Text>
-        <Text style={styles.metricUnit}>{metric.unit}</Text>
+        <Text style={styles.metricValue}>
+          {formatMeasurementNumber(
+            convertedMetric.value,
+            convertedMetric.unit === '%' ? 1 : 1,
+          )}
+        </Text>
+        <Text style={styles.metricUnit}>{convertedMetric.unit}</Text>
       </View>
 
       <Text style={styles.metricLabel}>{config.label}</Text>
@@ -148,7 +183,12 @@ const MetricCard: React.FC<MetricCardProps> = ({ metric, index }) => {
             color={changeColor}
           />
           <Text style={[styles.changeText, { color: changeColor }]}>
-            {Math.abs(metric.change_from_previous!)}
+            {convertedChange
+              ? formatMeasurementNumber(
+                  convertedChange.value,
+                  convertedChange.unit === '%' ? 1 : 1,
+                )
+              : '--'}
           </Text>
         </View>
       )}

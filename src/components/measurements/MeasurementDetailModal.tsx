@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   Modal,
   ScrollView,
@@ -25,6 +25,11 @@ import {
   getMeasurementDisplayDate,
   parseMeasurementNumber,
 } from '../../utils/measurements';
+import { convertMeasurementUnitValue } from '../../utils/measurementUnits';
+import {
+  type MeasurementPreference,
+  useMeasurementPreferenceStore,
+} from '../../store/measurementPreferenceStore';
 
 interface MeasurementDetailModalProps {
   visible: boolean;
@@ -33,15 +38,23 @@ interface MeasurementDetailModalProps {
   onClose: () => void;
 }
 
-const formatCalculationValue = (calculation: MeasurementCalculationValue) => {
+const formatCalculationValue = (
+  calculation: MeasurementCalculationValue,
+  measurementPreference: MeasurementPreference,
+) => {
   if (calculation.value === null) {
     return '--';
   }
 
+  const convertedValue = convertMeasurementUnitValue(
+    calculation.value,
+    calculation.unit,
+    measurementPreference,
+  );
   const decimals = calculation.unit ? 2 : 3;
-  const formattedValue = formatMeasurementNumber(calculation.value, decimals);
+  const formattedValue = formatMeasurementNumber(convertedValue.value, decimals);
 
-  return calculation.unit ? `${formattedValue} ${calculation.unit}` : formattedValue;
+  return convertedValue.unit ? `${formattedValue} ${convertedValue.unit}` : formattedValue;
 };
 
 const getCalculationAccent = (status: MeasurementCalculationValue['status']) => {
@@ -74,6 +87,13 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
   isLoading,
   onClose,
 }) => {
+  const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
+  const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
+
+  useEffect(() => {
+    void initializeMeasurementPreference();
+  }, [initializeMeasurementPreference]);
+
   const sortedCalculations = useMemo(() => {
     if (!detail) {
       return [];
@@ -185,8 +205,21 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                     return {
                       key: field.key,
                       label: field.label,
-                      value: formatMeasurementNumber(value, field.unit === '%' ? 1 : 1),
-                      unit: field.unit,
+                      ...(() => {
+                        const convertedValue = convertMeasurementUnitValue(
+                          numericValue,
+                          field.unit,
+                          measurementPreference,
+                        );
+
+                        return {
+                          value: formatMeasurementNumber(
+                            convertedValue.value,
+                            convertedValue.unit === '%' ? 1 : 1,
+                          ),
+                          unit: convertedValue.unit ?? undefined,
+                        };
+                      })(),
                     };
                   })
                   .filter(Boolean) as Array<{
@@ -256,7 +289,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                           </View>
                         </View>
                         <Text style={styles.calculationValue}>
-                          {formatCalculationValue(calculation)}
+                          {formatCalculationValue(calculation, measurementPreference)}
                         </Text>
                         {missingFields ? (
                           <Text style={styles.calculationHint}>

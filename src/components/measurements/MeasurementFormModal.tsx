@@ -26,8 +26,15 @@ import type { CreateOwnMeasurementPayload } from '../../types';
 import {
   getTodayDateInput,
   isValidMeasurementDateInput,
+  formatMeasurementNumber,
   parseMeasurementNumber,
 } from '../../utils/measurements';
+import {
+  convertMeasurementInputToMetricValue,
+  convertMeasurementUnitValue,
+  getMeasurementDisplayUnit,
+} from '../../utils/measurementUnits';
+import { useMeasurementPreferenceStore } from '../../store/measurementPreferenceStore';
 
 type MeasurementFormState = Record<MeasurementNumericFormKey, string> & {
   date: string;
@@ -56,15 +63,34 @@ const createInitialFormState = (): MeasurementFormState => {
 const isIntegerField = (fieldKey: MeasurementNumericFormKey) =>
   fieldKey === 'metabolic_age';
 
+const FIELD_CONFIG_BY_KEY = Object.fromEntries(
+  [
+    ...BASE_MEASUREMENT_FIELDS,
+    ...BIOIMPEDANCE_SECTIONS.flatMap((section) => section.fields),
+    ...PERIMETER_SECTIONS.flatMap((section) => section.fields),
+  ].map((field) => [field.key, field]),
+) as Record<MeasurementNumericFormKey, {
+  key: MeasurementNumericFormKey;
+  label: string;
+  placeholder?: string;
+  unit?: string;
+}>;
+
 export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   visible,
   isSubmitting,
   onClose,
   onSubmit,
 }) => {
+  const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
+  const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
   const [formState, setFormState] = useState<MeasurementFormState>(
     createInitialFormState(),
   );
+
+  useEffect(() => {
+    void initializeMeasurementPreference();
+  }, [initializeMeasurementPreference]);
 
   useEffect(() => {
     if (!visible) {
@@ -93,16 +119,23 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
 
     MEASUREMENT_NUMERIC_FORM_KEYS.forEach((fieldKey) => {
       const parsedValue = parseMeasurementNumber(formState[fieldKey]);
+      const fieldUnit = FIELD_CONFIG_BY_KEY[fieldKey]?.unit;
 
       if (parsedValue !== null) {
+        const normalizedValue = convertMeasurementInputToMetricValue(
+          parsedValue,
+          fieldUnit,
+          measurementPreference,
+        );
+
         nextPayload[fieldKey] = isIntegerField(fieldKey)
-          ? Math.round(parsedValue)
-          : parsedValue;
+          ? Math.round(normalizedValue)
+          : normalizedValue;
       }
     });
 
     return nextPayload;
-  }, [formState]);
+  }, [formState, measurementPreference]);
 
   const handleSubmit = async () => {
     if (!isValidMeasurementDateInput(formState.date.trim())) {
@@ -136,6 +169,41 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
     }
 
     await onSubmit(payload);
+  };
+
+  const getFieldLabel = (field: {
+    label: string;
+    unit?: string;
+  }) => {
+    const displayUnit = getMeasurementDisplayUnit(field.unit, measurementPreference);
+    return `${field.label}${displayUnit ? ` (${displayUnit})` : ''}`;
+  };
+
+  const getFieldPlaceholder = (field: {
+    placeholder?: string;
+    unit?: string;
+  }) => {
+    if (!field.placeholder) {
+      return undefined;
+    }
+
+    const numericPlaceholder = parseMeasurementNumber(field.placeholder);
+
+    if (numericPlaceholder === null) {
+      return field.placeholder;
+    }
+
+    const convertedValue = convertMeasurementUnitValue(
+      numericPlaceholder,
+      field.unit,
+      measurementPreference,
+    );
+
+    return formatMeasurementNumber(
+      convertedValue.value,
+      convertedValue.unit === '%' ? 1 : 1,
+      field.placeholder,
+    );
   };
 
   return (
@@ -185,10 +253,10 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
               {BASE_MEASUREMENT_FIELDS.map((field) => (
                 <Input
                   key={field.key}
-                  label={`${field.label}${field.unit ? ` (${field.unit})` : ''}`}
+                  label={getFieldLabel(field)}
                   value={formState[field.key]}
                   onChangeText={(value) => handleChangeField(field.key, value)}
-                  placeholder={field.placeholder}
+                  placeholder={getFieldPlaceholder(field)}
                   keyboardType="numeric"
                 />
               ))}
@@ -201,10 +269,10 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
                 {section.fields.map((field) => (
                   <Input
                     key={field.key}
-                    label={`${field.label}${field.unit ? ` (${field.unit})` : ''}`}
+                    label={getFieldLabel(field)}
                     value={formState[field.key]}
                     onChangeText={(value) => handleChangeField(field.key, value)}
-                    placeholder={field.placeholder}
+                    placeholder={getFieldPlaceholder(field)}
                     keyboardType="numeric"
                   />
                 ))}
@@ -218,10 +286,10 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
                 {section.fields.map((field) => (
                   <Input
                     key={field.key}
-                    label={`${field.label}${field.unit ? ` (${field.unit})` : ''}`}
+                    label={getFieldLabel(field)}
                     value={formState[field.key]}
                     onChangeText={(value) => handleChangeField(field.key, value)}
-                    placeholder={field.placeholder}
+                    placeholder={getFieldPlaceholder(field)}
                     keyboardType="numeric"
                   />
                 ))}

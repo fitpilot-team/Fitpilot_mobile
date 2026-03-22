@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +6,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, fontSize, borderRadius, shadows, brandColors } from '../../src/constants/colors';
+import {
+  type MeasurementPreference,
+  MEASUREMENT_PREFERENCE_LABELS,
+  useMeasurementPreferenceStore,
+} from '../../src/store/measurementPreferenceStore';
 
 type MenuItemProps = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -38,6 +43,13 @@ const MenuItem = ({ icon, label, value, onPress, showChevron = true, danger = fa
 
 export default function ProfileScreen() {
   const { user, logout, uploadAvatar, isLoading } = useAuthStore();
+  const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
+  const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
+  const setMeasurementPreference = useMeasurementPreferenceStore((state) => state.setPreference);
+
+  useEffect(() => {
+    void initializeMeasurementPreference();
+  }, [initializeMeasurementPreference]);
 
   const handlePickImage = async () => {
     try {
@@ -94,6 +106,38 @@ export default function ProfileScreen() {
       'Próximamente',
       `La función "${feature}" estará disponible próximamente.`,
       [{ text: 'OK' }]
+    );
+  };
+
+  const handleMeasurementPreferenceSelect = async (
+    nextPreference: MeasurementPreference,
+  ) => {
+    try {
+      await setMeasurementPreference(nextPreference);
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo guardar tu preferencia de unidades.');
+    }
+  };
+
+  const handleMeasurementPreferencePress = () => {
+    Alert.alert(
+      'Unidades de medida',
+      'Selecciona el país que quieres usar para las unidades:',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Estados Unidos (USA)',
+          onPress: () => {
+            void handleMeasurementPreferenceSelect('us');
+          },
+        },
+        {
+          text: 'México',
+          onPress: () => {
+            void handleMeasurementPreferenceSelect('mx');
+          },
+        },
+      ]
     );
   };
 
@@ -157,12 +201,14 @@ export default function ProfileScreen() {
         {/* Preferences Section */}
         <Text style={styles.sectionTitle}>Preferencias</Text>
         <View style={styles.menuSection}>
+          {/*
           <MenuItem
             icon="language-outline"
             label="Idioma"
             value="Español"
             onPress={() => handleNotImplemented('Idioma')}
           />
+          */}
           <MenuItem
             icon="moon-outline"
             label="Tema"
@@ -172,8 +218,8 @@ export default function ProfileScreen() {
           <MenuItem
             icon="fitness-outline"
             label="Unidades de medida"
-            value="Métrico"
-            onPress={() => handleNotImplemented('Unidades de medida')}
+            value={MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
+            onPress={handleMeasurementPreferencePress}
           />
         </View>
 

@@ -10,7 +10,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Button, Card, LoadingSpinner } from '../../src/components/common';
+import {
+  Button,
+  Card,
+  FloatingButton,
+  LoadingSpinner,
+} from '../../src/components/common';
 import {
   MeasurementDetailModal,
   MeasurementFormModal,
@@ -47,6 +52,8 @@ import {
   getMeasurementDisplayDate,
   parseMeasurementNumber,
 } from '../../src/utils/measurements';
+import { convertMeasurementUnitValue } from '../../src/utils/measurementUnits';
+import { useMeasurementPreferenceStore } from '../../src/store/measurementPreferenceStore';
 
 const HISTORY_PAGE_SIZE = 20;
 
@@ -71,6 +78,8 @@ const getChangeAppearance = (
 };
 
 export default function MeasurementsScreen() {
+  const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
+  const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
   const [measurements, setMeasurements] = useState<MeasurementHistoryItem[]>([]);
   const [pagination, setPagination] = useState<MeasurementPagination | null>(null);
   const [detailCache, setDetailCache] = useState<Record<string, MeasurementDetail>>({});
@@ -132,6 +141,10 @@ export default function MeasurementsScreen() {
   useEffect(() => {
     void loadMeasurements();
   }, [loadMeasurements]);
+
+  useEffect(() => {
+    void initializeMeasurementPreference();
+  }, [initializeMeasurementPreference]);
 
   const summaryMetrics = useMemo(() => {
     if (!latestMeasurement) {
@@ -248,6 +261,31 @@ export default function MeasurementsScreen() {
     [loadMeasurements],
   );
 
+  const getDisplayMeasurement = useCallback(
+    (value: unknown, unit?: string | null, decimals = 1) => {
+      const numericValue = parseMeasurementNumber(value);
+
+      if (numericValue === null) {
+        return {
+          value: '--',
+          unit: unit ?? null,
+        };
+      }
+
+      const convertedValue = convertMeasurementUnitValue(
+        numericValue,
+        unit,
+        measurementPreference,
+      );
+
+      return {
+        value: formatMeasurementNumber(convertedValue.value, decimals),
+        unit: convertedValue.unit,
+      };
+    },
+    [measurementPreference],
+  );
+
   if (isLoading) {
     return <LoadingSpinner fullScreen text="Cargando tus medidas..." />;
   }
@@ -259,13 +297,6 @@ export default function MeasurementsScreen() {
           <Text style={styles.title}>Medidas</Text>
           <Text style={styles.subtitle}>Control antropometrico con datos reales</Text>
         </View>
-        <TouchableOpacity
-          style={styles.headerAction}
-          onPress={() => setIsFormVisible(true)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="add-outline" size={22} color={colors.white} />
-        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -311,6 +342,14 @@ export default function MeasurementsScreen() {
                   metric.change,
                   metric.emphasizeDecrease ?? false,
                 );
+                const displayValue = getDisplayMeasurement(
+                  metric.value,
+                  metric.unit,
+                  metric.unit === '%' ? 1 : 1,
+                );
+                const displayChange = metric.change === null
+                  ? null
+                  : getDisplayMeasurement(Math.abs(metric.change), metric.unit, 2);
 
                 return (
                   <View
@@ -329,11 +368,9 @@ export default function MeasurementsScreen() {
                     </View>
                     <Text style={styles.summaryLabel}>{metric.label}</Text>
                     <Text style={styles.summaryValue}>
-                      {metric.value === null
-                        ? '--'
-                        : formatMeasurementNumber(metric.value, metric.unit === '%' ? 1 : 1)}
-                      {metric.value !== null ? (
-                        <Text style={styles.summaryUnit}> {metric.unit}</Text>
+                      {displayValue.value}
+                      {metric.value !== null && displayValue.unit ? (
+                        <Text style={styles.summaryUnit}> {displayValue.unit}</Text>
                       ) : null}
                     </Text>
                     {metric.change !== null ? (
@@ -349,7 +386,7 @@ export default function MeasurementsScreen() {
                           color={appearance.color}
                         />
                         <Text style={[styles.changeText, { color: appearance.color }]}>
-                          {formatMeasurementNumber(Math.abs(metric.change), 2)} {metric.unit}
+                          {displayChange?.value} {displayChange?.unit}
                         </Text>
                       </View>
                     ) : (
@@ -384,20 +421,25 @@ export default function MeasurementsScreen() {
                   </TouchableOpacity>
                 </View>
                 <View style={styles.calculationGrid}>
-                  {recentCalculations.map((calculation) => (
-                    <View key={calculation.code} style={styles.calculationChip}>
-                      <Text style={styles.calculationChipLabel}>{calculation.label}</Text>
-                      <Text style={styles.calculationChipValue}>
-                        {formatMeasurementNumber(
-                          calculation.value,
-                          calculation.unit ? 2 : 3,
-                        )}
-                        {calculation.unit ? (
-                          <Text style={styles.calculationChipUnit}> {calculation.unit}</Text>
-                        ) : null}
-                      </Text>
-                    </View>
-                  ))}
+                  {recentCalculations.map((calculation) => {
+                    const displayValue = getDisplayMeasurement(
+                      calculation.value,
+                      calculation.unit,
+                      calculation.unit ? 2 : 3,
+                    );
+
+                    return (
+                      <View key={calculation.code} style={styles.calculationChip}>
+                        <Text style={styles.calculationChipLabel}>{calculation.label}</Text>
+                        <Text style={styles.calculationChipValue}>
+                          {displayValue.value}
+                          {displayValue.unit ? (
+                            <Text style={styles.calculationChipUnit}> {displayValue.unit}</Text>
+                          ) : null}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </View>
                 <View style={styles.analysisMeta}>
                   <Text style={styles.analysisMetaText}>
@@ -416,20 +458,26 @@ export default function MeasurementsScreen() {
                 Se muestran unicamente las medidas disponibles del ultimo registro.
               </Text>
               <View style={styles.perimeterGrid}>
-                {perimeterCards.map((field) => (
-                  <View key={field.key} style={styles.perimeterCard}>
-                    <Ionicons
-                      name={(field.icon ?? 'body-outline') as keyof typeof Ionicons.glyphMap}
-                      size={18}
-                      color={colors.gray[400]}
-                    />
-                    <Text style={styles.perimeterLabel}>{field.label}</Text>
-                    <Text style={styles.perimeterValue}>
-                      {formatMeasurementNumber(field.value, 1)}
-                      <Text style={styles.perimeterUnit}> {field.unit}</Text>
-                    </Text>
-                  </View>
-                ))}
+                {perimeterCards.map((field) => {
+                  const displayValue = getDisplayMeasurement(field.value, field.unit, 1);
+
+                  return (
+                    <View key={field.key} style={styles.perimeterCard}>
+                      <Ionicons
+                        name={(field.icon ?? 'body-outline') as keyof typeof Ionicons.glyphMap}
+                        size={18}
+                        color={colors.gray[400]}
+                      />
+                      <Text style={styles.perimeterLabel}>{field.label}</Text>
+                      <Text style={styles.perimeterValue}>
+                        {displayValue.value}
+                        {displayValue.unit ? (
+                          <Text style={styles.perimeterUnit}> {displayValue.unit}</Text>
+                        ) : null}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
             </Card>
 
@@ -479,12 +527,18 @@ export default function MeasurementsScreen() {
                           return null;
                         }
 
+                        const displayValue = getDisplayMeasurement(
+                          value,
+                          metric.unit,
+                          metric.unit === '%' ? 1 : 1,
+                        );
+
                         return (
                           <View key={`${measurement.id}-${metric.key}`} style={styles.historyMetric}>
                             <Text style={styles.historyMetricLabel}>{metric.label}</Text>
                             <Text style={styles.historyMetricValue}>
-                              {formatMeasurementNumber(value, metric.unit === '%' ? 1 : 1)}
-                              <Text style={styles.historyMetricUnit}> {metric.unit}</Text>
+                              {displayValue.value}
+                              <Text style={styles.historyMetricUnit}> {displayValue.unit}</Text>
                             </Text>
                           </View>
                         );
@@ -512,6 +566,12 @@ export default function MeasurementsScreen() {
           </>
         ) : null}
       </ScrollView>
+
+      <FloatingButton
+        accessibilityLabel="Registrar nueva medicion"
+        icon={<Ionicons name="add-outline" size={28} color={colors.white} />}
+        onPress={() => setIsFormVisible(true)}
+      />
 
       <MeasurementDetailModal
         visible={isDetailVisible}
@@ -553,21 +613,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.gray[500],
   },
-  headerAction: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary[500],
-    ...shadows.md,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl + 60,
+    paddingBottom: spacing.xxl + 92,
   },
   errorCard: {
     marginBottom: spacing.md,
