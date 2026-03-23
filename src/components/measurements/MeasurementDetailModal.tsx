@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   Modal,
   ScrollView,
@@ -13,7 +13,7 @@ import {
   CALCULATION_METADATA,
   DETAIL_MEASUREMENT_SECTIONS,
 } from '../../constants/measurements';
-import { borderRadius, colors, fontSize, spacing } from '../../constants/colors';
+import { borderRadius, fontSize, spacing } from '../../constants/colors';
 import type {
   MeasurementCalculationValue,
   MeasurementDetail,
@@ -25,6 +25,9 @@ import {
   getMeasurementDisplayDate,
   parseMeasurementNumber,
 } from '../../utils/measurements';
+import { convertMeasurementUnitValue } from '../../utils/measurementUnits';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
+import { useMeasurementPreferenceStore } from '../../store/measurementPreferenceStore';
 
 interface MeasurementDetailModalProps {
   visible: boolean;
@@ -33,38 +36,49 @@ interface MeasurementDetailModalProps {
   onClose: () => void;
 }
 
-const formatCalculationValue = (calculation: MeasurementCalculationValue) => {
+const formatCalculationValue = (
+  calculation: MeasurementCalculationValue,
+  preference: ReturnType<typeof useMeasurementPreferenceStore.getState>['preference'],
+) => {
   if (calculation.value === null) {
     return '--';
   }
 
+  const convertedValue = convertMeasurementUnitValue(
+    calculation.value,
+    calculation.unit,
+    preference,
+  );
   const decimals = calculation.unit ? 2 : 3;
-  const formattedValue = formatMeasurementNumber(calculation.value, decimals);
+  const formattedValue = formatMeasurementNumber(convertedValue.value, decimals);
 
-  return calculation.unit ? `${formattedValue} ${calculation.unit}` : formattedValue;
+  return convertedValue.unit ? `${formattedValue} ${convertedValue.unit}` : formattedValue;
 };
 
-const getCalculationAccent = (status: MeasurementCalculationValue['status']) => {
+const getCalculationAccent = (
+  status: MeasurementCalculationValue['status'],
+  theme: AppTheme,
+) => {
   if (status === 'computed') {
     return {
-      badgeBackground: '#DCFCE7',
-      badgeText: '#166534',
-      borderColor: '#BBF7D0',
+      badgeBackground: `${theme.colors.success}20`,
+      badgeText: theme.colors.success,
+      borderColor: `${theme.colors.success}45`,
     };
   }
 
   if (status === 'error') {
     return {
-      badgeBackground: '#FEE2E2',
-      badgeText: '#991B1B',
-      borderColor: '#FECACA',
+      badgeBackground: `${theme.colors.error}20`,
+      badgeText: theme.colors.error,
+      borderColor: `${theme.colors.error}45`,
     };
   }
 
   return {
-    badgeBackground: '#FEF3C7',
-    badgeText: '#92400E',
-    borderColor: '#FDE68A',
+    badgeBackground: `${theme.colors.warning}20`,
+    badgeText: theme.colors.warning,
+    borderColor: `${theme.colors.warning}45`,
   };
 };
 
@@ -74,6 +88,15 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
   isLoading,
   onClose,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
+  const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
+
+  useEffect(() => {
+    void initializeMeasurementPreference();
+  }, [initializeMeasurementPreference]);
+
   const sortedCalculations = useMemo(() => {
     if (!detail) {
       return [];
@@ -106,7 +129,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
               <Text style={styles.subtitle}>{measurementDate}</Text>
             </View>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Ionicons name="close-outline" size={24} color={colors.gray[600]} />
+              <Ionicons name="close-outline" size={24} color={theme.colors.icon} />
             </TouchableOpacity>
           </View>
 
@@ -114,7 +137,11 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
             <LoadingSpinner text="Cargando detalle..." />
           ) : !detail ? (
             <View style={styles.emptyState}>
-              <Ionicons name="alert-circle-outline" size={40} color={colors.gray[400]} />
+              <Ionicons
+                name="alert-circle-outline"
+                size={40}
+                color={theme.colors.iconMuted}
+              />
               <Text style={styles.emptyStateText}>
                 No fue posible cargar el detalle de esta medicion.
               </Text>
@@ -140,10 +167,10 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                       {
                         backgroundColor:
                           detail.calculationRun?.status === 'failed'
-                            ? '#FEE2E2'
+                            ? `${theme.colors.error}20`
                             : detail.calculationRun?.status === 'partial'
-                              ? '#FEF3C7'
-                              : '#DCFCE7',
+                              ? `${theme.colors.warning}20`
+                              : `${theme.colors.success}20`,
                       },
                     ]}
                   >
@@ -153,10 +180,10 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                         {
                           color:
                             detail.calculationRun?.status === 'failed'
-                              ? '#991B1B'
+                              ? theme.colors.error
                               : detail.calculationRun?.status === 'partial'
-                                ? '#92400E'
-                                : '#166534',
+                                ? theme.colors.warning
+                                : theme.colors.success,
                         },
                       ]}
                     >
@@ -182,11 +209,20 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                       return null;
                     }
 
+                    const convertedValue = convertMeasurementUnitValue(
+                      numericValue,
+                      field.unit,
+                      measurementPreference,
+                    );
+
                     return {
                       key: field.key,
                       label: field.label,
-                      value: formatMeasurementNumber(value, field.unit === '%' ? 1 : 1),
-                      unit: field.unit,
+                      value: formatMeasurementNumber(
+                        convertedValue.value,
+                        convertedValue.unit === '%' ? 1 : 1,
+                      ),
+                      unit: convertedValue.unit ?? undefined,
                     };
                   })
                   .filter(Boolean) as Array<{
@@ -228,7 +264,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                 </Text>
                 <View style={styles.calculationList}>
                   {sortedCalculations.map(([code, calculation]) => {
-                    const accent = getCalculationAccent(calculation.status);
+                    const accent = getCalculationAccent(calculation.status, theme);
                     const missingFields =
                       detail.missingFieldsByCalculation[code]?.join(', ') ?? null;
 
@@ -256,7 +292,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                           </View>
                         </View>
                         <Text style={styles.calculationValue}>
-                          {formatCalculationValue(calculation)}
+                          {formatCalculationValue(calculation, measurementPreference)}
                         </Text>
                         {missingFields ? (
                           <Text style={styles.calculationHint}>
@@ -278,7 +314,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                         <Ionicons
                           name="warning-outline"
                           size={18}
-                          color={colors.warning}
+                          color={theme.colors.warning}
                           style={styles.warningIcon}
                         />
                         <View style={styles.warningContent}>
@@ -305,215 +341,220 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17, 24, 39, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.md,
-  },
-  container: {
-    width: '100%',
-    height: '88%',
-    maxWidth: 440,
-    maxHeight: 760,
-    minHeight: 520,
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.xl,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-    backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
-  },
-  headerText: {
-    flex: 1,
-    paddingRight: spacing.md,
-  },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  subtitle: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.gray[100],
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xl,
-    gap: spacing.md,
-  },
-  sectionCard: {
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    color: colors.gray[900],
-  },
-  sectionDescription: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  runHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  supportingText: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  runMeta: {
-    marginTop: spacing.sm,
-    fontSize: fontSize.sm,
-    color: colors.gray[600],
-  },
-  rowsContainer: {
-    marginTop: spacing.md,
-    gap: spacing.sm,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
-  },
-  detailLabel: {
-    flex: 1,
-    fontSize: fontSize.sm,
-    color: colors.gray[600],
-  },
-  detailValue: {
-    fontSize: fontSize.base,
-    fontWeight: '600',
-    color: colors.gray[900],
-  },
-  detailUnit: {
-    fontSize: fontSize.sm,
-    fontWeight: '400',
-    color: colors.gray[500],
-  },
-  calculationList: {
-    marginTop: spacing.md,
-    gap: spacing.sm,
-  },
-  calculationCard: {
-    borderWidth: 1,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    backgroundColor: colors.white,
-  },
-  calculationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  calculationHeaderText: {
-    flex: 1,
-  },
-  calculationLabel: {
-    fontSize: fontSize.base,
-    fontWeight: '600',
-    color: colors.gray[900],
-  },
-  calculationMethod: {
-    marginTop: 2,
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  calculationValue: {
-    marginTop: spacing.sm,
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  calculationHint: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: borderRadius.full,
-    alignSelf: 'flex-start',
-  },
-  statusBadgeText: {
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    textTransform: 'capitalize',
-  },
-  warningList: {
-    marginTop: spacing.md,
-    gap: spacing.sm,
-  },
-  warningCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    backgroundColor: '#FFF7ED',
-    borderWidth: 1,
-    borderColor: '#FED7AA',
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-  },
-  warningIcon: {
-    marginTop: 2,
-  },
-  warningContent: {
-    flex: 1,
-  },
-  warningTitle: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[800],
-  },
-  warningText: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[600],
-  },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-    paddingTop: spacing.sm,
-    backgroundColor: colors.background,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xl,
-  },
-  emptyStateText: {
-    marginTop: spacing.sm,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    textAlign: 'center',
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: theme.colors.overlay,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: spacing.md,
+    },
+    container: {
+      width: '100%',
+      height: '88%',
+      maxWidth: 440,
+      maxHeight: 760,
+      minHeight: 520,
+      backgroundColor: theme.colors.background,
+      borderRadius: borderRadius.xl,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    headerText: {
+      flex: 1,
+      paddingRight: spacing.md,
+    },
+    title: {
+      fontSize: fontSize.xl,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    closeButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    content: {
+      flex: 1,
+    },
+    contentContainer: {
+      padding: spacing.lg,
+      paddingBottom: spacing.xl,
+      gap: spacing.md,
+    },
+    sectionCard: {
+      marginBottom: spacing.md,
+    },
+    sectionTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+    sectionDescription: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    runHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+    supportingText: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    runMeta: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.sm,
+      color: theme.colors.textSecondary,
+    },
+    rowsContainer: {
+      marginTop: spacing.md,
+      gap: spacing.sm,
+    },
+    detailRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+      paddingBottom: spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    detailLabel: {
+      flex: 1,
+      fontSize: fontSize.sm,
+      color: theme.colors.textSecondary,
+    },
+    detailValue: {
+      fontSize: fontSize.base,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+    detailUnit: {
+      fontSize: fontSize.sm,
+      fontWeight: '400',
+      color: theme.colors.textMuted,
+    },
+    calculationList: {
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    calculationCard: {
+      borderWidth: 1,
+      borderRadius: borderRadius.lg,
+      padding: spacing.md,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    calculationHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+    calculationHeaderText: {
+      flex: 1,
+    },
+    calculationLabel: {
+      fontSize: fontSize.base,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+    calculationMethod: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    calculationValue: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.lg,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    calculationHint: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    statusBadge: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: borderRadius.full,
+    },
+    statusBadgeText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+    },
+    warningList: {
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    warningCard: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      padding: spacing.md,
+      borderRadius: borderRadius.md,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    warningIcon: {
+      marginTop: 2,
+    },
+    warningContent: {
+      flex: 1,
+    },
+    warningTitle: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+    warningText: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textSecondary,
+    },
+    emptyState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.xl,
+      gap: spacing.md,
+    },
+    emptyStateText: {
+      fontSize: fontSize.base,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
+    footer: {
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.lg,
+      backgroundColor: theme.colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+  });

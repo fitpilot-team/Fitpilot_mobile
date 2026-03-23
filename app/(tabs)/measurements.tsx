@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { router } from 'expo-router';
 import {
   Alert,
   RefreshControl,
@@ -17,6 +18,8 @@ import {
 } from '../../src/components/measurements';
 import {
   CALCULATION_METADATA,
+  getMeasurementProgressMetricConfig,
+  type MeasurementProgressMetricKey,
   PERIMETER_CARD_FIELDS,
   RECENT_CALCULATION_CODES,
   SUMMARY_METRICS,
@@ -47,6 +50,11 @@ import {
   getMeasurementDisplayDate,
   parseMeasurementNumber,
 } from '../../src/utils/measurements';
+import { convertMeasurementUnitValue } from '../../src/utils/measurementUnits';
+import {
+  MEASUREMENT_PREFERENCE_LABELS,
+  useMeasurementPreferenceStore,
+} from '../../src/store/measurementPreferenceStore';
 
 const HISTORY_PAGE_SIZE = 20;
 
@@ -74,6 +82,8 @@ const getChangeAppearance = (
 export default function MeasurementsScreen() {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
+  const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
   const [measurements, setMeasurements] = useState<MeasurementHistoryItem[]>([]);
   const [pagination, setPagination] = useState<MeasurementPagination | null>(null);
   const [detailCache, setDetailCache] = useState<Record<string, MeasurementDetail>>({});
@@ -136,6 +146,10 @@ export default function MeasurementsScreen() {
     void loadMeasurements();
   }, [loadMeasurements]);
 
+  useEffect(() => {
+    void initializeMeasurementPreference();
+  }, [initializeMeasurementPreference]);
+
   const summaryMetrics = useMemo(() => {
     if (!latestMeasurement) {
       return [];
@@ -185,6 +199,34 @@ export default function MeasurementsScreen() {
     }>;
   }, [latestMeasurementDetail]);
 
+  const getDisplayMeasurement = useCallback(
+    (value: unknown, unit?: string | null, decimals = 1) => {
+      const numericValue = parseMeasurementNumber(value);
+
+      if (numericValue === null) {
+        return {
+          value: '--',
+          unit: unit?.trim() ?? null,
+        };
+      }
+
+      const convertedValue = convertMeasurementUnitValue(
+        numericValue,
+        unit,
+        measurementPreference,
+      );
+
+      return {
+        value: formatMeasurementNumber(
+          convertedValue.value,
+          convertedValue.unit === '%' ? 1 : decimals,
+        ),
+        unit: convertedValue.unit,
+      };
+    },
+    [measurementPreference],
+  );
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await loadMeasurements();
@@ -200,6 +242,13 @@ export default function MeasurementsScreen() {
       append: true,
     });
   }, [isLoadingMore, loadMeasurements, measurements.length, pagination]);
+
+  const handleOpenMeasurementProgress = useCallback((metricKey: MeasurementProgressMetricKey) => {
+    router.push({
+      pathname: '/measurements/progress/[metric]',
+      params: { metric: metricKey },
+    });
+  }, []);
 
   const openMeasurementDetail = useCallback(async (measurementId: string) => {
     setSelectedMeasurementId(measurementId);
@@ -258,9 +307,12 @@ export default function MeasurementsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerCopy}>
           <Text style={styles.title}>Medidas</Text>
           <Text style={styles.subtitle}>Control antropometrico con datos reales</Text>
+          <Text style={styles.preferenceText}>
+            Unidades: {MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
+          </Text>
         </View>
         <TouchableOpacity
           style={styles.headerAction}
@@ -310,34 +362,47 @@ export default function MeasurementsScreen() {
           <>
             <View style={styles.mainStatsContainer}>
               {summaryMetrics.map((metric, index) => {
+                const progressConfig = getMeasurementProgressMetricConfig(metric.key);
                 const appearance = getChangeAppearance(
                   metric.change,
                   metric.emphasizeDecrease ?? false,
                   theme,
                 );
+                const displayValue = getDisplayMeasurement(
+                  metric.value,
+                  metric.unit,
+                  metric.unit === '%' ? 1 : 1,
+                );
+                const displayChange = metric.change === null
+                  ? null
+                  : getDisplayMeasurement(Math.abs(metric.change), metric.unit, 2);
 
-                return (
-                  <View
-                    key={metric.key}
-                    style={[
-                      styles.summaryCard,
-                      index === 0 ? styles.summaryCardLarge : null,
-                    ]}
-                  >
-                    <View style={styles.summaryIcon}>
-                      <Ionicons
-                        name={metric.icon as keyof typeof Ionicons.glyphMap}
-                        size={20}
-                        color={theme.colors.primary}
-                      />
+                const content = (
+                  <>
+                    <View style={styles.summaryCardHeader}>
+                      <View style={styles.summaryIcon}>
+                        <Ionicons
+                          name={metric.icon as keyof typeof Ionicons.glyphMap}
+                          size={20}
+                          color={theme.colors.primary}
+                        />
+                      </View>
+                      {progressConfig ? (
+                        <View style={styles.metricActionPill}>
+                          <Ionicons
+                            name="analytics-outline"
+                            size={12}
+                            color={theme.colors.primary}
+                          />
+                          <Text style={styles.metricActionText}>Ver grafica</Text>
+                        </View>
+                      ) : null}
                     </View>
                     <Text style={styles.summaryLabel}>{metric.label}</Text>
                     <Text style={styles.summaryValue}>
-                      {metric.value === null
-                        ? '--'
-                        : formatMeasurementNumber(metric.value, metric.unit === '%' ? 1 : 1)}
-                      {metric.value !== null ? (
-                        <Text style={styles.summaryUnit}> {metric.unit}</Text>
+                      {displayValue.value}
+                      {metric.value !== null && displayValue.unit ? (
+                        <Text style={styles.summaryUnit}> {displayValue.unit}</Text>
                       ) : null}
                     </Text>
                     {metric.change !== null ? (
@@ -353,13 +418,49 @@ export default function MeasurementsScreen() {
                           color={appearance.color}
                         />
                         <Text style={[styles.changeText, { color: appearance.color }]}>
-                          {formatMeasurementNumber(Math.abs(metric.change), 2)} {metric.unit}
+                          {displayChange?.value} {displayChange?.unit}
                         </Text>
                       </View>
                     ) : (
                       <Text style={styles.noChangeText}>Sin comparativo previo</Text>
                     )}
-                  </View>
+                    {progressConfig ? (
+                      <Text style={styles.summaryHelperText}>
+                        Toca para ver el progreso completo.
+                      </Text>
+                    ) : null}
+                  </>
+                );
+
+                if (!progressConfig) {
+                  return (
+                    <View
+                      key={metric.key}
+                      style={[
+                        styles.summaryCard,
+                        index === 0 ? styles.summaryCardLarge : null,
+                      ]}
+                    >
+                      {content}
+                    </View>
+                  );
+                }
+
+                return (
+                  <TouchableOpacity
+                    key={metric.key}
+                    style={[
+                      styles.summaryCard,
+                      index === 0 ? styles.summaryCardLarge : null,
+                      styles.metricCardInteractive,
+                    ]}
+                    activeOpacity={0.92}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Ver progreso de ${metric.label.toLowerCase()}`}
+                    onPress={() => handleOpenMeasurementProgress(progressConfig.key)}
+                  >
+                    {content}
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -388,20 +489,59 @@ export default function MeasurementsScreen() {
                   </TouchableOpacity>
                 </View>
                 <View style={styles.calculationGrid}>
-              {recentCalculations.map((calculation) => (
-                <View key={calculation.code} style={styles.calculationChip}>
-                      <Text style={styles.calculationChipLabel}>{calculation.label}</Text>
-                      <Text style={styles.calculationChipValue}>
-                        {formatMeasurementNumber(
-                          calculation.value,
-                          calculation.unit ? 2 : 3,
-                        )}
-                        {calculation.unit ? (
-                          <Text style={styles.calculationChipUnit}> {calculation.unit}</Text>
-                        ) : null}
-                      </Text>
-                    </View>
-                  ))}
+                  {recentCalculations.map((calculation) => {
+                    const progressConfig = getMeasurementProgressMetricConfig(calculation.code);
+                    const displayValue = getDisplayMeasurement(
+                      calculation.value,
+                      calculation.unit,
+                      calculation.unit ? 2 : 3,
+                    );
+
+                    const content = (
+                      <>
+                        <View style={styles.metricChipHeader}>
+                          <Text style={styles.calculationChipLabel}>{calculation.label}</Text>
+                          {progressConfig ? (
+                            <View style={styles.metricActionPill}>
+                              <Ionicons
+                                name="analytics-outline"
+                                size={12}
+                                color={theme.colors.primary}
+                              />
+                              <Text style={styles.metricActionText}>Ver grafica</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <Text style={styles.calculationChipValue}>
+                          {displayValue.value}
+                          {displayValue.unit ? (
+                            <Text style={styles.calculationChipUnit}> {displayValue.unit}</Text>
+                          ) : null}
+                        </Text>
+                      </>
+                    );
+
+                    if (!progressConfig) {
+                      return (
+                        <View key={calculation.code} style={styles.calculationChip}>
+                          {content}
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <TouchableOpacity
+                        key={calculation.code}
+                        style={[styles.calculationChip, styles.metricCardInteractive]}
+                        activeOpacity={0.9}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Ver progreso de ${calculation.label.toLowerCase()}`}
+                        onPress={() => handleOpenMeasurementProgress(progressConfig.key)}
+                      >
+                        {content}
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
                 <View style={styles.analysisMeta}>
                   <Text style={styles.analysisMetaText}>
@@ -420,20 +560,44 @@ export default function MeasurementsScreen() {
                 Se muestran unicamente las medidas disponibles del ultimo registro.
               </Text>
               <View style={styles.perimeterGrid}>
-                {perimeterCards.map((field) => (
-                  <View key={field.key} style={styles.perimeterCard}>
-                    <Ionicons
-                      name={(field.icon ?? 'body-outline') as keyof typeof Ionicons.glyphMap}
-                      size={18}
-                      color={theme.colors.iconMuted}
-                    />
-                    <Text style={styles.perimeterLabel}>{field.label}</Text>
-                    <Text style={styles.perimeterValue}>
-                      {formatMeasurementNumber(field.value, 1)}
-                      <Text style={styles.perimeterUnit}> {field.unit}</Text>
-                    </Text>
-                  </View>
-                ))}
+                {perimeterCards.map((field) => {
+                  const progressConfig = getMeasurementProgressMetricConfig(field.key);
+                  const displayValue = getDisplayMeasurement(field.value, field.unit, 1);
+
+                  return (
+                    <TouchableOpacity
+                      key={field.key}
+                      style={[styles.perimeterCard, styles.metricCardInteractive]}
+                      activeOpacity={0.9}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Ver progreso de ${field.label.toLowerCase()}`}
+                      onPress={() => progressConfig && handleOpenMeasurementProgress(progressConfig.key)}
+                    >
+                      <View style={styles.metricChipHeader}>
+                        <Ionicons
+                          name={(field.icon ?? 'body-outline') as keyof typeof Ionicons.glyphMap}
+                          size={18}
+                          color={theme.colors.iconMuted}
+                        />
+                        <View style={styles.metricActionPill}>
+                          <Ionicons
+                            name="analytics-outline"
+                            size={12}
+                            color={theme.colors.primary}
+                          />
+                          <Text style={styles.metricActionText}>Ver grafica</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.perimeterLabel}>{field.label}</Text>
+                      <Text style={styles.perimeterValue}>
+                        {displayValue.value}
+                        {displayValue.unit ? (
+                          <Text style={styles.perimeterUnit}> {displayValue.unit}</Text>
+                        ) : null}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </Card>
 
@@ -483,12 +647,20 @@ export default function MeasurementsScreen() {
                           return null;
                         }
 
+                        const displayValue = getDisplayMeasurement(
+                          value,
+                          metric.unit,
+                          metric.unit === '%' ? 1 : 1,
+                        );
+
                         return (
                           <View key={`${measurement.id}-${metric.key}`} style={styles.historyMetric}>
                             <Text style={styles.historyMetricLabel}>{metric.label}</Text>
                             <Text style={styles.historyMetricValue}>
-                              {formatMeasurementNumber(value, metric.unit === '%' ? 1 : 1)}
-                              <Text style={styles.historyMetricUnit}> {metric.unit}</Text>
+                              {displayValue.value}
+                              {displayValue.unit ? (
+                                <Text style={styles.historyMetricUnit}> {displayValue.unit}</Text>
+                              ) : null}
                             </Text>
                           </View>
                         );
@@ -548,6 +720,10 @@ const createStyles = (theme: AppTheme) =>
       paddingTop: spacing.md,
       paddingBottom: spacing.sm,
       backgroundColor: theme.colors.background,
+      gap: spacing.md,
+    },
+    headerCopy: {
+      flex: 1,
     },
     title: {
       fontSize: fontSize['2xl'],
@@ -558,6 +734,11 @@ const createStyles = (theme: AppTheme) =>
       marginTop: spacing.xs,
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
+    },
+    preferenceText: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.xs,
+      color: theme.colors.iconMuted,
     },
     headerAction: {
       width: 44,
@@ -624,6 +805,12 @@ const createStyles = (theme: AppTheme) =>
     summaryCardLarge: {
       width: '100%',
     },
+    summaryCardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
     summaryIcon: {
       width: 36,
       height: 36,
@@ -631,6 +818,29 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.primarySoft,
+    },
+    metricCardInteractive: {
+      borderColor: theme.colors.primaryBorder,
+    },
+    metricChipHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    metricActionPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 6,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.primarySoft,
+    },
+    metricActionText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.colors.primary,
     },
     summaryLabel: {
       marginTop: spacing.sm,
@@ -666,6 +876,11 @@ const createStyles = (theme: AppTheme) =>
       marginTop: spacing.sm,
       fontSize: fontSize.xs,
       color: theme.colors.iconMuted,
+    },
+    summaryHelperText: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
     },
     lastUpdate: {
       marginTop: spacing.md,
@@ -717,6 +932,8 @@ const createStyles = (theme: AppTheme) =>
       padding: spacing.md,
       borderRadius: borderRadius.md,
       backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
     calculationChipLabel: {
       fontSize: fontSize.xs,
@@ -754,6 +971,8 @@ const createStyles = (theme: AppTheme) =>
       padding: spacing.md,
       borderRadius: borderRadius.md,
       backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
     perimeterLabel: {
       marginTop: spacing.xs,
@@ -779,6 +998,8 @@ const createStyles = (theme: AppTheme) =>
       padding: spacing.md,
       borderRadius: borderRadius.md,
       backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
     historyHeader: {
       flexDirection: 'row',
@@ -801,6 +1022,8 @@ const createStyles = (theme: AppTheme) =>
       paddingVertical: spacing.xs,
       borderRadius: borderRadius.full,
       backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
     historyMetricLabel: {
       fontSize: 10,
