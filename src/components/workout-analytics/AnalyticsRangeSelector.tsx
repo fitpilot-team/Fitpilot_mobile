@@ -1,7 +1,8 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { borderRadius, colors, fontSize, spacing } from '../../constants/colors';
+import { ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { borderRadius, fontSize, spacing } from '../../constants/colors';
 import { WORKOUT_ANALYTICS_RANGE_OPTIONS } from '../../constants/workoutAnalytics';
+import { useThemedStyles, type AppTheme } from '../../theme';
 import type { WorkoutAnalyticsRange } from '../../types';
 
 interface AnalyticsRangeSelectorProps {
@@ -12,55 +13,60 @@ interface AnalyticsRangeSelectorProps {
 export const AnalyticsRangeSelector: React.FC<AnalyticsRangeSelectorProps> = ({
   value,
   onChange,
-}) => (
-  <ScrollView
-    horizontal
-    showsHorizontalScrollIndicator={false}
-    contentContainerStyle={styles.content}
-  >
-    {WORKOUT_ANALYTICS_RANGE_OPTIONS.map((option) => {
-      const isActive = option.value === value;
+}) => {
+  const styles = useThemedStyles(createStyles);
 
-      return (
-        <TouchableOpacity
-          key={option.value}
-          activeOpacity={0.85}
-          onPress={() => onChange(option.value)}
-          style={[styles.pill, isActive ? styles.pillActive : null]}
-        >
-          <Text style={[styles.pillText, isActive ? styles.pillTextActive : null]}>
-            {option.label}
-          </Text>
-        </TouchableOpacity>
-      );
-    })}
-  </ScrollView>
-);
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.content}
+    >
+      {WORKOUT_ANALYTICS_RANGE_OPTIONS.map((option) => {
+        const isActive = option.value === value;
 
-const styles = StyleSheet.create({
-  content: {
-    gap: spacing.sm,
-  },
-  pill: {
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  pillActive: {
-    backgroundColor: colors.primary[500],
-    borderColor: colors.primary[500],
-  },
-  pillText: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[600],
-  },
-  pillTextActive: {
-    color: colors.white,
-  },
-});
+        return (
+          <TouchableOpacity
+            key={option.value}
+            activeOpacity={0.85}
+            onPress={() => onChange(option.value)}
+            style={[styles.pill, isActive ? styles.pillActive : null]}
+          >
+            <Text style={[styles.pillText, isActive ? styles.pillTextActive : null]}>
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+};
+
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    content: {
+      gap: spacing.sm,
+    },
+    pill: {
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    pillActive: {
+      backgroundColor: theme.isDark ? theme.colors.primarySoft : theme.colors.primary,
+      borderColor: theme.isDark ? theme.colors.primaryBorder : theme.colors.primary,
+    },
+    pillText: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    pillTextActive: {
+      color: theme.isDark ? theme.colors.primary : theme.colors.surface,
+    },
+  });
 
 export default AnalyticsRangeSelector;

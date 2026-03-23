@@ -13,6 +13,7 @@ import Animated, {
 import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import { WorkoutCardSkeleton } from '../common/Skeleton';
 import type { NextWorkoutReason, TrainingDay } from '../../types';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 
 const workoutImage = require('../../../assets/mock-image-workout.jpg');
 
@@ -133,6 +134,8 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   contentWidth,
 }) => {
   const scale = useSharedValue(1);
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const availableWidth = Math.max(320, (contentWidth ?? 0) - CARD_MARGIN * 2);
   const cardWidth = availableWidth;
   const chamferHorizontal = getChamferHorizontal(cardWidth);
@@ -218,7 +221,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
           <View style={styles.content}>
             {position && total && (
               <View style={styles.positionBadge}>
-                <BlurView intensity={40} tint="light" style={styles.positionBlur}>
+                <BlurView intensity={40} tint={theme.colors.blurTint} style={styles.positionBlur}>
                   <Text style={styles.positionText}>
                     Sesion {position} de {total}
                   </Text>
@@ -241,10 +244,10 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
               onPress={onStartPress}
               activeOpacity={0.9}
             >
-              <BlurView intensity={80} tint="light" style={styles.startButtonBlur}>
+              <BlurView intensity={80} tint={theme.colors.blurTint} style={styles.startButtonBlur}>
                 <Text style={styles.startButtonText}>empezar</Text>
                 <View style={styles.arrowCircle}>
-                  <Ionicons name="arrow-forward" size={18} color={brandColors.navy} />
+                  <Ionicons name="arrow-forward" size={18} color={theme.colors.primary} />
                 </View>
               </BlurView>
             </TouchableOpacity>
@@ -260,7 +263,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     marginHorizontal: CARD_MARGIN,
     marginVertical: spacing.md,
@@ -280,12 +283,12 @@ const styles = StyleSheet.create({
   },
   durationLabel: {
     fontSize: fontSize.xs,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
     fontWeight: '500',
   },
   durationValue: {
     fontSize: fontSize.sm,
-    color: colors.gray[800],
+    color: theme.colors.textSecondary,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -327,7 +330,7 @@ const styles = StyleSheet.create({
   positionText: {
     fontSize: fontSize.xs,
     fontWeight: '600',
-    color: colors.gray[800],
+    color: theme.colors.textPrimary,
   },
   titleArea: {
     marginTop: spacing.xl,
@@ -373,19 +376,19 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.xl,
     paddingRight: spacing.sm,
     paddingVertical: spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: theme.isDark ? 'rgba(8,17,31,0.84)' : 'rgba(255,255,255,0.9)',
   },
   startButtonText: {
     fontSize: fontSize.base,
     fontWeight: '500',
-    color: colors.gray[800],
+    color: theme.colors.textPrimary,
     marginRight: spacing.md,
   },
   arrowCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: `${brandColors.sky}30`,
+    backgroundColor: theme.colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -393,7 +396,9 @@ const styles = StyleSheet.create({
     marginHorizontal: CARD_MARGIN,
     marginVertical: spacing.md,
     padding: spacing.xl,
-    backgroundColor: colors.white,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     borderRadius: borderRadius.xl,
     alignItems: 'center',
     ...shadows.sm,
@@ -401,12 +406,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: fontSize.lg,
     fontWeight: '600',
-    color: colors.gray[700],
+    color: theme.colors.textPrimary,
     marginTop: spacing.md,
   },
   emptySubtitle: {
     fontSize: fontSize.sm,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
     textAlign: 'center',
     marginTop: spacing.xs,
   },

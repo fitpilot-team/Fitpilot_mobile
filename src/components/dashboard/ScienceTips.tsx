@@ -12,23 +12,47 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInRight } from 'react-native-reanimated';
 import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
-import { scienceTips, categoryColors, type ScienceTip } from '../../constants/scienceTips';
+import { categoryColors, categoryLabels, type ScienceTip } from '../../constants/scienceTips';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
+import { getContextualTips, type TipContext } from '../../utils/contextualTips';
 
 interface ScienceTipsProps {
-  tips?: ScienceTip[];
+  context?: TipContext;
+  tipsCount?: number;
   autoScroll?: boolean;
   autoScrollInterval?: number;
   contentWidth?: number;
 }
 
 export const ScienceTips: React.FC<ScienceTipsProps> = ({
-  tips = scienceTips.slice(0, 5),
+  context,
+  tipsCount = 5,
   autoScroll = false,
   autoScrollInterval = 5000,
   contentWidth = 390,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const scrollViewRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+
+  const tips = useMemo(() => {
+    if (!context) {
+      return getContextualTips(
+        {
+          nextSession: null,
+          microcycleProgress: null,
+          muscleVolume: null,
+          allCompleted: false,
+          workoutPosition: null,
+          workoutTotal: null,
+          currentHour: new Date().getHours(),
+        },
+        tipsCount,
+      );
+    }
+    return getContextualTips(context, tipsCount);
+  }, [context, tipsCount]);
 
   const cardMetrics = useMemo(() => {
     const availableWidth = Math.max(320, contentWidth - spacing.lg * 2);
@@ -65,12 +89,12 @@ export const ScienceTips: React.FC<ScienceTipsProps> = ({
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="bulb" size={20} color={brandColors.sky} />
-          <Text style={styles.title}>Tips Cientificos</Text>
+          <Ionicons name="bulb" size={20} color={theme.colors.primary} />
+          <Text style={styles.title}>Recomendaciones</Text>
         </View>
         <TouchableOpacity style={styles.seeAllButton}>
           <Text style={styles.seeAllText}>Ver todos</Text>
-          <Ionicons name="chevron-forward" size={16} color={brandColors.sky} />
+          <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -112,6 +136,8 @@ interface TipCardProps {
 }
 
 const TipCard: React.FC<TipCardProps> = ({ tip, index, cardWidth }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const categoryColor = categoryColors[tip.category];
 
   return (
@@ -138,7 +164,7 @@ const TipCard: React.FC<TipCardProps> = ({ tip, index, cardWidth }) => {
             </View>
             <View style={[styles.categoryBadge, { backgroundColor: `${categoryColor}15` }]}>
               <Text style={[styles.categoryText, { color: categoryColor }]}>
-                {getCategoryLabel(tip.category)}
+                {categoryLabels[tip.category] || tip.category}
               </Text>
             </View>
           </View>
@@ -153,7 +179,7 @@ const TipCard: React.FC<TipCardProps> = ({ tip, index, cardWidth }) => {
 
           {tip.source && (
             <View style={styles.sourceContainer}>
-              <Ionicons name="document-text-outline" size={12} color={colors.gray[400]} />
+              <Ionicons name="document-text-outline" size={12} color={theme.colors.iconMuted} />
               <Text style={styles.sourceText} numberOfLines={1}>
                 {tip.source}
               </Text>
@@ -165,18 +191,7 @@ const TipCard: React.FC<TipCardProps> = ({ tip, index, cardWidth }) => {
   );
 };
 
-const getCategoryLabel = (category: string): string => {
-  const labels: Record<string, string> = {
-    recovery: 'Recuperacion',
-    nutrition: 'Nutricion',
-    technique: 'Tecnica',
-    motivation: 'Motivacion',
-    science: 'Ciencia',
-  };
-  return labels[category] || category;
-};
-
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     marginVertical: spacing.md,
   },
@@ -195,7 +210,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSize.lg,
     fontWeight: '600',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   seeAllButton: {
     flexDirection: 'row',
@@ -204,7 +219,7 @@ const styles = StyleSheet.create({
   },
   seeAllText: {
     fontSize: fontSize.sm,
-    color: brandColors.sky,
+    color: theme.colors.primary,
     fontWeight: '500',
   },
   scrollContent: {
@@ -214,7 +229,9 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.sm,
   },
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     borderRadius: borderRadius.xl,
     overflow: 'hidden',
     minHeight: 160,
@@ -249,12 +266,12 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: fontSize.base,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
     marginBottom: spacing.xs,
   },
   cardDescription: {
     fontSize: fontSize.sm,
-    color: colors.gray[600],
+    color: theme.colors.textSecondary,
     lineHeight: 20,
     flex: 1,
   },
@@ -265,11 +282,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
+    borderTopColor: theme.colors.border,
   },
   sourceText: {
     fontSize: fontSize.xs,
-    color: colors.gray[400],
+    color: theme.colors.textMuted,
     fontStyle: 'italic',
     flex: 1,
   },
@@ -284,11 +301,11 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: colors.gray[300],
+    backgroundColor: theme.colors.borderStrong,
   },
   paginationDotActive: {
     width: 20,
-    backgroundColor: brandColors.sky,
+    backgroundColor: theme.colors.primary,
   },
 });
 

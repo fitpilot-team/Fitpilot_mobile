@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
-import { colors, borderRadius, spacing, shadows } from '../../constants/colors';
+import { borderRadius, spacing, shadows } from '../../constants/colors';
+import { useAppTheme, useThemedStyles } from '../../theme';
 
 interface CardProps {
   children: React.ReactNode;
@@ -13,6 +14,8 @@ export const Card: React.FC<CardProps> = ({
   style,
   padding = 'md',
 }) => {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={[styles.card, styles[`padding_${padding}`], style]}>
       {children}
@@ -20,22 +23,25 @@ export const Card: React.FC<CardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    ...shadows.md,
-  },
-  padding_none: {
-    padding: 0,
-  },
-  padding_sm: {
-    padding: spacing.sm,
-  },
-  padding_md: {
-    padding: spacing.md,
-  },
-  padding_lg: {
-    padding: spacing.lg,
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: theme.colors.card,
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.md,
+    },
+    padding_none: {
+      padding: 0,
+    },
+    padding_sm: {
+      padding: spacing.sm,
+    },
+    padding_md: {
+      padding: spacing.md,
+    },
+    padding_lg: {
+      padding: spacing.lg,
+    },
+  });

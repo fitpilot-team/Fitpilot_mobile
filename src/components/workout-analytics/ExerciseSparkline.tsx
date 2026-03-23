@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
-import { colors } from '../../constants/colors';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import { buildLineCoordinates, buildPolylinePoints } from '../../utils/workoutAnalytics';
 
 interface ExerciseSparklineProps {
@@ -15,8 +15,12 @@ export const ExerciseSparkline: React.FC<ExerciseSparklineProps> = ({
   values,
   width = 112,
   height = 38,
-  color = colors.primary[500],
+  color,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const strokeColor = color ?? theme.colors.primary;
+
   if (!values.length) {
     return <View style={[styles.empty, { width, height }]} />;
   }
@@ -32,7 +36,7 @@ export const ExerciseSparkline: React.FC<ExerciseSparklineProps> = ({
     <Svg width={width} height={height}>
       <Polyline
         fill="none"
-        stroke={color}
+        stroke={strokeColor}
         strokeWidth={2.5}
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -42,11 +46,14 @@ export const ExerciseSparkline: React.FC<ExerciseSparklineProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  empty: {
-    borderRadius: 999,
-    backgroundColor: colors.gray[100],
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    empty: {
+      borderRadius: 999,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+  });
 
 export default ExerciseSparkline;

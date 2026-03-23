@@ -20,8 +20,9 @@ import {
   DietMenuSelectorModal,
   DietWeekCalendar,
 } from '../../src/components/diet';
-import { borderRadius, brandColors, colors, fontSize, spacing, nutritionTheme } from '../../src/constants/colors';
+import { borderRadius, brandColors, fontSize, spacing, nutritionTheme } from '../../src/constants/colors';
 import { useAuthStore } from '../../src/store/authStore';
+import { useAppTheme, useThemedStyles } from '../../src/theme';
 import {
   getClientDietCalendar,
   getClientDietMenuPool,
@@ -41,6 +42,8 @@ const formatLongDate = (value: string) =>
 export default function DietScreen() {
   const { width } = useWindowDimensions();
   const contentWidth = getDashboardContentWidth(width);
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useAuthStore();
   const [dietDays, setDietDays] = useState<ClientDietWeekDay[]>([]);
   const [selectedDate, setSelectedDate] = useState(getTodayDietDateKey());
@@ -321,7 +324,7 @@ export default function DietScreen() {
                     <Ionicons
                       name={hasAvailablePool ? 'chevron-forward-outline' : 'remove-outline'}
                       size={20}
-                      color={hasAvailablePool ? nutritionTheme.accentStrong : colors.gray[400]}
+                      color={hasAvailablePool ? nutritionTheme.accentStrong : theme.colors.iconMuted}
                     />
                   )}
                 </View>
@@ -411,164 +414,166 @@ export default function DietScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: spacing.xxl + 64,
-  },
-  header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-  },
-  eyebrow: {
-    color: nutritionTheme.accentStrong,
-    fontSize: fontSize.xs,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  title: {
-    marginTop: spacing.xs,
-    color: colors.gray[900],
-    fontSize: 32,
-    fontWeight: '800',
-  },
-  subtitle: {
-    marginTop: spacing.sm,
-    color: colors.gray[500],
-    fontSize: fontSize.base,
-    lineHeight: 22,
-  },
-  heroSection: {
-    marginTop: spacing.md,
-    paddingHorizontal: spacing.lg,
-  },
-  sectionHeader: {
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    color: colors.gray[900],
-    fontSize: fontSize.xl,
-    fontWeight: '800',
-  },
-  sectionSubtitle: {
-    marginTop: spacing.xs,
-    color: colors.gray[500],
-    fontSize: fontSize.sm,
-  },
-  selectorSection: {
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-  },
-  selectorCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-    backgroundColor: colors.white,
-    padding: spacing.md,
-  },
-  selectorCardDisabled: {
-    opacity: 0.65,
-  },
-  selectorCopy: {
-    flex: 1,
-    paddingRight: spacing.md,
-  },
-  selectorEyebrow: {
-    color: nutritionTheme.accentStrong,
-    fontSize: fontSize.xs,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  selectorTitle: {
-    marginTop: spacing.xs,
-    color: colors.gray[900],
-    fontSize: fontSize.base,
-    fontWeight: '800',
-  },
-  selectorSubtitle: {
-    marginTop: spacing.xs,
-    color: colors.gray[500],
-    fontSize: fontSize.sm,
-    lineHeight: 20,
-  },
-  selectorAction: {
-    width: 34,
-    height: 34,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: nutritionTheme.accentSoft,
-  },
-  mealsSection: {
-    marginTop: spacing.lg,
-  },
-  mealList: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-  },
-  emptyStateWrapper: {
-    flex: 1,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xxl,
-  },
-  emptyCard: {
-    alignItems: 'center',
-    paddingVertical: spacing.xxl,
-    paddingHorizontal: spacing.lg,
-  },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: nutritionTheme.accentSoft,
-  },
-  emptyTitle: {
-    marginTop: spacing.lg,
-    color: colors.gray[900],
-    fontSize: fontSize.xl,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  emptyText: {
-    marginTop: spacing.sm,
-    color: colors.gray[500],
-    fontSize: fontSize.base,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: spacing.lg,
-    minWidth: 180,
-  },
-  noMealsCard: {
-    paddingVertical: spacing.xl,
-  },
-  noMealsTitle: {
-    color: colors.gray[900],
-    fontSize: fontSize.lg,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  noMealsText: {
-    marginTop: spacing.sm,
-    color: colors.gray[500],
-    fontSize: fontSize.base,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scrollView: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scrollContent: {
+      paddingBottom: spacing.xxl + 64,
+    },
+    header: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+    },
+    eyebrow: {
+      color: nutritionTheme.accentStrong,
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 1.2,
+    },
+    title: {
+      marginTop: spacing.xs,
+      color: theme.colors.textPrimary,
+      fontSize: 32,
+      fontWeight: '800',
+    },
+    subtitle: {
+      marginTop: spacing.sm,
+      color: theme.colors.textMuted,
+      fontSize: fontSize.base,
+      lineHeight: 22,
+    },
+    heroSection: {
+      marginTop: spacing.md,
+      paddingHorizontal: spacing.lg,
+    },
+    sectionHeader: {
+      paddingHorizontal: spacing.lg,
+      marginTop: spacing.lg,
+      marginBottom: spacing.md,
+    },
+    sectionTitle: {
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.xl,
+      fontWeight: '800',
+    },
+    sectionSubtitle: {
+      marginTop: spacing.xs,
+      color: theme.colors.textMuted,
+      fontSize: fontSize.sm,
+    },
+    selectorSection: {
+      paddingHorizontal: spacing.lg,
+      marginTop: spacing.sm,
+    },
+    selectorCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+      padding: spacing.md,
+    },
+    selectorCardDisabled: {
+      opacity: 0.65,
+    },
+    selectorCopy: {
+      flex: 1,
+      paddingRight: spacing.md,
+    },
+    selectorEyebrow: {
+      color: nutritionTheme.accentStrong,
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+    },
+    selectorTitle: {
+      marginTop: spacing.xs,
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.base,
+      fontWeight: '800',
+    },
+    selectorSubtitle: {
+      marginTop: spacing.xs,
+      color: theme.colors.textMuted,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+    },
+    selectorAction: {
+      width: 34,
+      height: 34,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: nutritionTheme.accentSoft,
+    },
+    mealsSection: {
+      marginTop: spacing.lg,
+    },
+    mealList: {
+      paddingHorizontal: spacing.lg,
+      gap: spacing.md,
+    },
+    emptyStateWrapper: {
+      flex: 1,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.xxl,
+    },
+    emptyCard: {
+      alignItems: 'center',
+      paddingVertical: spacing.xxl,
+      paddingHorizontal: spacing.lg,
+    },
+    emptyIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: nutritionTheme.accentSoft,
+    },
+    emptyTitle: {
+      marginTop: spacing.lg,
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.xl,
+      fontWeight: '800',
+      textAlign: 'center',
+    },
+    emptyText: {
+      marginTop: spacing.sm,
+      color: theme.colors.textMuted,
+      fontSize: fontSize.base,
+      lineHeight: 22,
+      textAlign: 'center',
+    },
+    retryButton: {
+      marginTop: spacing.lg,
+      minWidth: 180,
+    },
+    noMealsCard: {
+      paddingVertical: spacing.xl,
+    },
+    noMealsTitle: {
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.lg,
+      fontWeight: '800',
+      textAlign: 'center',
+    },
+    noMealsText: {
+      marginTop: spacing.sm,
+      color: theme.colors.textMuted,
+      fontSize: fontSize.base,
+      lineHeight: 22,
+      textAlign: 'center',
+    },
+  });

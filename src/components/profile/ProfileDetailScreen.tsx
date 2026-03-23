@@ -15,11 +15,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   borderRadius,
-  colors,
   fontSize,
   shadows,
   spacing,
 } from '../../constants/colors';
+import { useAppTheme, useThemedStyles } from '../../theme';
 
 interface ProfileDetailScreenProps {
   title: string;
@@ -37,120 +37,128 @@ export const ProfileDetailScreen: React.FC<ProfileDetailScreenProps> = ({
   footer,
   scrollEnabled = true,
   contentStyle,
-}) => (
-  <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-    <KeyboardAvoidingView
-      style={styles.keyboardContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          activeOpacity={0.7}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={20} color={colors.gray[700]} />
-        </TouchableOpacity>
+}) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
 
-        <View style={styles.headerContent}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            activeOpacity={0.7}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.colors.icon} />
+          </TouchableOpacity>
+
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>{title}</Text>
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </View>
         </View>
-      </View>
 
-      {scrollEnabled ? (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[
-            styles.scrollContent,
-            footer ? styles.scrollContentWithFooter : null,
-            contentStyle,
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {children}
-        </ScrollView>
-      ) : (
-        <View
-          style={[
-            styles.staticContent,
-            footer ? styles.staticContentWithFooter : null,
-            contentStyle,
-          ]}
-        >
-          {children}
-        </View>
-      )}
+        {scrollEnabled ? (
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[
+              styles.scrollContent,
+              footer ? styles.scrollContentWithFooter : null,
+              contentStyle,
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {children}
+          </ScrollView>
+        ) : (
+          <View
+            style={[
+              styles.staticContent,
+              footer ? styles.staticContentWithFooter : null,
+              contentStyle,
+            ]}
+          >
+            {children}
+          </View>
+        )}
 
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
-    </KeyboardAvoidingView>
-  </SafeAreaView>
-);
+        {footer ? <View style={styles.footer}>{footer}</View> : null}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+};
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  keyboardContainer: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.white,
-    ...shadows.sm,
-  },
-  headerContent: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-  title: {
-    fontSize: fontSize['2xl'],
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  subtitle: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    lineHeight: 20,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
-  scrollContentWithFooter: {
-    paddingBottom: spacing.xl,
-  },
-  staticContent: {
-    flex: 1,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
-  staticContentWithFooter: {
-    paddingBottom: spacing.lg,
-  },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
-    backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    keyboardContainer: {
+      flex: 1,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.md,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.sm,
+    },
+    headerContent: {
+      flex: 1,
+      marginLeft: spacing.md,
+    },
+    title: {
+      fontSize: fontSize['2xl'],
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      lineHeight: 20,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.xxl,
+    },
+    scrollContentWithFooter: {
+      paddingBottom: spacing.xl,
+    },
+    staticContent: {
+      flex: 1,
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.xxl,
+    },
+    staticContentWithFooter: {
+      paddingBottom: spacing.lg,
+    },
+    footer: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.lg,
+      backgroundColor: theme.colors.background,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+  });

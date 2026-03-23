@@ -23,6 +23,7 @@ import {
   spacing,
 } from '../../constants/colors';
 import { getAssetUrl, getVideoThumbnailUrl } from '../../services/api';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { DayExercise, ExerciseProgress } from '../../types';
 import {
   formatDistanceMeters,
@@ -195,6 +196,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   onDeleteSet,
   onVideoPress,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [isEditing, setIsEditing] = useState(false);
   const [editingField, setEditingField] = useState<EditingField>(null);
   const [repsDraft, setRepsDraft] = useState(() => formatEditableNumber(currentReps));
@@ -224,6 +227,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
     currentEffortValue ?? dayExercise.effort_value,
   );
   const targetEffortLabel = formatEffortValue(dayExercise.effort_type, dayExercise.effort_value);
+  const controlAccentColor = controlsDisabled ? theme.colors.iconMuted : theme.colors.primary;
   const showCurrentSetChip = !isCompleted && (isActive || setInProgress);
   const unitLabel = isCardio ? 'bloque' : 'serie';
   const currentUnitLabel = isCardio ? 'Bloque' : 'Serie';
@@ -512,7 +516,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
               <View style={styles.cardioSection}>
                 <View style={styles.cardioBadgeRow}>
                   <View style={styles.cardioBadge}>
-                    <Ionicons name="pulse-outline" size={12} color={colors.primary[700]} />
+                    <Ionicons name="pulse-outline" size={12} color={theme.colors.primary} />
                     <Text style={styles.cardioBadgeText}>{cardioProtocolLabel}</Text>
                   </View>
                   {cardioZoneLabel ? (
@@ -544,7 +548,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                     <Ionicons
                       name="chevron-down"
                       size={22}
-                      color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                      color={controlAccentColor}
                     />
                   </TouchableOpacity>
                   {editingField === 'reps' && isActive ? (
@@ -588,7 +592,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                     <Ionicons
                       name="chevron-up"
                       size={22}
-                      color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                      color={controlAccentColor}
                     />
                   </TouchableOpacity>
                 </View>
@@ -604,7 +608,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                     <Ionicons
                       name="chevron-down"
                       size={22}
-                      color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                      color={controlAccentColor}
                     />
                   </TouchableOpacity>
                   {editingField === 'weight' && isActive ? (
@@ -644,7 +648,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                     <Ionicons
                       name="chevron-up"
                       size={22}
-                      color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                      color={controlAccentColor}
                     />
                   </TouchableOpacity>
                 </View>
@@ -661,7 +665,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                       <Ionicons
                         name="chevron-down"
                         size={22}
-                        color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                        color={controlAccentColor}
                       />
                     </TouchableOpacity>
                     <View style={styles.valueContainer}>
@@ -678,7 +682,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                       <Ionicons
                         name="chevron-up"
                         size={22}
-                        color={controlsDisabled ? colors.gray[300] : colors.primary[500]}
+                        color={controlAccentColor}
                       />
                     </TouchableOpacity>
                   </View>
@@ -728,10 +732,10 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
               activeOpacity={0.9}
               onPress={() => setIsEditing(true)}
             >
-              <BlurView intensity={25} tint="light" style={styles.blurView}>
+              <BlurView intensity={25} tint={theme.colors.blurTint} style={styles.blurView}>
                 <View style={styles.completedOverlayContent}>
                   <View style={styles.checkCircle}>
-                    <Ionicons name="checkmark" size={32} color={colors.primary[500]} />
+                    <Ionicons name="checkmark" size={32} color={theme.colors.primary} />
                   </View>
                   <Text style={styles.completedText}>Completado</Text>
                   <Text style={styles.tapToEditText}>Toca para editar</Text>
@@ -799,9 +803,9 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                     {isCardio ? `B${setNumber}` : `S${setNumber}`}
                   </Text>
                   {isSetCompleted ? (
-                    <Ionicons name="checkmark-circle" size={14} color={colors.primary[500]} />
+                    <Ionicons name="checkmark-circle" size={14} color={theme.colors.primary} />
                   ) : isCurrentSet && setInProgress ? (
-                    <Ionicons name="timer-outline" size={14} color={brandColors.navy} />
+                    <Ionicons name="timer-outline" size={14} color={theme.colors.primary} />
                   ) : null}
                 </View>
                 <Text
@@ -843,7 +847,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     marginHorizontal: spacing.lg,
     marginVertical: spacing.sm,
@@ -853,7 +857,9 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT,
     borderRadius: borderRadius.xl,
     overflow: 'hidden',
-    backgroundColor: colors.gray[100],
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     position: 'relative',
     ...shadows.md,
   },
@@ -904,7 +910,7 @@ const styles = StyleSheet.create({
   infoBackground: {
     width: INFO_WIDTH,
     height: CARD_HEIGHT,
-    backgroundColor: colors.white,
+    backgroundColor: theme.colors.card,
   },
   infoArea: {
     position: 'absolute',
@@ -925,19 +931,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: borderRadius.sm,
-    backgroundColor: colors.gray[100],
+    backgroundColor: theme.colors.surfaceAlt,
   },
   orderBadgeText: {
     fontSize: fontSize.xs,
     fontWeight: '600',
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   exerciseName: {
     maxWidth: '85%',
     marginBottom: spacing.xs,
     fontSize: fontSize.lg,
     fontWeight: '600',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   cardioSection: {
     flex: 1,
@@ -956,29 +962,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.primary[50],
+    backgroundColor: theme.colors.primarySoft,
   },
   cardioBadgeText: {
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.primary[700],
+    color: theme.colors.primary,
   },
   cardioZoneBadge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.gray[100],
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   cardioZoneBadgeText: {
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.gray[700],
+    color: theme.colors.textSecondary,
   },
   cardioSummary: {
     marginTop: spacing.sm,
     fontSize: fontSize.base,
     fontWeight: '700',
-    color: brandColors.navy,
+    color: theme.colors.textPrimary,
   },
   cardioMetrics: {
     marginTop: spacing.md,
@@ -990,11 +998,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
+    borderBottomColor: theme.colors.border,
   },
   cardioMetricLabel: {
     fontSize: fontSize.xs,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   cardioMetricValue: {
     marginLeft: spacing.sm,
@@ -1002,7 +1010,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.gray[800],
+    color: theme.colors.textSecondary,
   },
   controlRow: {
     flexDirection: 'row',
@@ -1030,9 +1038,9 @@ const styles = StyleSheet.create({
   valueContainerEditing: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    backgroundColor: colors.gray[50],
+    backgroundColor: theme.colors.inputBackground,
     borderWidth: 1,
-    borderColor: colors.primary[200],
+    borderColor: theme.colors.primaryBorder,
     borderRadius: borderRadius.md,
   },
   readOnlyValueContainer: {
@@ -1044,32 +1052,32 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     fontSize: fontSize.xl,
     fontWeight: '600',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
     textAlign: 'center',
   },
   valueNumber: {
     fontSize: fontSize.xl,
     fontWeight: '600',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   effortValueText: {
     fontSize: fontSize.lg,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   valueDimmed: {
-    color: colors.gray[400],
+    color: theme.colors.textMuted,
   },
   valueLabel: {
     marginTop: 1,
     fontSize: fontSize.xs,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   divider: {
     width: '70%',
     height: 1,
     marginVertical: spacing.xs,
-    backgroundColor: colors.gray[200],
+    backgroundColor: theme.colors.border,
   },
   nextButton: {
     alignSelf: 'flex-start',
@@ -1101,7 +1109,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(59, 130, 246, 0.65)',
+    backgroundColor: theme.isDark ? 'rgba(8, 17, 31, 0.82)' : 'rgba(59, 130, 246, 0.65)',
   },
   completedOverlayContent: {
     alignItems: 'center',
@@ -1113,7 +1121,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: theme.colors.surface,
   },
   completedText: {
     fontSize: fontSize.lg,
@@ -1156,22 +1164,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.md,
-    backgroundColor: colors.white,
+    backgroundColor: theme.colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: colors.gray[200],
+    borderColor: theme.colors.border,
     ...shadows.sm,
   },
   setChipCompleted: {
-    backgroundColor: colors.primary[50],
-    borderColor: colors.primary[200],
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primaryBorder,
   },
   setChipCurrent: {
-    backgroundColor: colors.white,
-    borderColor: brandColors.navy,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.primary,
   },
   setChipInProgress: {
-    backgroundColor: colors.primary[100],
-    borderColor: colors.primary[400],
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primary,
   },
   setChipHeader: {
     flexDirection: 'row',
@@ -1182,30 +1190,30 @@ const styles = StyleSheet.create({
   setChipTitle: {
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.gray[600],
+    color: theme.colors.textSecondary,
   },
   setChipTitleCompleted: {
-    color: colors.primary[700],
+    color: theme.colors.primary,
   },
   setChipTitleCurrent: {
-    color: brandColors.navy,
+    color: theme.colors.primary,
   },
   setChipEffort: {
     marginTop: 2,
     fontSize: fontSize.xs,
     fontWeight: '600',
-    color: colors.gray[800],
+    color: theme.colors.textPrimary,
   },
   setChipEffortCompleted: {
-    color: colors.primary[700],
+    color: theme.colors.primary,
   },
   setChipEffortCurrent: {
-    color: brandColors.navy,
+    color: theme.colors.primary,
   },
   setIndicatorText: {
     marginTop: spacing.sm,
     fontSize: fontSize.xs,
     fontWeight: '500',
-    color: colors.gray[600],
+    color: theme.colors.textMuted,
   },
 });

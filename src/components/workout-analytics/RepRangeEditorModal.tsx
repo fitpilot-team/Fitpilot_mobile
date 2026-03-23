@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../common';
-import { borderRadius, colors, fontSize, spacing } from '../../constants/colors';
+import { borderRadius, fontSize, spacing } from '../../constants/colors';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { RepRangeBucket } from '../../types';
 import {
   RepRangeDraft,
@@ -38,6 +39,8 @@ export const RepRangeEditorModal: React.FC<RepRangeEditorModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [drafts, setDrafts] = useState<RepRangeDraft[]>(() => cloneRepRangeDrafts(repRanges));
 
   useEffect(() => {
@@ -89,7 +92,7 @@ export const RepRangeEditorModal: React.FC<RepRangeEditorModalProps> = ({
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={20} color={colors.gray[700]} />
+              <Ionicons name="close" size={20} color={theme.colors.icon} />
             </TouchableOpacity>
           </View>
 
@@ -118,7 +121,7 @@ export const RepRangeEditorModal: React.FC<RepRangeEditorModalProps> = ({
                     <Ionicons
                       name="trash-outline"
                       size={18}
-                      color={drafts.length <= 2 ? colors.gray[300] : colors.error}
+                      color={drafts.length <= 2 ? theme.colors.iconMuted : theme.colors.error}
                     />
                   </TouchableOpacity>
                 </View>
@@ -132,7 +135,7 @@ export const RepRangeEditorModal: React.FC<RepRangeEditorModalProps> = ({
                       keyboardType="number-pad"
                       style={styles.input}
                       placeholder="1"
-                      placeholderTextColor={colors.gray[400]}
+                      placeholderTextColor={theme.colors.textMuted}
                     />
                   </View>
                   <View style={styles.inputGroup}>
@@ -143,7 +146,7 @@ export const RepRangeEditorModal: React.FC<RepRangeEditorModalProps> = ({
                       keyboardType="number-pad"
                       style={styles.input}
                       placeholder={index === drafts.length - 1 ? 'Abierto' : '5'}
-                      placeholderTextColor={colors.gray[400]}
+                      placeholderTextColor={theme.colors.textMuted}
                     />
                   </View>
                 </View>
@@ -156,7 +159,7 @@ export const RepRangeEditorModal: React.FC<RepRangeEditorModalProps> = ({
               disabled={drafts.length >= 6}
               style={[styles.addButton, drafts.length >= 6 ? styles.addButtonDisabled : null]}
             >
-              <Ionicons name="add-outline" size={18} color={colors.primary[600]} />
+              <Ionicons name="add-outline" size={18} color={theme.colors.primary} />
               <Text style={styles.addButtonText}>Agregar rango</Text>
             </TouchableOpacity>
 
@@ -179,137 +182,142 @@ export const RepRangeEditorModal: React.FC<RepRangeEditorModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(17,24,39,0.38)',
-    justifyContent: 'flex-end',
-  },
-  card: {
-    maxHeight: '88%',
-    backgroundColor: colors.white,
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
-    padding: spacing.lg,
-    paddingBottom: spacing.xl,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  headerCopy: {
-    flex: 1,
-  },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  subtitle: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  closeButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.gray[100],
-  },
-  list: {
-    marginTop: spacing.lg,
-  },
-  listContent: {
-    gap: spacing.md,
-  },
-  rangeCard: {
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.background,
-    padding: spacing.md,
-  },
-  rangeCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  colorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  rangeLabel: {
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  deleteButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inputsRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: spacing.md,
-  },
-  inputGroup: {
-    flex: 1,
-  },
-  inputLabel: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-    marginBottom: spacing.xs,
-  },
-  input: {
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-    backgroundColor: colors.white,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: fontSize.base,
-    color: colors.gray[900],
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.primary[200],
-    backgroundColor: colors.primary[50],
-    paddingVertical: spacing.md,
-  },
-  addButtonDisabled: {
-    opacity: 0.5,
-  },
-  addButtonText: {
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-    color: colors.primary[700],
-  },
-  errorText: {
-    fontSize: fontSize.sm,
-    color: colors.error,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: spacing.lg,
-  },
-  actionButton: {
-    flex: 1,
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: theme.colors.overlay,
+      justifyContent: 'flex-end',
+    },
+    card: {
+      maxHeight: '88%',
+      backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: borderRadius.xl,
+      borderTopRightRadius: borderRadius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.lg,
+      paddingBottom: spacing.xl,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    headerCopy: {
+      flex: 1,
+    },
+    title: {
+      fontSize: fontSize.xl,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    closeButton: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    list: {
+      marginTop: spacing.lg,
+    },
+    listContent: {
+      gap: spacing.md,
+    },
+    rangeCard: {
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.md,
+    },
+    rangeCardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    labelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    colorDot: {
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+    },
+    rangeLabel: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    deleteButton: {
+      width: 32,
+      height: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    inputsRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      marginTop: spacing.md,
+    },
+    inputGroup: {
+      flex: 1,
+    },
+    inputLabel: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      marginBottom: spacing.xs,
+    },
+    input: {
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.inputBorder,
+      backgroundColor: theme.colors.inputBackground,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      fontSize: fontSize.base,
+      color: theme.colors.textPrimary,
+    },
+    addButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.primarySoft,
+      paddingVertical: spacing.md,
+    },
+    addButtonDisabled: {
+      opacity: 0.5,
+    },
+    addButtonText: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.primary,
+    },
+    errorText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.error,
+    },
+    actionsRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      marginTop: spacing.lg,
+    },
+    actionButton: {
+      flex: 1,
+    },
+  });
 
 export default RepRangeEditorModal;

@@ -11,11 +11,11 @@ import {
 } from '../../../src/constants/support';
 import {
   borderRadius,
-  colors,
   fontSize,
   shadows,
   spacing,
 } from '../../../src/constants/colors';
+import { useAppTheme, useThemedStyles } from '../../../src/theme';
 
 const resolveDocumentKey = (value: string | string[] | undefined) => {
   if (Array.isArray(value)) {
@@ -27,6 +27,8 @@ const resolveDocumentKey = (value: string | string[] | undefined) => {
 
 export default function LegalDocumentScreen() {
   const { document } = useLocalSearchParams<{ document?: string | string[] }>();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const documentKey = resolveDocumentKey(document);
 
   if (!documentKey || !isSupportLegalDocumentKey(documentKey)) {
@@ -37,7 +39,7 @@ export default function LegalDocumentScreen() {
       >
         <View style={styles.emptyCard}>
           <View style={styles.emptyIcon}>
-            <Ionicons name="alert-circle-outline" size={24} color={colors.warning} />
+            <Ionicons name="alert-circle-outline" size={24} color={theme.colors.warning} />
           </View>
           <Text style={styles.emptyTitle}>Documento no disponible</Text>
           <Text style={styles.emptyDescription}>
@@ -58,7 +60,7 @@ export default function LegalDocumentScreen() {
       >
         <View style={styles.emptyCard}>
           <View style={styles.emptyIcon}>
-            <Ionicons name="document-text-outline" size={24} color={colors.primary[600]} />
+            <Ionicons name="document-text-outline" size={24} color={theme.colors.primary} />
           </View>
           <Text style={styles.emptyTitle}>{documentConfig.emptyStateTitle}</Text>
           <Text style={styles.emptyDescription}>
@@ -88,49 +90,54 @@ export default function LegalDocumentScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screenContent: {
-    flex: 1,
-    paddingBottom: spacing.lg,
-  },
-  webViewCard: {
-    flex: 1,
-    overflow: 'hidden',
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    ...shadows.sm,
-  },
-  webView: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  emptyCard: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.xl,
-    alignItems: 'center',
-    ...shadows.sm,
-  },
-  emptyIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.gray[50],
-  },
-  emptyTitle: {
-    marginTop: spacing.md,
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: colors.gray[900],
-    textAlign: 'center',
-  },
-  emptyDescription: {
-    marginTop: spacing.sm,
-    fontSize: fontSize.sm,
-    lineHeight: 20,
-    color: colors.gray[600],
-    textAlign: 'center',
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    screenContent: {
+      flex: 1,
+      paddingBottom: spacing.lg,
+    },
+    webViewCard: {
+      flex: 1,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.sm,
+    },
+    webView: {
+      flex: 1,
+      backgroundColor: theme.colors.surface,
+    },
+    emptyCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.lg,
+      padding: spacing.xl,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.sm,
+    },
+    emptyIcon: {
+      width: 52,
+      height: 52,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    emptyTitle: {
+      marginTop: spacing.md,
+      fontSize: fontSize.lg,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+      textAlign: 'center',
+    },
+    emptyDescription: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
+  });

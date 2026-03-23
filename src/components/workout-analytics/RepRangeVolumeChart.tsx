@@ -1,7 +1,8 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
-import { borderRadius, colors, fontSize, spacing } from '../../constants/colors';
+import { borderRadius, fontSize, spacing } from '../../constants/colors';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { RepRangeBucket, RepRangeChartPoint } from '../../types';
 import { formatLocalDate } from '../../utils/date';
 import { getRepRangeColor } from '../../utils/workoutAnalytics';
@@ -23,6 +24,9 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
   repRanges,
   contentWidth = 360,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   if (!points.length || repRanges.length === 0) {
     return (
       <View style={styles.emptyState}>
@@ -88,7 +92,7 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
                     height={CHART_HEIGHT - PADDING_Y * 2}
                     rx={6}
                     fill="transparent"
-                    stroke={colors.gray[100]}
+                    stroke={theme.colors.border}
                     strokeWidth={1}
                   />
                 </React.Fragment>
@@ -109,54 +113,59 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  legendRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.gray[50],
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  legendLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-    color: colors.gray[600],
-  },
-  labelsRow: {
-    flexDirection: 'row',
-    marginTop: spacing.xs,
-    paddingLeft: PADDING_X - (SLOT_WIDTH - BAR_WIDTH) / 2,
-  },
-  axisLabel: {
-    textAlign: 'center',
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  emptyState: {
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.gray[50],
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    textAlign: 'center',
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    legendRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginBottom: spacing.md,
+    },
+    legendItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 6,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    legendDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+    },
+    legendLabel: {
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    labelsRow: {
+      flexDirection: 'row',
+      marginTop: spacing.xs,
+      paddingLeft: PADDING_X - (SLOT_WIDTH - BAR_WIDTH) / 2,
+    },
+    axisLabel: {
+      textAlign: 'center',
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    emptyState: {
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingVertical: spacing.lg,
+      paddingHorizontal: spacing.md,
+      alignItems: 'center',
+    },
+    emptyText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+  });
 
 export default RepRangeVolumeChart;

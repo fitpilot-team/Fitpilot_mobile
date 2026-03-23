@@ -11,7 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, fontSize, borderRadius } from '../../constants/colors';
+import { spacing, fontSize, borderRadius } from '../../constants/colors';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { AbandonReason } from '../../types';
 
 interface AbandonReasonOption {
@@ -30,9 +31,9 @@ const ABANDON_REASONS: AbandonReasonOption[] = [
   },
   {
     value: 'injury',
-    label: 'Lesión o dolor',
+    label: 'LesiÃ³n o dolor',
     icon: 'bandage-outline',
-    description: 'Sentí molestia o riesgo de lesión',
+    description: 'SentÃ­ molestia o riesgo de lesiÃ³n',
   },
   {
     value: 'fatigue',
@@ -42,19 +43,19 @@ const ABANDON_REASONS: AbandonReasonOption[] = [
   },
   {
     value: 'motivation',
-    label: 'Sin motivación',
+    label: 'Sin motivaciÃ³n',
     icon: 'sad-outline',
-    description: 'No me sentía con ganas hoy',
+    description: 'No me sentÃ­a con ganas hoy',
   },
   {
     value: 'schedule',
     label: 'Conflicto de agenda',
     icon: 'calendar-outline',
-    description: 'Surgió algo importante',
+    description: 'SurgiÃ³ algo importante',
   },
   {
     value: 'other',
-    label: 'Otra razón',
+    label: 'Otra razÃ³n',
     icon: 'ellipsis-horizontal-outline',
     description: 'Especificar en notas',
   },
@@ -73,13 +74,14 @@ export const AbandonModal: React.FC<AbandonModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [selectedReason, setSelectedReason] = useState<AbandonReason | null>(null);
   const [notes, setNotes] = useState('');
 
   const handleConfirm = () => {
     if (selectedReason) {
       onConfirm(selectedReason, notes.trim() || undefined);
-      // Reset state
       setSelectedReason(null);
       setNotes('');
     }
@@ -104,10 +106,9 @@ export const AbandonModal: React.FC<AbandonModalProps> = ({
         style={styles.overlay}
       >
         <View style={styles.container}>
-          {/* Header */}
           <View style={styles.header}>
             <View style={styles.iconContainer}>
-              <Ionicons name="pause-circle-outline" size={40} color={colors.warning} />
+              <Ionicons name="pause-circle-outline" size={40} color={theme.colors.warning} />
             </View>
             <Text style={styles.title}>Abandonar entrenamiento</Text>
             <Text style={styles.subtitle} numberOfLines={2}>
@@ -115,9 +116,8 @@ export const AbandonModal: React.FC<AbandonModalProps> = ({
             </Text>
           </View>
 
-          {/* Reasons list */}
           <ScrollView style={styles.reasonsList} showsVerticalScrollIndicator={false}>
-            <Text style={styles.sectionLabel}>¿Por qué abandonas el entrenamiento?</Text>
+            <Text style={styles.sectionLabel}>Â¿Por quÃ© abandonas el entrenamiento?</Text>
 
             {ABANDON_REASONS.map((reason) => {
               const isSelected = selectedReason === reason.value;
@@ -132,7 +132,7 @@ export const AbandonModal: React.FC<AbandonModalProps> = ({
                     <Ionicons
                       name={reason.icon}
                       size={24}
-                      color={isSelected ? colors.white : colors.gray[500]}
+                      color={isSelected ? theme.colors.surface : theme.colors.iconMuted}
                     />
                   </View>
                   <View style={styles.reasonContent}>
@@ -141,20 +141,19 @@ export const AbandonModal: React.FC<AbandonModalProps> = ({
                     </Text>
                     <Text style={styles.reasonDescription}>{reason.description}</Text>
                   </View>
-                  {isSelected && (
-                    <Ionicons name="checkmark-circle" size={24} color={colors.primary[500]} />
-                  )}
+                  {isSelected ? (
+                    <Ionicons name="checkmark-circle" size={24} color={theme.colors.primary} />
+                  ) : null}
                 </TouchableOpacity>
               );
             })}
 
-            {/* Notes input */}
             <View style={styles.notesContainer}>
               <Text style={styles.notesLabel}>Notas adicionales (opcional)</Text>
               <TextInput
                 style={styles.notesInput}
-                placeholder="Describe más detalles si lo deseas..."
-                placeholderTextColor={colors.gray[400]}
+                placeholder="Describe mÃ¡s detalles si lo deseas..."
+                placeholderTextColor={theme.colors.textMuted}
                 multiline
                 numberOfLines={3}
                 value={notes}
@@ -164,7 +163,6 @@ export const AbandonModal: React.FC<AbandonModalProps> = ({
             </View>
           </ScrollView>
 
-          {/* Actions */}
           <View style={styles.actions}>
             <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
               <Text style={styles.cancelButtonText}>Continuar entrenando</Text>
@@ -175,7 +173,7 @@ export const AbandonModal: React.FC<AbandonModalProps> = ({
               onPress={handleConfirm}
               disabled={!selectedReason}
             >
-              <Ionicons name="exit-outline" size={20} color={colors.white} />
+              <Ionicons name="exit-outline" size={20} color={theme.colors.surface} />
               <Text style={styles.confirmButtonText}>Abandonar</Text>
             </TouchableOpacity>
           </View>
@@ -185,158 +183,166 @@ export const AbandonModal: React.FC<AbandonModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.md,
-  },
-  container: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.xl,
-    width: '100%',
-    maxWidth: 400,
-    maxHeight: '85%',
-    overflow: 'hidden',
-  },
-  header: {
-    alignItems: 'center',
-    paddingTop: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
-  },
-  iconContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#FEF3C7', // amber-100
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: '700',
-    color: colors.gray[900],
-    marginBottom: spacing.xs,
-  },
-  subtitle: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    textAlign: 'center',
-  },
-  reasonsList: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-  },
-  sectionLabel: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[700],
-    marginBottom: spacing.md,
-  },
-  reasonItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    backgroundColor: colors.gray[50],
-    borderRadius: borderRadius.lg,
-    marginBottom: spacing.sm,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  reasonItemSelected: {
-    backgroundColor: colors.primary[50],
-    borderColor: colors.primary[500],
-  },
-  reasonIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.gray[200],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.md,
-  },
-  reasonIconSelected: {
-    backgroundColor: colors.primary[500],
-  },
-  reasonContent: {
-    flex: 1,
-  },
-  reasonLabel: {
-    fontSize: fontSize.base,
-    fontWeight: '600',
-    color: colors.gray[800],
-    marginBottom: 2,
-  },
-  reasonLabelSelected: {
-    color: colors.primary[700],
-  },
-  reasonDescription: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  notesContainer: {
-    marginTop: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  notesLabel: {
-    fontSize: fontSize.sm,
-    fontWeight: '500',
-    color: colors.gray[600],
-    marginBottom: spacing.sm,
-  },
-  notesInput: {
-    backgroundColor: colors.gray[50],
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    fontSize: fontSize.base,
-    color: colors.gray[900],
-    minHeight: 80,
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-  },
-  actions: {
-    flexDirection: 'row',
-    padding: spacing.lg,
-    gap: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.gray[100],
-    borderRadius: borderRadius.lg,
-  },
-  cancelButtonText: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[700],
-  },
-  confirmButton: {
-    flex: 1,
-    flexDirection: 'row',
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.warning,
-    borderRadius: borderRadius.lg,
-    gap: spacing.xs,
-  },
-  confirmButtonDisabled: {
-    backgroundColor: colors.gray[300],
-  },
-  confirmButtonText: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.white,
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: theme.colors.overlay,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: spacing.md,
+    },
+    container: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      width: '100%',
+      maxWidth: 400,
+      maxHeight: '85%',
+      overflow: 'hidden',
+    },
+    header: {
+      alignItems: 'center',
+      paddingTop: spacing.xl,
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    iconContainer: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      backgroundColor: theme.colors.surfaceAlt,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spacing.md,
+    },
+    title: {
+      fontSize: fontSize.xl,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+      marginBottom: spacing.xs,
+    },
+    subtitle: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+    reasonsList: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+    },
+    sectionLabel: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      marginBottom: spacing.md,
+    },
+    reasonItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: spacing.md,
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginBottom: spacing.sm,
+      gap: spacing.sm,
+    },
+    reasonItemSelected: {
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.primarySoft,
+    },
+    reasonIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: theme.colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    reasonIconSelected: {
+      backgroundColor: theme.colors.primary,
+    },
+    reasonContent: {
+      flex: 1,
+    },
+    reasonLabel: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    reasonLabelSelected: {
+      color: theme.colors.primary,
+    },
+    reasonDescription: {
+      marginTop: 2,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    notesContainer: {
+      marginTop: spacing.md,
+      marginBottom: spacing.lg,
+    },
+    notesLabel: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      marginBottom: spacing.sm,
+    },
+    notesInput: {
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.inputBorder,
+      backgroundColor: theme.colors.inputBackground,
+      color: theme.colors.textPrimary,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      minHeight: 100,
+      fontSize: fontSize.sm,
+    },
+    actions: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      padding: spacing.lg,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+    cancelButton: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: spacing.md,
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    cancelButtonText: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    confirmButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.xs,
+      paddingVertical: spacing.md,
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.error,
+    },
+    confirmButtonDisabled: {
+      opacity: 0.45,
+    },
+    confirmButtonText: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.surface,
+    },
+  });
+
+export default AbandonModal;

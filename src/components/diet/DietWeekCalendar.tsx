@@ -3,6 +3,7 @@ import type { ClientDietWeekDay } from '../../types';
 import {
   SharedWeeklyCalendar,
   type SharedWeeklyCalendarDay,
+  sharedWeeklyCalendarHeroLayoutPreset,
 } from '../calendar/SharedWeeklyCalendar';
 import { formatLocalShortWeekday, getLocalDayNumber } from '../../utils/date';
 
@@ -45,6 +46,9 @@ export const DietWeekCalendar: React.FC<DietWeekCalendarProps> = ({
       days={calendarDays}
       heroSelectionMode="selected-only"
       contentWidth={contentWidth}
+      edgeInset={sharedWeeklyCalendarHeroLayoutPreset.edgeInset}
+      rowOffsetX={sharedWeeklyCalendarHeroLayoutPreset.rowOffsetX}
+      heroOffsetX={sharedWeeklyCalendarHeroLayoutPreset.heroOffsetX}
     />
   );
 };

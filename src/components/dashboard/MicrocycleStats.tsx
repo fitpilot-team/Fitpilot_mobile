@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, brandColors, colors, fontSize, shadows, spacing } from '../../constants/colors';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { MicrocycleMode, MicrocycleProgress } from '../../types';
 
 interface MicrocycleStatsProps {
@@ -25,6 +26,8 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
   onModeChange,
   isLoading = false,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const plannedMetrics = microcycleProgress?.planned_metrics;
   const actualMetrics = microcycleProgress?.actual_metrics;
 
@@ -66,7 +69,7 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
     },
     {
       key: 'active-days',
-      label: 'Días activos',
+      label: 'DÃ­as activos',
       value: `${actualMetrics?.active_days ?? 0}`,
       icon: 'calendar-outline',
       tint: brandColors.sky,
@@ -90,7 +93,7 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
           style={[styles.toggleButton, mode === 'planned' && styles.toggleButtonActive]}
         >
           <Text style={[styles.toggleLabel, mode === 'planned' && styles.toggleLabelActive]}>
-            Planificación
+            PlanificaciÃ³n
           </Text>
         </Pressable>
         <Pressable
@@ -98,7 +101,7 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
           style={[styles.toggleButton, mode === 'actual' && styles.toggleButtonActive]}
         >
           <Text style={[styles.toggleLabel, mode === 'actual' && styles.toggleLabelActive]}>
-            Ejecución real
+            EjecuciÃ³n real
           </Text>
         </Pressable>
       </View>
@@ -118,68 +121,73 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-  },
-  toggleWrap: {
-    flexDirection: 'row',
-    alignSelf: 'center',
-    marginBottom: spacing.md,
-    padding: 4,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.white,
-    ...shadows.sm,
-  },
-  toggleButton: {
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  toggleButtonActive: {
-    backgroundColor: brandColors.navy,
-  },
-  toggleLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    color: colors.gray[500],
-  },
-  toggleLabelActive: {
-    color: colors.white,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  card: {
-    flex: 1,
-    minHeight: 132,
-    padding: spacing.md,
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.white,
-    alignItems: 'center',
-    ...shadows.sm,
-  },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-  value: {
-    fontSize: fontSize['2xl'],
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  label: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-    textAlign: 'center',
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    container: {
+      paddingHorizontal: spacing.lg,
+      marginTop: spacing.sm,
+    },
+    toggleWrap: {
+      flexDirection: 'row',
+      alignSelf: 'center',
+      marginBottom: spacing.md,
+      padding: 4,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.sm,
+    },
+    toggleButton: {
+      borderRadius: borderRadius.full,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    toggleButtonActive: {
+      backgroundColor: theme.isDark ? theme.colors.primarySoft : brandColors.navy,
+    },
+    toggleLabel: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+    },
+    toggleLabelActive: {
+      color: theme.isDark ? theme.colors.primary : theme.colors.surface,
+    },
+    row: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    card: {
+      flex: 1,
+      minHeight: 132,
+      padding: spacing.md,
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.card,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: 'center',
+      ...shadows.sm,
+    },
+    iconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: borderRadius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spacing.sm,
+    },
+    value: {
+      fontSize: fontSize['2xl'],
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    label: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+  });
 
 export default MicrocycleStats;

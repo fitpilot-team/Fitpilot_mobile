@@ -23,7 +23,6 @@ import {
 } from '../../src/constants/measurements';
 import {
   borderRadius,
-  colors,
   fontSize,
   shadows,
   spacing,
@@ -33,6 +32,7 @@ import {
   getMyMeasurementDetail,
   listMyMeasurements,
 } from '../../src/services/measurements';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
   CreateOwnMeasurementPayload,
@@ -53,11 +53,12 @@ const HISTORY_PAGE_SIZE = 20;
 const getChangeAppearance = (
   change: number | null,
   emphasizeDecrease: boolean,
+  theme: AppTheme,
 ) => {
   if (change === null || change === 0) {
     return {
       icon: 'remove-outline' as const,
-      color: colors.gray[400],
+      color: theme.colors.iconMuted,
     };
   }
 
@@ -66,11 +67,13 @@ const getChangeAppearance = (
 
   return {
     icon: isPositive ? ('arrow-up-outline' as const) : ('arrow-down-outline' as const),
-    color: isGoodChange ? colors.success : colors.warning,
+    color: isGoodChange ? theme.colors.success : theme.colors.warning,
   };
 };
 
 export default function MeasurementsScreen() {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [measurements, setMeasurements] = useState<MeasurementHistoryItem[]>([]);
   const [pagination, setPagination] = useState<MeasurementPagination | null>(null);
   const [detailCache, setDetailCache] = useState<Record<string, MeasurementDetail>>({});
@@ -264,7 +267,7 @@ export default function MeasurementsScreen() {
           onPress={() => setIsFormVisible(true)}
           activeOpacity={0.8}
         >
-          <Ionicons name="add-outline" size={22} color={colors.white} />
+          <Ionicons name="add-outline" size={22} color="#ffffff" />
         </TouchableOpacity>
       </View>
 
@@ -276,7 +279,7 @@ export default function MeasurementsScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor={colors.primary[500]}
+            tintColor={theme.colors.primary}
           />
         }
       >
@@ -290,7 +293,7 @@ export default function MeasurementsScreen() {
 
         {!error && !latestMeasurement ? (
           <Card style={styles.emptyCard}>
-            <Ionicons name="analytics-outline" size={44} color={colors.gray[300]} />
+            <Ionicons name="analytics-outline" size={44} color={theme.colors.iconMuted} />
             <Text style={styles.emptyTitle}>Todavia no tienes mediciones registradas</Text>
             <Text style={styles.emptyText}>
               Captura tu primer registro para empezar a ver peso, composicion y perimetros.
@@ -298,7 +301,7 @@ export default function MeasurementsScreen() {
             <Button
               title="Registrar mi primera medicion"
               onPress={() => setIsFormVisible(true)}
-              icon={<Ionicons name="add-outline" size={18} color={colors.white} />}
+              icon={<Ionicons name="add-outline" size={18} color="#ffffff" />}
             />
           </Card>
         ) : null}
@@ -310,6 +313,7 @@ export default function MeasurementsScreen() {
                 const appearance = getChangeAppearance(
                   metric.change,
                   metric.emphasizeDecrease ?? false,
+                  theme,
                 );
 
                 return (
@@ -324,7 +328,7 @@ export default function MeasurementsScreen() {
                       <Ionicons
                         name={metric.icon as keyof typeof Ionicons.glyphMap}
                         size={20}
-                        color={colors.primary[500]}
+                        color={theme.colors.primary}
                       />
                     </View>
                     <Text style={styles.summaryLabel}>{metric.label}</Text>
@@ -384,8 +388,8 @@ export default function MeasurementsScreen() {
                   </TouchableOpacity>
                 </View>
                 <View style={styles.calculationGrid}>
-                  {recentCalculations.map((calculation) => (
-                    <View key={calculation.code} style={styles.calculationChip}>
+              {recentCalculations.map((calculation) => (
+                <View key={calculation.code} style={styles.calculationChip}>
                       <Text style={styles.calculationChipLabel}>{calculation.label}</Text>
                       <Text style={styles.calculationChipValue}>
                         {formatMeasurementNumber(
@@ -421,7 +425,7 @@ export default function MeasurementsScreen() {
                     <Ionicons
                       name={(field.icon ?? 'body-outline') as keyof typeof Ionicons.glyphMap}
                       size={18}
-                      color={colors.gray[400]}
+                      color={theme.colors.iconMuted}
                     />
                     <Text style={styles.perimeterLabel}>{field.label}</Text>
                     <Text style={styles.perimeterValue}>
@@ -467,7 +471,7 @@ export default function MeasurementsScreen() {
                       <Ionicons
                         name="chevron-forward-outline"
                         size={18}
-                        color={colors.gray[400]}
+                        color={theme.colors.iconMuted}
                       />
                     </View>
 
@@ -530,287 +534,292 @@ export default function MeasurementsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  title: {
-    fontSize: fontSize['2xl'],
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  subtitle: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  headerAction: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary[500],
-    ...shadows.md,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl + 60,
-  },
-  errorCard: {
-    marginBottom: spacing.md,
-  },
-  errorTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    color: colors.gray[900],
-  },
-  errorText: {
-    marginTop: spacing.sm,
-    marginBottom: spacing.md,
-    fontSize: fontSize.sm,
-    color: colors.gray[600],
-  },
-  emptyCard: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-    gap: spacing.md,
-  },
-  emptyTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: '700',
-    color: colors.gray[900],
-    textAlign: 'center',
-  },
-  emptyText: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-  },
-  mainStatsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  summaryCard: {
-    width: '48%',
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    ...shadows.md,
-  },
-  summaryCardLarge: {
-    width: '100%',
-  },
-  summaryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary[50],
-  },
-  summaryLabel: {
-    marginTop: spacing.sm,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  summaryValue: {
-    marginTop: spacing.xs,
-    fontSize: 30,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  summaryUnit: {
-    fontSize: fontSize.base,
-    fontWeight: '400',
-    color: colors.gray[500],
-  },
-  changeBadge: {
-    marginTop: spacing.sm,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: borderRadius.full,
-  },
-  changeText: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-  },
-  noChangeText: {
-    marginTop: spacing.sm,
-    fontSize: fontSize.xs,
-    color: colors.gray[400],
-  },
-  lastUpdate: {
-    marginTop: spacing.md,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-    fontSize: fontSize.xs,
-    color: colors.gray[400],
-  },
-  sectionCard: {
-    marginBottom: spacing.md,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  sectionHeaderContent: {
-    flex: 1,
-    paddingRight: spacing.sm,
-  },
-  sectionHeaderAction: {
-    flexShrink: 0,
-    alignSelf: 'flex-start',
-  },
-  sectionTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    color: colors.gray[900],
-  },
-  sectionDescription: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  sectionLink: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.primary[600],
-  },
-  calculationGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  calculationChip: {
-    width: '48%',
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.gray[50],
-  },
-  calculationChipLabel: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  calculationChipValue: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  calculationChipUnit: {
-    fontSize: fontSize.sm,
-    fontWeight: '400',
-    color: colors.gray[500],
-  },
-  analysisMeta: {
-    marginTop: spacing.md,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  analysisMetaText: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  perimeterGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  perimeterCard: {
-    width: '48%',
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.gray[50],
-  },
-  perimeterLabel: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  perimeterValue: {
-    marginTop: 2,
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    color: colors.gray[800],
-  },
-  perimeterUnit: {
-    fontSize: fontSize.xs,
-    fontWeight: '400',
-    color: colors.gray[400],
-  },
-  historyList: {
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  historyCard: {
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.gray[50],
-  },
-  historyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  historyDate: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[800],
-  },
-  historyMetricsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  historyMetric: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.white,
-  },
-  historyMetricLabel: {
-    fontSize: 10,
-    color: colors.gray[500],
-  },
-  historyMetricValue: {
-    marginTop: 2,
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[900],
-  },
-  historyMetricUnit: {
-    fontSize: fontSize.xs,
-    fontWeight: '400',
-    color: colors.gray[500],
-  },
-  historyNote: {
-    marginTop: spacing.sm,
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+      backgroundColor: theme.colors.background,
+    },
+    title: {
+      fontSize: fontSize['2xl'],
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    headerAction: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primary,
+      ...shadows.md,
+    },
+    scrollView: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scrollContent: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.xxl + 60,
+    },
+    errorCard: {
+      marginBottom: spacing.md,
+    },
+    errorTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+    errorText: {
+      marginTop: spacing.sm,
+      marginBottom: spacing.md,
+      fontSize: fontSize.sm,
+      color: theme.colors.textSecondary,
+    },
+    emptyCard: {
+      alignItems: 'center',
+      paddingVertical: spacing.xl,
+      gap: spacing.md,
+    },
+    emptyTitle: {
+      fontSize: fontSize.xl,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+      textAlign: 'center',
+    },
+    emptyText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+      marginBottom: spacing.sm,
+    },
+    mainStatsContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    summaryCard: {
+      width: '48%',
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.md,
+      ...shadows.md,
+    },
+    summaryCardLarge: {
+      width: '100%',
+    },
+    summaryIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primarySoft,
+    },
+    summaryLabel: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    summaryValue: {
+      marginTop: spacing.xs,
+      fontSize: 30,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    summaryUnit: {
+      fontSize: fontSize.base,
+      fontWeight: '400',
+      color: theme.colors.textMuted,
+    },
+    changeBadge: {
+      marginTop: spacing.sm,
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: borderRadius.full,
+    },
+    changeText: {
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+    },
+    noChangeText: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.xs,
+      color: theme.colors.iconMuted,
+    },
+    lastUpdate: {
+      marginTop: spacing.md,
+      marginBottom: spacing.lg,
+      textAlign: 'center',
+      fontSize: fontSize.xs,
+      color: theme.colors.iconMuted,
+    },
+    sectionCard: {
+      marginBottom: spacing.md,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: spacing.md,
+      marginBottom: spacing.md,
+    },
+    sectionHeaderContent: {
+      flex: 1,
+      paddingRight: spacing.sm,
+    },
+    sectionHeaderAction: {
+      flexShrink: 0,
+      alignSelf: 'flex-start',
+    },
+    sectionTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+    sectionDescription: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    sectionLink: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.primary,
+    },
+    calculationGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    calculationChip: {
+      width: '48%',
+      padding: spacing.md,
+      borderRadius: borderRadius.md,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    calculationChipLabel: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    calculationChipValue: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.lg,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    calculationChipUnit: {
+      fontSize: fontSize.sm,
+      fontWeight: '400',
+      color: theme.colors.textMuted,
+    },
+    analysisMeta: {
+      marginTop: spacing.md,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    analysisMetaText: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    perimeterGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    perimeterCard: {
+      width: '48%',
+      padding: spacing.md,
+      borderRadius: borderRadius.md,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    perimeterLabel: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    perimeterValue: {
+      marginTop: 2,
+      fontSize: fontSize.lg,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    perimeterUnit: {
+      fontSize: fontSize.xs,
+      fontWeight: '400',
+      color: theme.colors.iconMuted,
+    },
+    historyList: {
+      gap: spacing.sm,
+      marginBottom: spacing.md,
+    },
+    historyCard: {
+      padding: spacing.md,
+      borderRadius: borderRadius.md,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    historyHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    historyDate: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    historyMetricsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+    historyMetric: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.surface,
+    },
+    historyMetricLabel: {
+      fontSize: 10,
+      color: theme.colors.textMuted,
+    },
+    historyMetricValue: {
+      marginTop: 2,
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+    historyMetricUnit: {
+      fontSize: fontSize.xs,
+      fontWeight: '400',
+      color: theme.colors.textMuted,
+    },
+    historyNote: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+  });

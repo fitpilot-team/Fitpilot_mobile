@@ -3,7 +3,7 @@ import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'reac
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, brandColors } from '../../src/constants/colors';
+import { useAppTheme, useThemedStyles } from '../../src/theme';
 import { isTabletLayout } from '../../src/utils/layout';
 
 const TABLET_EXPANDED_WIDTH = 164;
@@ -25,42 +25,49 @@ const TabletTabBar: React.FC<TabletTabBarProps> = ({
   onHoverIn,
   onHoverOut,
   onToggle,
-}) => (
-  <Pressable
-    onHoverIn={onHoverIn}
-    onHoverOut={onHoverOut}
-    style={styles.tabletRailContainer}
-  >
-    <View
-      style={[
-        styles.tabletRailInner,
-        isExpanded ? styles.tabletRailInnerExpanded : styles.tabletRailInnerCollapsed,
-      ]}
+}) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
+  return (
+    <Pressable
+      onHoverIn={onHoverIn}
+      onHoverOut={onHoverOut}
+      style={styles.tabletRailContainer}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={isExpanded ? 'Contraer navegacion' : 'Expandir navegacion'}
-        onPress={onToggle}
-        style={({ pressed }) => [
-          styles.tabletRailToggle,
-          pressed ? styles.tabletRailTogglePressed : null,
+      <View
+        style={[
+          styles.tabletRailInner,
+          isExpanded ? styles.tabletRailInnerExpanded : styles.tabletRailInnerCollapsed,
         ]}
       >
-        <Ionicons
-          name={isExpanded ? 'chevron-back' : 'chevron-forward'}
-          size={18}
-          color={brandColors.navy}
-        />
-      </Pressable>
-      <BottomTabBar {...props} />
-    </View>
-  </Pressable>
-);
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={isExpanded ? 'Contraer navegacion' : 'Expandir navegacion'}
+          onPress={onToggle}
+          style={({ pressed }) => [
+            styles.tabletRailToggle,
+            pressed ? styles.tabletRailTogglePressed : null,
+          ]}
+        >
+          <Ionicons
+            name={isExpanded ? 'chevron-back' : 'chevron-forward'}
+            size={18}
+            color={theme.colors.tabBarActiveTint}
+          />
+        </Pressable>
+        <BottomTabBar {...props} />
+      </View>
+    </Pressable>
+  );
+};
 
 export default function TabLayout() {
   const { width, height } = useWindowDimensions();
   const isTablet = isTabletLayout(width, height);
   const isHoverEnabled = Platform.OS === 'web';
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [isRailPinnedExpanded, setIsRailPinnedExpanded] = useState(false);
   const [isRailHovered, setIsRailHovered] = useState(false);
 
@@ -94,10 +101,12 @@ export default function TabLayout() {
       screenOptions={{
         tabBarPosition: isTablet ? 'left' : 'bottom',
         tabBarVariant: isTablet ? 'material' : 'uikit',
-        tabBarActiveTintColor: brandColors.navy,
-        tabBarInactiveTintColor: colors.gray[400],
-        tabBarActiveBackgroundColor: isTablet ? '#E8F0F8' : colors.white,
-        tabBarInactiveBackgroundColor: colors.white,
+        tabBarActiveTintColor: theme.colors.tabBarActiveTint,
+        tabBarInactiveTintColor: theme.colors.tabBarInactiveTint,
+        tabBarActiveBackgroundColor: isTablet
+          ? theme.colors.tabBarActiveBg
+          : theme.colors.tabBarBackground,
+        tabBarInactiveBackgroundColor: theme.colors.tabBarBackground,
         tabBarShowLabel: !isTablet || isRailExpanded,
         tabBarHideOnKeyboard: !isTablet,
         tabBarStyle: isTablet
@@ -186,84 +195,85 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  phoneTabBar: {
-    backgroundColor: colors.white,
-    borderTopColor: colors.gray[200],
-    borderTopWidth: 1,
-    paddingTop: 8,
-    paddingBottom: 8,
-    height: 60,
-  },
-  phoneTabBarItem: {
-    borderRadius: 0,
-  },
-  phoneTabBarLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  tabletRailContainer: {
-    alignSelf: 'stretch',
-  },
-  tabletRailInner: {
-    position: 'relative',
-  },
-  tabletRailInnerExpanded: {
-    width: TABLET_EXPANDED_WIDTH,
-  },
-  tabletRailInnerCollapsed: {
-    width: TABLET_COLLAPSED_WIDTH,
-  },
-  tabletTabBar: {
-    backgroundColor: colors.white,
-    borderTopWidth: 0,
-    borderRightColor: colors.gray[200],
-    borderRightWidth: 1,
-    paddingTop: TABLET_TOP_PADDING,
-    paddingBottom: TABLET_BOTTOM_PADDING,
-    width: '100%',
-  },
-  tabletTabBarExpanded: {
-    width: TABLET_EXPANDED_WIDTH,
-  },
-  tabletTabBarCollapsed: {
-    width: TABLET_COLLAPSED_WIDTH,
-  },
-  tabletTabBarItem: {
-    borderRadius: 18,
-    marginHorizontal: 10,
-    marginVertical: 4,
-    minHeight: 64,
-  },
-  tabletTabBarItemExpanded: {
-    paddingHorizontal: 10,
-  },
-  tabletTabBarItemCollapsed: {
-    paddingHorizontal: 0,
-    justifyContent: 'center',
-  },
-  tabletTabBarLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  tabletTabBarIcon: {
-    marginTop: 2,
-  },
-  tabletRailToggle: {
-    position: 'absolute',
-    top: 18,
-    right: 12,
-    zIndex: 2,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E8F0F8',
-    borderWidth: 1,
-    borderColor: '#D8E7F4',
-  },
-  tabletRailTogglePressed: {
-    backgroundColor: '#D8E7F4',
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    phoneTabBar: {
+      backgroundColor: theme.colors.tabBarBackground,
+      borderTopColor: theme.colors.tabBarBorder,
+      borderTopWidth: 1,
+      paddingTop: 8,
+      paddingBottom: 8,
+      height: 60,
+    },
+    phoneTabBarItem: {
+      borderRadius: 0,
+    },
+    phoneTabBarLabel: {
+      fontSize: 11,
+      fontWeight: '500',
+    },
+    tabletRailContainer: {
+      alignSelf: 'stretch',
+    },
+    tabletRailInner: {
+      position: 'relative',
+    },
+    tabletRailInnerExpanded: {
+      width: TABLET_EXPANDED_WIDTH,
+    },
+    tabletRailInnerCollapsed: {
+      width: TABLET_COLLAPSED_WIDTH,
+    },
+    tabletTabBar: {
+      backgroundColor: theme.colors.tabBarBackground,
+      borderTopWidth: 0,
+      borderRightColor: theme.colors.tabBarBorder,
+      borderRightWidth: 1,
+      paddingTop: TABLET_TOP_PADDING,
+      paddingBottom: TABLET_BOTTOM_PADDING,
+      width: '100%',
+    },
+    tabletTabBarExpanded: {
+      width: TABLET_EXPANDED_WIDTH,
+    },
+    tabletTabBarCollapsed: {
+      width: TABLET_COLLAPSED_WIDTH,
+    },
+    tabletTabBarItem: {
+      borderRadius: 18,
+      marginHorizontal: 10,
+      marginVertical: 4,
+      minHeight: 64,
+    },
+    tabletTabBarItemExpanded: {
+      paddingHorizontal: 10,
+    },
+    tabletTabBarItemCollapsed: {
+      paddingHorizontal: 0,
+      justifyContent: 'center',
+    },
+    tabletTabBarLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    tabletTabBarIcon: {
+      marginTop: 2,
+    },
+    tabletRailToggle: {
+      position: 'absolute',
+      top: 18,
+      right: 12,
+      zIndex: 2,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.tabBarActiveBg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    tabletRailTogglePressed: {
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+  });

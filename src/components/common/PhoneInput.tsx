@@ -12,12 +12,12 @@ import {
 } from '../../vendor/countryPicker';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  colors,
   borderRadius,
   spacing,
   fontSize,
   shadows,
 } from '../../constants/colors';
+import { useAppTheme, useThemedStyles } from '../../theme';
 import {
   buildE164Phone,
   DEFAULT_PHONE_COUNTRY,
@@ -42,6 +42,8 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   helperText,
   disabled = false,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<CountryItem>(DEFAULT_PHONE_COUNTRY);
   const [nationalNumber, setNationalNumber] = useState('');
@@ -81,7 +83,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
         >
           <Text style={styles.flag}>{selectedCountry.flag}</Text>
           <Text style={styles.dialCode}>{selectedCountry.dial_code}</Text>
-          <Ionicons name="chevron-down" size={16} color={colors.gray[500]} />
+          <Ionicons name="chevron-down" size={16} color={theme.colors.icon} />
         </TouchableOpacity>
 
         <TextInput
@@ -90,8 +92,8 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
           onChangeText={handleNumberChange}
           editable={!disabled}
           keyboardType="phone-pad"
-          placeholder="Número de teléfono"
-          placeholderTextColor={colors.gray[400]}
+          placeholder="NÃºmero de telÃ©fono"
+          placeholderTextColor={theme.colors.textMuted}
         />
       </View>
 
@@ -103,7 +105,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
         show={isPickerVisible}
         lang="es"
         initialState={selectedCountry.dial_code}
-        inputPlaceholder="Busca un país"
+        inputPlaceholder="Busca un paÃ­s"
         searchMessage="No encontramos resultados"
         onBackdropPress={() => setIsPickerVisible(false)}
         pickerButtonOnPress={handleCountrySelect}
@@ -119,94 +121,95 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    fontSize: fontSize.sm,
-    fontWeight: '500',
-    color: colors.gray[700],
-    marginBottom: spacing.xs,
-  },
-  fieldContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.gray[50],
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-    overflow: 'hidden',
-  },
-  fieldContainerError: {
-    borderColor: colors.error,
-  },
-  countryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    borderRightWidth: 1,
-    borderRightColor: colors.gray[200],
-    backgroundColor: colors.white,
-  },
-  countryButtonDisabled: {
-    opacity: 0.6,
-  },
-  flag: {
-    fontSize: fontSize.lg,
-  },
-  dialCode: {
-    fontSize: fontSize.base,
-    fontWeight: '600',
-    color: colors.gray[700],
-  },
-  input: {
-    flex: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: fontSize.base,
-    color: colors.gray[900],
-  },
-  helperText: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-    marginTop: spacing.xs,
-  },
-  errorText: {
-    color: colors.error,
-  },
-  pickerModal: {
-    backgroundColor: colors.white,
-    height: '72%',
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
-    ...shadows.lg,
-  },
-  pickerSearchInput: {
-    backgroundColor: colors.gray[50],
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    color: colors.gray[900],
-    fontSize: fontSize.base,
-  },
-  pickerCountryButton: {
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
-  },
-  pickerDialCode: {
-    color: colors.gray[500],
-    fontSize: fontSize.base,
-  },
-  pickerCountryName: {
-    color: colors.gray[900],
-    fontSize: fontSize.base,
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    container: {
+      marginBottom: spacing.md,
+    },
+    label: {
+      fontSize: fontSize.sm,
+      fontWeight: '500',
+      color: theme.colors.textSecondary,
+      marginBottom: spacing.xs,
+    },
+    fieldContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.inputBackground,
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.inputBorder,
+      overflow: 'hidden',
+    },
+    fieldContainerError: {
+      borderColor: theme.colors.error,
+    },
+    countryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      borderRightWidth: 1,
+      borderRightColor: theme.colors.inputBorder,
+      backgroundColor: theme.colors.surface,
+    },
+    countryButtonDisabled: {
+      opacity: 0.6,
+    },
+    flag: {
+      fontSize: fontSize.lg,
+    },
+    dialCode: {
+      fontSize: fontSize.base,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    input: {
+      flex: 1,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      fontSize: fontSize.base,
+      color: theme.colors.textPrimary,
+    },
+    helperText: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      marginTop: spacing.xs,
+    },
+    errorText: {
+      color: theme.colors.error,
+    },
+    pickerModal: {
+      backgroundColor: theme.colors.surface,
+      height: '72%',
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.lg,
+      borderTopLeftRadius: borderRadius.xl,
+      borderTopRightRadius: borderRadius.xl,
+      ...shadows.lg,
+    },
+    pickerSearchInput: {
+      backgroundColor: theme.colors.inputBackground,
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.inputBorder,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.base,
+    },
+    pickerCountryButton: {
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    pickerDialCode: {
+      color: theme.colors.textMuted,
+      fontSize: fontSize.base,
+    },
+    pickerCountryName: {
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.base,
+    },
+  });

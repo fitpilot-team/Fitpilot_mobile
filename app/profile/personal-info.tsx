@@ -5,11 +5,11 @@ import { Button, Input, LoadingSpinner, PhoneInput } from '../../src/components/
 import { ProfileDetailScreen } from '../../src/components/profile/ProfileDetailScreen';
 import {
   borderRadius,
-  colors,
   fontSize,
   shadows,
   spacing,
 } from '../../src/constants/colors';
+import { useAppTheme, useThemedStyles } from '../../src/theme';
 import { updateCurrentUser } from '../../src/services/account';
 import { useAuthStore } from '../../src/store/authStore';
 
@@ -27,6 +27,8 @@ type FormErrors = {
 
 export default function PersonalInfoScreen() {
   const { user, refreshUser } = useAuthStore();
+  const styles = useThemedStyles(createStyles);
+  const { theme } = useAppTheme();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formState, setFormState] = useState<FormState>({
     name: '',
@@ -59,7 +61,7 @@ export default function PersonalInfoScreen() {
     }
 
     if (!formState.phoneNumber.trim()) {
-      nextErrors.phoneNumber = 'El teléfono es obligatorio.';
+      nextErrors.phoneNumber = 'El telefono es obligatorio.';
     }
 
     setErrors(nextErrors);
@@ -83,8 +85,8 @@ export default function PersonalInfoScreen() {
       await refreshUser();
 
       Alert.alert(
-        'Éxito',
-        'Tu información personal se actualizó correctamente.',
+        'Exito',
+        'Tu informacion personal se actualizo correctamente.',
         [{ text: 'OK', onPress: () => router.back() }],
       );
     } catch (error: any) {
@@ -97,8 +99,8 @@ export default function PersonalInfoScreen() {
   if (!user) {
     return (
       <ProfileDetailScreen
-        title="Información personal"
-        subtitle="Actualiza tus datos básicos de perfil."
+        title="Informacion personal"
+        subtitle="Actualiza tus datos basicos de perfil."
       >
         <LoadingSpinner text="Cargando perfil..." />
       </ProfileDetailScreen>
@@ -124,8 +126,8 @@ export default function PersonalInfoScreen() {
 
   return (
     <ProfileDetailScreen
-      title="Información personal"
-      subtitle="Actualiza tu nombre, apellidos y teléfono de contacto."
+      title="Informacion personal"
+      subtitle="Actualiza tu nombre, apellidos y telefono de contacto."
       footer={footer}
     >
       <View style={styles.card}>
@@ -154,19 +156,19 @@ export default function PersonalInfoScreen() {
         />
 
         <View style={styles.readOnlyField}>
-          <Text style={styles.readOnlyLabel}>Correo electrónico</Text>
+          <Text style={styles.readOnlyLabel}>Correo electronico</Text>
           <Text style={styles.readOnlyValue}>{user.email}</Text>
         </View>
 
         <PhoneInput
-          label="Teléfono"
+          label="Telefono"
           value={formState.phoneNumber}
           onChangeValue={(value) => {
             setFormState((current) => ({ ...current, phoneNumber: value }));
             setErrors((current) => ({ ...current, phoneNumber: undefined }));
           }}
           error={errors.phoneNumber}
-          helperText="Si cambias tu número, quedará pendiente de verificación."
+          helperText="Si cambias tu numero, quedara pendiente de verificacion."
         />
 
         <View style={styles.statusRow}>
@@ -176,7 +178,7 @@ export default function PersonalInfoScreen() {
               user.isPhoneVerified ? styles.statusBadgeSuccess : styles.statusBadgeMuted,
             ]}
           >
-            {user.isPhoneVerified ? 'Número verificado' : 'Número pendiente de verificación'}
+            {user.isPhoneVerified ? 'Numero verificado' : 'Numero pendiente de verificacion'}
           </Text>
         </View>
       </View>
@@ -184,56 +186,59 @@ export default function PersonalInfoScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    ...shadows.sm,
-  },
-  readOnlyField: {
-    marginBottom: spacing.md,
-  },
-  readOnlyLabel: {
-    fontSize: fontSize.sm,
-    fontWeight: '500',
-    color: colors.gray[700],
-    marginBottom: spacing.xs,
-  },
-  readOnlyValue: {
-    fontSize: fontSize.base,
-    color: colors.gray[900],
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.gray[50],
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-  },
-  statusRow: {
-    marginTop: spacing.xs,
-    flexDirection: 'row',
-  },
-  statusBadge: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.full,
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-  },
-  statusBadgeSuccess: {
-    backgroundColor: `${colors.success}15`,
-    color: colors.success,
-  },
-  statusBadgeMuted: {
-    backgroundColor: colors.gray[100],
-    color: colors.gray[600],
-  },
-  footerActions: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  footerButton: {
-    flex: 1,
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.lg,
+      padding: spacing.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.sm,
+    },
+    readOnlyField: {
+      marginBottom: spacing.md,
+    },
+    readOnlyLabel: {
+      fontSize: fontSize.sm,
+      fontWeight: '500',
+      color: theme.colors.textSecondary,
+      marginBottom: spacing.xs,
+    },
+    readOnlyValue: {
+      fontSize: fontSize.base,
+      color: theme.colors.textPrimary,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      backgroundColor: theme.colors.inputBackground,
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.inputBorder,
+    },
+    statusRow: {
+      marginTop: spacing.xs,
+      flexDirection: 'row',
+    },
+    statusBadge: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      borderRadius: borderRadius.full,
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+    },
+    statusBadgeSuccess: {
+      backgroundColor: `${theme.colors.success}18`,
+      color: theme.colors.success,
+    },
+    statusBadgeMuted: {
+      backgroundColor: theme.colors.surfaceAlt,
+      color: theme.colors.textSecondary,
+    },
+    footerActions: {
+      flexDirection: 'row',
+      gap: spacing.md,
+    },
+    footerButton: {
+      flex: 1,
+    },
+  });

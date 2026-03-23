@@ -21,6 +21,7 @@ import {
 import type { ToastConfig } from '../../src/components/workout';
 import { borderRadius, colors, fontSize, spacing } from '../../src/constants/colors';
 import { useWorkoutStore } from '../../src/store/workoutStore';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type { DayExercise, ExercisePhase, ExerciseProgress } from '../../src/types';
 import {
   clampEffortValue,
@@ -53,6 +54,8 @@ type ListItem =
 const PHASE_ORDER: Record<ExercisePhase, number> = { warmup: 0, main: 1, cooldown: 2 };
 
 export default function WorkoutSessionScreen() {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const { id: workoutLogId } = useLocalSearchParams<{ id: string }>();
   const {
     currentWorkout,
@@ -649,9 +652,12 @@ export default function WorkoutSessionScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <LinearGradient colors={[colors.white, colors.background]} style={styles.header}>
+      <LinearGradient
+        colors={theme.isDark ? [theme.colors.surface, theme.colors.background] : [colors.white, colors.background]}
+        style={styles.header}
+      >
         <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={colors.gray[900]} />
+          <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
@@ -770,7 +776,7 @@ export default function WorkoutSessionScreen() {
               <Ionicons
                 name={isWorkoutReadOnly ? 'create-outline' : 'arrow-forward'}
                 size={16}
-                color={isWorkoutReadOnly ? '#0f766e' : '#182f50'}
+                color={isWorkoutReadOnly ? '#0f766e' : theme.isDark ? theme.colors.primary : '#182f50'}
               />
             </View>
           </LinearGradient>
@@ -793,10 +799,10 @@ export default function WorkoutSessionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -814,11 +820,11 @@ const styles = StyleSheet.create({
   workoutTitle: {
     fontSize: fontSize['2xl'],
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   workoutFocus: {
     fontSize: fontSize.sm,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   dateBadge: {
     backgroundColor: colors.primary[500],
@@ -843,7 +849,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     padding: spacing.md,
     borderRadius: borderRadius.xl,
-    backgroundColor: colors.white,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -854,12 +862,12 @@ const styles = StyleSheet.create({
   readOnlyTitle: {
     fontSize: fontSize.base,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   readOnlySubtitle: {
     marginTop: spacing.xs,
     fontSize: fontSize.sm,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   readOnlyButton: {
     borderRadius: borderRadius.full,
@@ -885,7 +893,7 @@ const styles = StyleSheet.create({
     right: 0,
     padding: spacing.lg,
     paddingBottom: spacing.xl,
-    backgroundColor: colors.background,
+    backgroundColor: theme.colors.background,
   },
   finishButtonWrapper: {
     shadowColor: '#182f50',
@@ -913,7 +921,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.white,
+    backgroundColor: theme.isDark ? theme.colors.surface : colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },

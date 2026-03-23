@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { colors, spacing } from '../../constants/colors';
+import { spacing } from '../../constants/colors';
+import { useThemedStyles, type AppTheme } from '../../theme';
 
 interface ProgressStepperProps {
   totalSteps: number;
@@ -13,6 +14,8 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
   completedSteps,
   currentStep,
 }) => {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.container}>
       {Array.from({ length: totalSteps }).map((_, index) => {
@@ -35,26 +38,29 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  step: {
-    flex: 1,
-    height: 4,
-    backgroundColor: colors.gray[200],
-    borderRadius: 2,
-  },
-  stepWithGap: {
-    marginRight: spacing.xs,
-  },
-  stepCompleted: {
-    backgroundColor: colors.primary[500],
-  },
-  stepCurrent: {
-    backgroundColor: colors.primary[300],
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+    },
+    step: {
+      flex: 1,
+      height: 4,
+      backgroundColor: theme.colors.border,
+      borderRadius: 2,
+    },
+    stepWithGap: {
+      marginRight: spacing.xs,
+    },
+    stepCompleted: {
+      backgroundColor: theme.colors.primary,
+    },
+    stepCurrent: {
+      backgroundColor: theme.colors.primaryBorder,
+    },
+  });
+
+export default ProgressStepper;

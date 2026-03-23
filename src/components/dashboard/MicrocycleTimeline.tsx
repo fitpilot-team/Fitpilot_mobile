@@ -5,15 +5,15 @@ import {
   SharedWeeklyCalendar,
   type SharedWeeklyCalendarDay,
   type SharedWeeklyCalendarVariant,
+  sharedWeeklyCalendarHeroLayoutPreset,
 } from '../calendar/SharedWeeklyCalendar';
 import {
   borderRadius,
-  brandColors,
-  colors,
   fontSize,
   shadows,
   spacing,
 } from '../../constants/colors';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { MicrocycleDayProgress, MicrocycleMode, MicrocycleProgress } from '../../types';
 import {
   compareDateKeys,
@@ -143,6 +143,8 @@ export const MicrocycleTimeline: React.FC<MicrocycleTimelineProps> = ({
   onDayPress,
   contentWidth = 390,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const todayDateKey = getTodayDateKey();
   const days = microcycleProgress?.days ?? [];
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
@@ -232,11 +234,11 @@ export const MicrocycleTimeline: React.FC<MicrocycleTimelineProps> = ({
   if (!days.length) {
     return (
       <View style={styles.emptyState}>
-        <Ionicons name="calendar-outline" size={24} color={brandColors.navy} />
+        <Ionicons name="calendar-outline" size={24} color={theme.colors.primary} />
         <View style={styles.emptyCopy}>
           <Text style={styles.emptyTitle}>Sin microciclo activo</Text>
           <Text style={styles.emptySubtitle}>
-            Cuando exista una programación vigente, aparecerá aquí.
+            Cuando exista una programaciÃ³n vigente, aparecerÃ¡ aquÃ­.
           </Text>
         </View>
       </View>
@@ -272,77 +274,87 @@ export const MicrocycleTimeline: React.FC<MicrocycleTimelineProps> = ({
           days={calendarDays}
           heroSelectionMode="selected-only"
           contentWidth={contentWidth}
+          edgeInset={sharedWeeklyCalendarHeroLayoutPreset.edgeInset}
+          rowOffsetX={sharedWeeklyCalendarHeroLayoutPreset.rowOffsetX}
+          heroOffsetX={sharedWeeklyCalendarHeroLayoutPreset.heroOffsetX}
         />
       </View>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xs,
-    borderRadius: borderRadius.xl,
-    backgroundColor: colors.white,
-    ...shadows.sm,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  headerCopy: {
-    flex: 1,
-  },
-  title: {
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  subtitle: {
-    marginTop: 2,
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  modePill: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.full,
-    backgroundColor: `${brandColors.sky}18`,
-  },
-  modePillText: {
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    color: brandColors.navy,
-  },
-  emptyState: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    padding: spacing.lg,
-    borderRadius: borderRadius.xl,
-    backgroundColor: colors.white,
-    flexDirection: 'row',
-    gap: spacing.md,
-    ...shadows.sm,
-  },
-  emptyCopy: {
-    flex: 1,
-  },
-  emptyTitle: {
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: colors.gray[800],
-  },
-  emptySubtitle: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    lineHeight: 20,
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    container: {
+      marginHorizontal: spacing.lg,
+      marginTop: spacing.md,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.xs,
+      borderRadius: borderRadius.xl,
+      backgroundColor: theme.colors.card,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.sm,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+    },
+    headerCopy: {
+      flex: 1,
+    },
+    title: {
+      fontSize: fontSize.lg,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      marginTop: 2,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    modePill: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.primarySoft,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+    },
+    modePillText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.primary,
+    },
+    emptyState: {
+      marginHorizontal: spacing.lg,
+      marginTop: spacing.md,
+      padding: spacing.lg,
+      borderRadius: borderRadius.xl,
+      backgroundColor: theme.colors.card,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      flexDirection: 'row',
+      gap: spacing.md,
+      ...shadows.sm,
+    },
+    emptyCopy: {
+      flex: 1,
+    },
+    emptyTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    emptySubtitle: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      lineHeight: 20,
+    },
+  });
 
 export default MicrocycleTimeline;

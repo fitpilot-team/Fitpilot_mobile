@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuthStore } from '../../src/store/authStore';
 import * as ImagePicker from 'expo-image-picker';
-import { colors, spacing, fontSize, borderRadius, shadows, brandColors } from '../../src/constants/colors';
+import { useAuthStore } from '../../src/store/authStore';
+import { useAppTheme, useThemedStyles, getThemePreferenceLabel } from '../../src/theme';
+import { borderRadius, brandColors, fontSize, shadows, spacing } from '../../src/constants/colors';
 
 type MenuItemProps = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -16,28 +17,35 @@ type MenuItemProps = {
   danger?: boolean;
 };
 
-const MenuItem = ({ icon, label, value, onPress, showChevron = true, danger = false }: MenuItemProps) => (
-  <TouchableOpacity
-    style={styles.menuItem}
-    onPress={onPress}
-    activeOpacity={0.7}
-    disabled={!onPress}
-  >
-    <View style={[styles.menuIconContainer, danger && styles.menuIconContainerDanger]}>
-      <Ionicons name={icon} size={20} color={danger ? colors.error : colors.gray[600]} />
-    </View>
-    <View style={styles.menuContent}>
-      <Text style={[styles.menuLabel, danger && styles.menuLabelDanger]}>{label}</Text>
-      {value && <Text style={styles.menuValue}>{value}</Text>}
-    </View>
-    {showChevron && (
-      <Ionicons name="chevron-forward" size={20} color={colors.gray[400]} />
-    )}
-  </TouchableOpacity>
-);
+const MenuItem = ({ icon, label, value, onPress, showChevron = true, danger = false }: MenuItemProps) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
+  return (
+    <TouchableOpacity
+      style={styles.menuItem}
+      onPress={onPress}
+      activeOpacity={0.7}
+      disabled={!onPress}
+    >
+      <View style={[styles.menuIconContainer, danger ? styles.menuIconContainerDanger : null]}>
+        <Ionicons name={icon} size={20} color={danger ? theme.colors.error : theme.colors.icon} />
+      </View>
+      <View style={styles.menuContent}>
+        <Text style={[styles.menuLabel, danger ? styles.menuLabelDanger : null]}>{label}</Text>
+        {value ? <Text style={styles.menuValue}>{value}</Text> : null}
+      </View>
+      {showChevron ? (
+        <Ionicons name="chevron-forward" size={20} color={theme.colors.iconMuted} />
+      ) : null}
+    </TouchableOpacity>
+  );
+};
 
 export default function ProfileScreen() {
   const { user, logout, uploadAvatar, isLoading } = useAuthStore();
+  const { preference, theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
 
   const handlePickImage = async () => {
     try {
@@ -46,7 +54,7 @@ export default function ProfileScreen() {
       if (status !== 'granted') {
         Alert.alert(
           'Permiso denegado',
-          'Necesitamos permiso para acceder a tu galería para cambiar tu foto de perfil.'
+          'Necesitamos permiso para acceder a tu galeria para cambiar tu foto de perfil.',
         );
         return;
       }
@@ -61,39 +69,39 @@ export default function ProfileScreen() {
       if (!result.canceled && result.assets[0].uri) {
         try {
           await uploadAvatar(result.assets[0].uri);
-          Alert.alert('Éxito', 'Foto de perfil actualizada correctamente');
-        } catch (error) {
+          Alert.alert('Exito', 'Foto de perfil actualizada correctamente');
+        } catch {
           Alert.alert('Error', 'No se pudo actualizar la foto de perfil');
         }
       }
-    } catch (error) {
-      Alert.alert('Error', 'Ocurrió un error al seleccionar la imagen');
+    } catch {
+      Alert.alert('Error', 'Ocurrio un error al seleccionar la imagen');
     }
   };
 
   const handleLogout = () => {
     Alert.alert(
-      'Cerrar sesión',
-      '¿Estás seguro que deseas cerrar sesión?',
+      'Cerrar sesion',
+      'Estas seguro que deseas cerrar sesion?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Cerrar sesión',
+          text: 'Cerrar sesion',
           style: 'destructive',
           onPress: async () => {
             await logout();
             router.replace('/login');
           },
         },
-      ]
+      ],
     );
   };
 
   const handleNotImplemented = (feature: string) => {
     Alert.alert(
-      'Próximamente',
-      `La función "${feature}" estará disponible próximamente.`,
-      [{ text: 'OK' }]
+      'Proximamente',
+      `La funcion "${feature}" estara disponible proximamente.`,
+      [{ text: 'OK' }],
     );
   };
 
@@ -108,14 +116,13 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* User Card */}
         <View style={styles.userCard}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
               {user?.profilePictureUrl ? (
                 <Image source={{ uri: user.profilePictureUrl }} style={styles.avatarImage} />
               ) : (
-                <Ionicons name="person" size={40} color={colors.primary[500]} />
+                <Ionicons name="person" size={40} color={theme.colors.primary} />
               )}
             </View>
             <TouchableOpacity
@@ -124,7 +131,7 @@ export default function ProfileScreen() {
               onPress={handlePickImage}
               disabled={isLoading}
             >
-              <Ionicons name="camera" size={14} color={colors.white} />
+              <Ionicons name="camera" size={14} color="#ffffff" />
             </TouchableOpacity>
           </View>
           <Text style={styles.userName}>{user?.displayName || 'Usuario'}</Text>
@@ -134,17 +141,16 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Account Section */}
         <Text style={styles.sectionTitle}>Cuenta</Text>
         <View style={styles.menuSection}>
           <MenuItem
             icon="person-outline"
-            label="Información personal"
+            label="Informacion personal"
             onPress={() => router.push('/profile/personal-info')}
           />
           <MenuItem
             icon="lock-closed-outline"
-            label="Cambiar contraseña"
+            label="Cambiar contrasena"
             onPress={() => router.push('/profile/change-password')}
           />
           <MenuItem
@@ -154,30 +160,28 @@ export default function ProfileScreen() {
           />
         </View>
 
-        {/* Preferences Section */}
         <Text style={styles.sectionTitle}>Preferencias</Text>
         <View style={styles.menuSection}>
           <MenuItem
             icon="language-outline"
             label="Idioma"
-            value="Español"
+            value="Espanol"
             onPress={() => handleNotImplemented('Idioma')}
           />
           <MenuItem
             icon="moon-outline"
             label="Tema"
-            value="Claro"
-            onPress={() => handleNotImplemented('Tema')}
+            value={getThemePreferenceLabel(preference)}
+            onPress={() => router.push('/profile/theme-settings')}
           />
           <MenuItem
             icon="fitness-outline"
             label="Unidades de medida"
-            value="Métrico"
+            value="Metrico"
             onPress={() => handleNotImplemented('Unidades de medida')}
           />
         </View>
 
-        {/* Support Section */}
         <Text style={styles.sectionTitle}>Soporte</Text>
         <View style={styles.menuSection}>
           <MenuItem
@@ -193,179 +197,189 @@ export default function ProfileScreen() {
           <MenuItem
             icon="document-text-outline"
             label="Términos y condiciones"
-            onPress={() =>
-              router.push({
-                pathname: '/profile/legal/[document]',
-                params: { document: 'terms' },
-              })
-            }
+            onPress={() => {
+              const url = process.env.EXPO_PUBLIC_TERMS_URL;
+              if (url) {
+                Linking.openURL(url);
+              } else {
+                Alert.alert('No configurado', 'Enlace no disponible.');
+              }
+            }}
           />
           <MenuItem
             icon="shield-checkmark-outline"
             label="Política de privacidad"
-            onPress={() =>
-              router.push({
-                pathname: '/profile/legal/[document]',
-                params: { document: 'privacy' },
-              })
-            }
+            onPress={() => {
+              const url = process.env.EXPO_PUBLIC_PRIVACY_URL;
+              if (url) {
+                Linking.openURL(url);
+              } else {
+                Alert.alert('No configurado', 'Enlace no disponible.');
+              }
+            }}
           />
         </View>
 
-        {/* Logout */}
         <View style={styles.menuSection}>
           <MenuItem
             icon="log-out-outline"
-            label="Cerrar sesión"
+            label="Cerrar sesion"
             onPress={handleLogout}
             showChevron={false}
             danger
           />
         </View>
 
-        {/* App Version */}
         <Text style={styles.versionText}>FitPilot v1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  title: {
-    fontSize: fontSize['2xl'],
-    fontWeight: 'bold',
-    color: colors.gray[900],
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl + 60,
-  },
-  userCard: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.xl,
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-    ...shadows.md,
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: spacing.md,
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primary[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  editAvatarButton: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: brandColors.navy,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.white,
-  },
-  userName: {
-    fontSize: fontSize.xl,
-    fontWeight: 'bold',
-    color: colors.gray[900],
-  },
-  userEmail: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    marginTop: spacing.xs,
-  },
-  roleBadge: {
-    backgroundColor: colors.primary[50],
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.full,
-    marginTop: spacing.sm,
-  },
-  roleText: {
-    fontSize: fontSize.xs,
-    fontWeight: '500',
-    color: colors.primary[600],
-  },
-  sectionTitle: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[500],
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-  menuSection: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    overflow: 'hidden',
-    ...shadows.sm,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
-  },
-  menuIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: borderRadius.sm,
-    backgroundColor: colors.gray[50],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuIconContainerDanger: {
-    backgroundColor: `${colors.error}10`,
-  },
-  menuContent: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-  menuLabel: {
-    fontSize: fontSize.base,
-    color: colors.gray[800],
-  },
-  menuLabelDanger: {
-    color: colors.error,
-  },
-  menuValue: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-    marginTop: 2,
-  },
-  versionText: {
-    fontSize: fontSize.xs,
-    color: colors.gray[400],
-    textAlign: 'center',
-    marginTop: spacing.xl,
-    marginBottom: spacing.lg,
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+    },
+    title: {
+      fontSize: fontSize['2xl'],
+      fontWeight: 'bold',
+      color: theme.colors.textPrimary,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.xxl + 60,
+    },
+    userCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.lg,
+      padding: spacing.xl,
+      alignItems: 'center',
+      marginBottom: spacing.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.md,
+    },
+    avatarContainer: {
+      position: 'relative',
+      marginBottom: spacing.md,
+    },
+    avatar: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: theme.colors.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    avatarImage: {
+      width: '100%',
+      height: '100%',
+    },
+    editAvatarButton: {
+      position: 'absolute',
+      right: 0,
+      bottom: 0,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: brandColors.navy,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: theme.colors.surface,
+    },
+    userName: {
+      fontSize: fontSize.xl,
+      fontWeight: 'bold',
+      color: theme.colors.textPrimary,
+    },
+    userEmail: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      marginTop: spacing.xs,
+    },
+    roleBadge: {
+      backgroundColor: theme.colors.primarySoft,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      borderRadius: borderRadius.full,
+      marginTop: spacing.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+    },
+    roleText: {
+      fontSize: fontSize.xs,
+      fontWeight: '500',
+      color: theme.colors.primary,
+    },
+    sectionTitle: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: spacing.sm,
+    },
+    menuSection: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.lg,
+      marginBottom: spacing.lg,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.sm,
+    },
+    menuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.border,
+    },
+    menuIconContainer: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    menuIconContainerDanger: {
+      backgroundColor: `${theme.colors.error}18`,
+    },
+    menuContent: {
+      flex: 1,
+      marginLeft: spacing.md,
+    },
+    menuLabel: {
+      fontSize: fontSize.base,
+      color: theme.colors.textPrimary,
+      fontWeight: '500',
+    },
+    menuLabelDanger: {
+      color: theme.colors.error,
+    },
+    menuValue: {
+      marginTop: 2,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    versionText: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+      marginTop: spacing.sm,
+    },
+  });

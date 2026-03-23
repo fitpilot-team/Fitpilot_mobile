@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
-import { brandColors, colors, fontSize, spacing } from '../../constants/colors';
+import { brandColors, fontSize, spacing } from '../../constants/colors';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 
 const SVG_ORIGINAL_WIDTH = 100;
 const SVG_ORIGINAL_HEIGHT = 100;
@@ -35,10 +36,19 @@ export interface SharedWeeklyCalendarDay {
   onPress?: () => void;
 }
 
+export const sharedWeeklyCalendarHeroLayoutPreset = Object.freeze({
+  edgeInset: 8,
+  rowOffsetX: -4,
+  heroOffsetX: -6,
+});
+
 interface SharedWeeklyCalendarProps {
   days: SharedWeeklyCalendarDay[];
   heroSelectionMode?: SharedWeeklyCalendarHeroSelectionMode;
   contentWidth?: number;
+  edgeInset?: number;
+  rowOffsetX?: number;
+  heroOffsetX?: number;
 }
 
 interface CalendarMetrics {
@@ -52,6 +62,7 @@ interface CalendarMetrics {
   textContainerHeight: number;
   circleCenterX: number;
   circleCenterY: number;
+  baseHorizontalPadding: number;
   horizontalPadding: number;
 }
 
@@ -78,6 +89,8 @@ const DayShapeBackground: React.FC<{ width: number; height: number }> = ({ width
   );
 };
 
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
 const getShowSpecialShape = (
   day: SharedWeeklyCalendarDay,
   heroSelectionMode: SharedWeeklyCalendarHeroSelectionMode,
@@ -89,7 +102,10 @@ const getShowSpecialShape = (
   return day.isSelected || day.isToday;
 };
 
-const getStatusTextStyle = (day: SharedWeeklyCalendarDay) => {
+const getStatusTextStyle = (
+  day: SharedWeeklyCalendarDay,
+  styles: ReturnType<typeof createStyles>,
+) => {
   switch (day.variant) {
     case 'rest':
       return styles.statusRest;
@@ -106,7 +122,10 @@ const getStatusTextStyle = (day: SharedWeeklyCalendarDay) => {
   }
 };
 
-const getDayLabelStyle = (day: SharedWeeklyCalendarDay) => {
+const getDayLabelStyle = (
+  day: SharedWeeklyCalendarDay,
+  styles: ReturnType<typeof createStyles>,
+) => {
   if (day.variant === 'rest') {
     return [styles.dayLabel, styles.dayLabelRest];
   }
@@ -114,7 +133,10 @@ const getDayLabelStyle = (day: SharedWeeklyCalendarDay) => {
   return styles.dayLabel;
 };
 
-const getDateCircleStyle = (day: SharedWeeklyCalendarDay) => {
+const getDateCircleStyle = (
+  day: SharedWeeklyCalendarDay,
+  styles: ReturnType<typeof createStyles>,
+) => {
   switch (day.variant) {
     case 'rest':
       return [styles.dateCircle, styles.dateCircleRest];
@@ -122,6 +144,8 @@ const getDateCircleStyle = (day: SharedWeeklyCalendarDay) => {
       return [styles.dateCircle, styles.dateCircleMissed];
     case 'complete':
       return [styles.dateCircle, styles.dateCircleComplete];
+    case 'partial':
+      return [styles.dateCircle, styles.dateCirclePartial];
     case 'diet':
       return day.isToday ? [styles.dateCircle, styles.dateCircleDietToday] : styles.dateCircle;
     default:
@@ -129,7 +153,10 @@ const getDateCircleStyle = (day: SharedWeeklyCalendarDay) => {
   }
 };
 
-const getDateNumberStyle = (day: SharedWeeklyCalendarDay) => {
+const getDateNumberStyle = (
+  day: SharedWeeklyCalendarDay,
+  styles: ReturnType<typeof createStyles>,
+) => {
   switch (day.variant) {
     case 'rest':
       return [styles.dateNumber, styles.dateNumberRest];
@@ -137,6 +164,8 @@ const getDateNumberStyle = (day: SharedWeeklyCalendarDay) => {
       return [styles.dateNumber, styles.dateNumberMissed];
     case 'complete':
       return [styles.dateNumber, styles.dateNumberComplete];
+    case 'partial':
+      return [styles.dateNumber, styles.dateNumberPartial];
     case 'diet':
       return day.isToday ? [styles.dateNumber, styles.dateNumberDietToday] : styles.dateNumber;
     default:
@@ -148,7 +177,13 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
   days,
   heroSelectionMode = 'selected-or-today',
   contentWidth = 390,
+  edgeInset = 0,
+  rowOffsetX = 0,
+  heroOffsetX = 0,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   const metrics = useMemo<CalendarMetrics>(() => {
     const usableWidth = Math.max(320, contentWidth - spacing.lg * 2);
     const isCompact = usableWidth < 390;
@@ -160,7 +195,7 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
     const shapeSize = Math.max(dayColumnWidth + 54, Math.min(isTablet ? 144 : 136, dayColumnWidth + 92));
     const circleRadius = Math.max(16, Math.min(20, shapeSize * 0.125));
     const scale = shapeSize / SVG_ORIGINAL_WIDTH;
-    const horizontalPadding = Math.max(0, (shapeSize - dayColumnWidth) / 2);
+    const baseHorizontalPadding = Math.max(0, (shapeSize - dayColumnWidth) / 2);
 
     return {
       dayColumnWidth,
@@ -173,9 +208,16 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
       textContainerHeight: SVG_RECT_HEIGHT * scale,
       circleCenterX: SVG_CIRCLE_CX * scale,
       circleCenterY: SVG_CIRCLE_CY * scale,
-      horizontalPadding,
+      baseHorizontalPadding,
+      horizontalPadding: baseHorizontalPadding + edgeInset,
     };
-  }, [contentWidth]);
+  }, [contentWidth, edgeInset]);
+
+  const heroLeft = useMemo(() => {
+    const minLeft = -(metrics.baseHorizontalPadding + edgeInset);
+    const maxLeft = -(metrics.baseHorizontalPadding - edgeInset);
+    return clamp(-metrics.baseHorizontalPadding + heroOffsetX, minLeft, maxLeft);
+  }, [edgeInset, heroOffsetX, metrics.baseHorizontalPadding]);
 
   return (
     <View
@@ -186,7 +228,15 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
         },
       ]}
     >
-      <View style={[styles.daysRow, { gap: metrics.dayGap }]}>
+      <View
+        style={[
+          styles.daysRow,
+          {
+            gap: metrics.dayGap,
+            transform: [{ translateX: rowOffsetX }],
+          },
+        ]}
+      >
         {days.map((day) => {
           const showSpecialShape = getShowSpecialShape(day, heroSelectionMode);
           const statusText = day.statusText || ' ';
@@ -207,7 +257,7 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
                   style={[
                     styles.shapeContainer,
                     {
-                      left: (metrics.dayColumnWidth - metrics.shapeSize) / 2,
+                      left: heroLeft,
                       width: metrics.shapeSize,
                       height: metrics.shapeSize,
                     },
@@ -263,8 +313,8 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
                     { paddingTop: metrics.textContainerTop },
                   ]}
                 >
-                  <Text style={getStatusTextStyle(day)}>{statusText}</Text>
-                  <Text style={getDayLabelStyle(day)}>{day.dayLabel}</Text>
+                  <Text style={getStatusTextStyle(day, styles)}>{statusText}</Text>
+                  <Text style={getDayLabelStyle(day, styles)}>{day.dayLabel}</Text>
                   <View
                     style={[
                       styles.dateCircleContainer,
@@ -273,7 +323,7 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
                   >
                     <View
                       style={[
-                        getDateCircleStyle(day),
+                        getDateCircleStyle(day, styles),
                         {
                           width: metrics.circleRadius * 2,
                           height: metrics.circleRadius * 2,
@@ -281,7 +331,7 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
                         },
                       ]}
                     >
-                      <Text style={getDateNumberStyle(day)}>{day.dateNumber}</Text>
+                      <Text style={getDateNumberStyle(day, styles)}>{day.dateNumber}</Text>
                     </View>
                   </View>
                 </View>
@@ -294,157 +344,156 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    paddingVertical: 12,
-    overflow: 'visible',
-  },
-  daysRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'visible',
-  },
-  dayColumn: {
-    alignItems: 'center',
-    position: 'relative',
-    overflow: 'visible',
-  },
-  shapeContainer: {
-    position: 'absolute',
-    top: 0,
-    overflow: 'visible',
-  },
-  dayContent: {
-    flex: 1,
-    alignItems: 'center',
-    zIndex: 1,
-  },
-  dayContentRest: {
-    opacity: 0.9,
-  },
-  textContainerHighlighted: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  circleContainerHighlighted: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  status: {
-    fontSize: fontSize.xs,
-    color: colors.gray[400],
-    marginBottom: spacing.xs,
-    fontWeight: '500',
-  },
-  statusHighlighted: {
-    fontSize: fontSize.xs,
-    color: colors.white,
-    fontWeight: '600',
-  },
-  statusComplete: {
-    fontSize: fontSize.xs,
-    color: colors.primary[500],
-    marginBottom: spacing.xs,
-    fontWeight: '600',
-  },
-  statusPartial: {
-    fontSize: fontSize.xs,
-    color: colors.gray[600],
-    marginBottom: spacing.xs,
-    fontWeight: '500',
-  },
-  statusRest: {
-    fontSize: fontSize.sm,
-    color: '#10B981',
-    marginBottom: spacing.xs,
-    fontWeight: '500',
-  },
-  statusMissed: {
-    fontSize: fontSize.xs,
-    color: '#F59E0B',
-    marginBottom: spacing.xs,
-    fontWeight: '600',
-  },
-  statusDietToday: {
-    fontSize: fontSize.xs,
-    color: brandColors.sky,
-    marginBottom: spacing.xs,
-    fontWeight: '700',
-  },
-  dayLabel: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-    marginBottom: spacing.sm,
-    fontWeight: '500',
-  },
-  dayLabelHighlighted: {
-    fontSize: fontSize.xs,
-    color: colors.white,
-    fontWeight: '600',
-  },
-  dayLabelRest: {
-    color: '#10B981',
-  },
-  dateCircleContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  dateCircle: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  dateCircleHighlighted: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.white,
-  },
-  dateCircleRest: {
-    backgroundColor: '#D1FAE5',
-  },
-  dateCircleMissed: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-  },
-  dateCircleComplete: {
-    backgroundColor: '#DCFCE7',
-  },
-  dateCircleDietToday: {
-    backgroundColor: `${brandColors.sky}18`,
-    borderWidth: 1,
-    borderColor: `${brandColors.sky}60`,
-  },
-  dateNumber: {
-    fontSize: fontSize.base,
-    fontWeight: '500',
-    color: colors.gray[700],
-  },
-  dateNumberHighlighted: {
-    fontSize: fontSize.base,
-    color: colors.primary[600],
-    fontWeight: '700',
-  },
-  dateNumberRest: {
-    color: '#059669',
-  },
-  dateNumberMissed: {
-    color: '#D97706',
-  },
-  dateNumberComplete: {
-    color: '#16A34A',
-  },
-  dateNumberDietToday: {
-    color: brandColors.navy,
-    fontWeight: '700',
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    container: {
+      paddingVertical: 12,
+      overflow: 'visible',
+    },
+    daysRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      overflow: 'visible',
+    },
+    dayColumn: {
+      alignItems: 'center',
+      position: 'relative',
+      overflow: 'visible',
+    },
+    shapeContainer: {
+      position: 'absolute',
+      top: 0,
+      overflow: 'visible',
+    },
+    dayContent: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+    },
+    dayContentRest: {
+      opacity: theme.isDark ? 0.96 : 1,
+    },
+    textContainerHighlighted: {
+      position: 'absolute',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    statusHighlighted: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.surface,
+      lineHeight: 16,
+    },
+    dayLabelHighlighted: {
+      marginTop: 2,
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+      color: theme.colors.surface,
+      lineHeight: 16,
+    },
+    circleContainerHighlighted: {
+      position: 'absolute',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dateCircleHighlighted: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+    },
+    dateNumberHighlighted: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.primary,
+      lineHeight: 22,
+    },
+    status: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
+    },
+    statusRest: {
+      color: theme.colors.success,
+    },
+    statusMissed: {
+      color: theme.colors.warning,
+    },
+    statusComplete: {
+      color: theme.colors.primary,
+    },
+    statusPartial: {
+      color: theme.colors.primary,
+    },
+    statusDietToday: {
+      color: theme.colors.primary,
+    },
+    dayLabel: {
+      marginTop: 2,
+      fontSize: fontSize.xs,
+      fontWeight: '500',
+      color: theme.colors.textMuted,
+      lineHeight: 16,
+    },
+    dayLabelRest: {
+      color: theme.colors.success,
+    },
+    dateCircleContainer: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dateCircle: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    dateCircleRest: {
+      backgroundColor: theme.isDark ? 'rgba(52, 211, 153, 0.18)' : 'rgba(16, 185, 129, 0.14)',
+      borderColor: theme.isDark ? 'rgba(52, 211, 153, 0.32)' : 'rgba(16, 185, 129, 0.22)',
+    },
+    dateCircleMissed: {
+      backgroundColor: theme.isDark ? 'rgba(248, 113, 113, 0.16)' : 'rgba(239, 68, 68, 0.08)',
+      borderColor: theme.isDark ? 'rgba(248, 113, 113, 0.3)' : 'rgba(239, 68, 68, 0.16)',
+    },
+    dateCircleComplete: {
+      backgroundColor: theme.isDark ? 'rgba(52, 211, 153, 0.2)' : 'rgba(16, 185, 129, 0.12)',
+      borderColor: theme.isDark ? 'rgba(52, 211, 153, 0.34)' : 'rgba(16, 185, 129, 0.2)',
+    },
+    dateCirclePartial: {
+      backgroundColor: theme.isDark ? 'rgba(96, 165, 250, 0.18)' : 'rgba(59, 130, 246, 0.1)',
+      borderColor: theme.isDark ? 'rgba(96, 165, 250, 0.32)' : 'rgba(59, 130, 246, 0.18)',
+    },
+    dateCircleDietToday: {
+      backgroundColor: theme.colors.primarySoft,
+      borderColor: theme.colors.primaryBorder,
+    },
+    dateNumber: {
+      fontSize: fontSize.base,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+      lineHeight: 22,
+    },
+    dateNumberRest: {
+      color: theme.colors.success,
+    },
+    dateNumberMissed: {
+      color: theme.colors.error,
+    },
+    dateNumberComplete: {
+      color: theme.colors.success,
+    },
+    dateNumberPartial: {
+      color: theme.colors.primary,
+    },
+    dateNumberDietToday: {
+      color: theme.colors.primary,
+    },
+  });
 
 export default SharedWeeklyCalendar;

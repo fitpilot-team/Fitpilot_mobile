@@ -3,10 +3,11 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInUp } from 'react-native-reanimated';
-import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
+import { brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import { StatCardSkeleton } from '../common/Skeleton';
 import { nutritionClient } from '../../services/api';
 import type { ApiError, MetricSummary } from '../../types';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 
 interface MetricsSummaryProps {
   onPress?: () => void;
@@ -27,6 +28,8 @@ const metricConfig: Record<
 };
 
 export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress, contentWidth = 390 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [metrics, setMetrics] = useState<MetricSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +46,8 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress, content
         skipErrorLogging: true,
       });
       setMetrics(response);
-    } catch (error) {
-      const apiError = error as ApiError;
+    } catch (loadError) {
+      const apiError = loadError as ApiError;
 
       if (apiError.status !== 403 && apiError.status !== 404 && apiError.status !== 501) {
         setError('Error al cargar metricas');
@@ -79,12 +82,12 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress, content
     <Animated.View entering={FadeInUp.duration(500)} style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="analytics" size={20} color={brandColors.navy} />
+          <Ionicons name="analytics" size={20} color={theme.colors.primary} />
           <Text style={styles.title}>Mis metricas</Text>
         </View>
         <TouchableOpacity style={styles.seeAllButton} onPress={onPress}>
           <Text style={styles.seeAllText}>Ver todo</Text>
-          <Ionicons name="chevron-forward" size={16} color={brandColors.sky} />
+          <Ionicons name="chevron-forward" size={16} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -103,6 +106,8 @@ interface MetricCardProps {
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({ metric, index }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const config = metricConfig[metric.metric_type] || {
     icon: 'analytics' as React.ComponentProps<typeof Ionicons>['name'],
     label: metric.metric_type,
@@ -114,8 +119,8 @@ const MetricCard: React.FC<MetricCardProps> = ({ metric, index }) => {
   const isNegative = metric.change_from_previous && metric.change_from_previous < 0;
   const isWeightOrFat = ['weight', 'body_fat'].includes(metric.metric_type);
   const changeColor = isWeightOrFat
-    ? isNegative ? colors.success : isPositive ? colors.error : colors.gray[500]
-    : isPositive ? colors.success : isNegative ? colors.error : colors.gray[500];
+    ? isNegative ? theme.colors.success : isPositive ? theme.colors.error : theme.colors.textMuted
+    : isPositive ? theme.colors.success : isNegative ? theme.colors.error : theme.colors.textMuted;
 
   return (
     <Animated.View
@@ -156,97 +161,100 @@ const MetricCard: React.FC<MetricCardProps> = ({ metric, index }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    marginVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  title: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    color: colors.gray[900],
-  },
-  seeAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  seeAllText: {
-    fontSize: fontSize.sm,
-    color: brandColors.sky,
-    fontWeight: '500',
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  metricsGridTablet: {
-    justifyContent: 'space-between',
-  },
-  metricGap: {
-    width: spacing.sm,
-  },
-  metricCard: {
-    width: '48%',
-    maxWidth: 280,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    overflow: 'hidden',
-  },
-  metricIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: borderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  metricValueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.xs,
-  },
-  metricValue: {
-    fontSize: fontSize['2xl'],
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  metricUnit: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  metricLabel: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    marginTop: spacing.xs,
-  },
-  changeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: borderRadius.full,
-    alignSelf: 'flex-start',
-    marginTop: spacing.sm,
-  },
-  changeText: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    container: {
+      marginVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.md,
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    title: {
+      fontSize: fontSize.lg,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+    seeAllButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    seeAllText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.primary,
+      fontWeight: '500',
+    },
+    metricsGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    metricsGridTablet: {
+      justifyContent: 'space-between',
+    },
+    metricGap: {
+      width: spacing.sm,
+    },
+    metricCard: {
+      width: '48%',
+      maxWidth: 280,
+      backgroundColor: theme.colors.card,
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.md,
+      overflow: 'hidden',
+    },
+    metricIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: borderRadius.md,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: spacing.sm,
+    },
+    metricValueRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: spacing.xs,
+    },
+    metricValue: {
+      fontSize: fontSize['2xl'],
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    metricUnit: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    metricLabel: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      marginTop: spacing.xs,
+    },
+    changeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 2,
+      borderRadius: borderRadius.full,
+      alignSelf: 'flex-start',
+      marginTop: spacing.sm,
+    },
+    changeText: {
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+    },
+  });
 
 export default MetricsSummary;

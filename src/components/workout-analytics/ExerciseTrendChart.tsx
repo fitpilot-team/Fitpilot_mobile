@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Polyline, Rect } from 'react-native-svg';
-import { borderRadius, colors, fontSize, spacing } from '../../constants/colors';
+import { borderRadius, fontSize, spacing } from '../../constants/colors';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { ExerciseTrendPoint, RepRangeBucket } from '../../types';
 import { formatLocalDate } from '../../utils/date';
 import {
@@ -25,6 +26,9 @@ export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
   repRanges,
   contentWidth = 360,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   if (!series.length) {
     return (
       <View style={styles.emptyState}>
@@ -73,14 +77,14 @@ export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
               height={barHeight}
               rx={6}
               fill={getRepRangeColor(barColor)}
-              fillOpacity={0.24}
+              fillOpacity={theme.isDark ? 0.3 : 0.24}
             />
           );
         })}
 
         <Polyline
           fill="none"
-          stroke={colors.primary[500]}
+          stroke={theme.colors.primary}
           strokeWidth={3}
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -93,8 +97,8 @@ export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
             cx={point.x}
             cy={point.y}
             r={4.5}
-            fill={colors.white}
-            stroke={colors.primary[500]}
+            fill={theme.colors.surface}
+            stroke={theme.colors.primary}
             strokeWidth={2}
           />
         ))}
@@ -122,67 +126,72 @@ export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  legendRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  legendLineDot: {
-    backgroundColor: colors.primary[500],
-  },
-  legendBarDot: {
-    backgroundColor: colors.gray[300],
-  },
-  legendLabel: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-    fontWeight: '600',
-  },
-  bottomMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  metaColumn: {
-    flex: 1,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.gray[50],
-    padding: spacing.sm,
-  },
-  metaLabel: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  metaValue: {
-    marginTop: 4,
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  emptyState: {
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.gray[50],
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    textAlign: 'center',
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    legendRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      marginBottom: spacing.md,
+    },
+    legendItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    legendDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+    },
+    legendLineDot: {
+      backgroundColor: theme.colors.primary,
+    },
+    legendBarDot: {
+      backgroundColor: theme.colors.borderStrong,
+    },
+    legendLabel: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      fontWeight: '600',
+    },
+    bottomMeta: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+    metaColumn: {
+      flex: 1,
+      borderRadius: borderRadius.md,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.sm,
+    },
+    metaLabel: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    metaValue: {
+      marginTop: 4,
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    emptyState: {
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingVertical: spacing.lg,
+      paddingHorizontal: spacing.md,
+      alignItems: 'center',
+    },
+    emptyText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+  });
 
 export default ExerciseTrendChart;

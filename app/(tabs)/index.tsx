@@ -16,8 +16,10 @@ import {
   TodayWorkoutCard,
   UserHeader,
 } from '../../src/components/dashboard';
-import { colors, spacing } from '../../src/constants/colors';
+import { spacing } from '../../src/constants/colors';
 import { getMuscleVolume } from '../../src/services/api';
+import type { TipContext } from '../../src/utils/contextualTips';
+import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type {
   MicrocycleDayProgress,
   MicrocycleMode,
@@ -31,6 +33,8 @@ export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
   const isTablet = isTabletLayout(width, height);
   const contentWidth = getDashboardContentWidth(width);
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useAuthStore();
   const {
     activeMacrocycle,
@@ -179,6 +183,23 @@ export default function HomeScreen() {
     });
   }, [selectedDay]);
 
+  const tipContext = useMemo<TipContext>(() => ({
+    nextSession: nextPlannedSession,
+    microcycleProgress,
+    muscleVolume,
+    allCompleted,
+    workoutPosition,
+    workoutTotal,
+    currentHour: new Date().getHours(),
+  }), [
+    nextPlannedSession,
+    microcycleProgress,
+    muscleVolume,
+    allCompleted,
+    workoutPosition,
+    workoutTotal,
+  ]);
+
   if (!user) {
     router.replace('/login');
     return null;
@@ -200,7 +221,7 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={colors.primary[500]}
+            tintColor={theme.colors.primary}
           />
         }
         showsVerticalScrollIndicator={false}
@@ -255,7 +276,7 @@ export default function HomeScreen() {
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(420).duration(400)}>
-            <ScienceTips contentWidth={contentWidth} />
+            <ScienceTips context={tipContext} contentWidth={contentWidth} />
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(500).duration(400)}>
@@ -287,22 +308,24 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: spacing.xxl + 60,
-  },
-  scrollContentTablet: {
-    paddingBottom: spacing.xxl,
-  },
-  contentColumn: {
-    width: '100%',
-    alignSelf: 'center',
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scrollView: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scrollContent: {
+      paddingBottom: spacing.xxl + 60,
+    },
+    scrollContentTablet: {
+      paddingBottom: spacing.xxl,
+    },
+    contentColumn: {
+      width: '100%',
+      alignSelf: 'center',
+    },
+  });

@@ -18,11 +18,12 @@ import ExerciseSparkline from '../../src/components/workout-analytics/ExerciseSp
 import RepRangeEditorModal from '../../src/components/workout-analytics/RepRangeEditorModal';
 import RepRangeVolumeChart from '../../src/components/workout-analytics/RepRangeVolumeChart';
 import { DEFAULT_WORKOUT_ANALYTICS_RANGE } from '../../src/constants/workoutAnalytics';
-import { borderRadius, colors, fontSize, shadows, spacing } from '../../src/constants/colors';
+import { borderRadius, fontSize, shadows, spacing } from '../../src/constants/colors';
 import {
   getWorkoutAnalyticsDashboard,
   updateWorkoutAnalyticsPreferences,
 } from '../../src/services/workoutAnalytics';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
   ExerciseTrendSummary,
@@ -39,24 +40,27 @@ import {
   formatWeightKg,
 } from '../../src/utils/workoutAnalytics';
 
-const getHistoryStatusMeta = (status: RecentWorkoutHistoryItem['status']) => {
+const getHistoryStatusMeta = (
+  status: RecentWorkoutHistoryItem['status'],
+  theme: AppTheme,
+) => {
   switch (status) {
     case 'completed':
-      return { icon: 'checkmark-circle', color: colors.success, label: 'Completado' };
+      return { icon: 'checkmark-circle', color: theme.colors.success, label: 'Completado' };
     case 'in_progress':
-      return { icon: 'play-circle', color: colors.primary[500], label: 'En progreso' };
+      return { icon: 'play-circle', color: theme.colors.primary, label: 'En progreso' };
     case 'abandoned':
-      return { icon: 'warning', color: colors.warning, label: 'Abandonado' };
+      return { icon: 'warning', color: theme.colors.warning, label: 'Abandonado' };
     default:
-      return { icon: 'barbell', color: colors.gray[400], label: status };
+      return { icon: 'barbell', color: theme.colors.iconMuted, label: status };
   }
 };
 
-const getDeltaColor = (delta: number | null | undefined) => {
+const getDeltaColor = (delta: number | null | undefined, theme: AppTheme) => {
   if (delta == null || delta === 0) {
-    return colors.gray[500];
+    return theme.colors.textMuted;
   }
-  return delta > 0 ? colors.success : colors.warning;
+  return delta > 0 ? theme.colors.success : theme.colors.warning;
 };
 
 const SummaryCard = ({
@@ -67,15 +71,20 @@ const SummaryCard = ({
   value: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
-}) => (
-  <View style={styles.summaryCard}>
-    <View style={styles.summaryIcon}>
-      <Ionicons name={icon} size={18} color={colors.primary[600]} />
+}) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
+  return (
+    <View style={styles.summaryCard}>
+      <View style={styles.summaryIcon}>
+        <Ionicons name={icon} size={18} color={theme.colors.primary} />
+      </View>
+      <Text style={styles.summaryValue}>{value}</Text>
+      <Text style={styles.summaryLabel}>{label}</Text>
     </View>
-    <Text style={styles.summaryValue}>{value}</Text>
-    <Text style={styles.summaryLabel}>{label}</Text>
-  </View>
-);
+  );
+};
 
 const ExerciseCard = ({
   exercise,
@@ -83,38 +92,44 @@ const ExerciseCard = ({
 }: {
   exercise: ExerciseTrendSummary;
   onPress: () => void;
-}) => (
-  <TouchableOpacity style={styles.exerciseCard} activeOpacity={0.86} onPress={onPress}>
-    <View style={styles.exerciseCardTop}>
-      <View style={styles.exerciseCopy}>
-        <Text style={styles.exerciseName}>{exercise.exercise_name}</Text>
-        <Text style={styles.exerciseMeta}>
-          {exercise.last_performed_on
-            ? `Ultima sesion ${formatLocalDate(exercise.last_performed_on, {
-                day: 'numeric',
-                month: 'short',
-              })}`
-            : 'Sin fecha reciente'}
-        </Text>
-      </View>
-      <ExerciseSparkline values={exercise.sparkline_points} />
-    </View>
+}) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const deltaColor = getDeltaColor(exercise.best_weight_delta_kg, theme);
 
-    <View style={styles.exerciseStatsRow}>
-      <View style={styles.exerciseStatPill}>
-        <Text style={styles.exerciseStatLabel}>Mejor carga</Text>
-        <Text style={styles.exerciseStatValue}>
-          {formatWeightKg(exercise.latest_best_weight_kg ?? null)}
-        </Text>
+  return (
+    <TouchableOpacity style={styles.exerciseCard} activeOpacity={0.86} onPress={onPress}>
+      <View style={styles.exerciseCardTop}>
+        <View style={styles.exerciseCopy}>
+          <Text style={styles.exerciseName}>{exercise.exercise_name}</Text>
+          <Text style={styles.exerciseMeta}>
+            {exercise.last_performed_on
+              ? `Ultima sesion ${formatLocalDate(exercise.last_performed_on, {
+                  day: 'numeric',
+                  month: 'short',
+                })}`
+              : 'Sin fecha reciente'}
+          </Text>
+        </View>
+        <ExerciseSparkline values={exercise.sparkline_points} />
       </View>
-      <View style={[styles.deltaPill, { backgroundColor: `${getDeltaColor(exercise.best_weight_delta_kg)}14` }]}>
-        <Text style={[styles.deltaText, { color: getDeltaColor(exercise.best_weight_delta_kg) }]}>
-          {formatDeltaKg(exercise.best_weight_delta_kg)}
-        </Text>
+
+      <View style={styles.exerciseStatsRow}>
+        <View style={styles.exerciseStatPill}>
+          <Text style={styles.exerciseStatLabel}>Mejor carga</Text>
+          <Text style={styles.exerciseStatValue}>
+            {formatWeightKg(exercise.latest_best_weight_kg ?? null)}
+          </Text>
+        </View>
+        <View style={[styles.deltaPill, { backgroundColor: `${deltaColor}14` }]}>
+          <Text style={[styles.deltaText, { color: deltaColor }]}>
+            {formatDeltaKg(exercise.best_weight_delta_kg)}
+          </Text>
+        </View>
       </View>
-    </View>
-  </TouchableOpacity>
-);
+    </TouchableOpacity>
+  );
+};
 
 const HistoryCard = ({
   workout,
@@ -123,7 +138,9 @@ const HistoryCard = ({
   workout: RecentWorkoutHistoryItem;
   onPress: () => void;
 }) => {
-  const statusMeta = getHistoryStatusMeta(workout.status);
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const statusMeta = getHistoryStatusMeta(workout.status, theme);
 
   return (
     <TouchableOpacity style={styles.historyCard} activeOpacity={0.86} onPress={onPress}>
@@ -148,7 +165,7 @@ const HistoryCard = ({
 
       <View style={styles.historyStatsRow}>
         <View style={styles.historyStat}>
-          <Ionicons name="time-outline" size={14} color={colors.gray[400]} />
+          <Ionicons name="time-outline" size={14} color={theme.colors.iconMuted} />
           <Text style={styles.historyStatText}>
             {workout.duration_minutes != null
               ? formatDuration(Math.max(1, Math.round(workout.duration_minutes)))
@@ -156,11 +173,11 @@ const HistoryCard = ({
           </Text>
         </View>
         <View style={styles.historyStat}>
-          <Ionicons name="fitness-outline" size={14} color={colors.gray[400]} />
+          <Ionicons name="fitness-outline" size={14} color={theme.colors.iconMuted} />
           <Text style={styles.historyStatText}>{workout.exercises_count} ejercicios</Text>
         </View>
         <View style={styles.historyStat}>
-          <Ionicons name="trending-up-outline" size={14} color={colors.gray[400]} />
+          <Ionicons name="trending-up-outline" size={14} color={theme.colors.iconMuted} />
           <Text style={styles.historyStatText}>{formatVolumeKg(workout.volume_kg)}</Text>
         </View>
       </View>
@@ -170,6 +187,8 @@ const HistoryCard = ({
 
 export default function WorkoutsScreen() {
   const { width } = useWindowDimensions();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
   const [dashboard, setDashboard] = useState<WorkoutAnalyticsDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -268,7 +287,7 @@ export default function WorkoutsScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
-            tintColor={colors.primary[500]}
+            tintColor={theme.colors.primary}
           />
         }
       >
@@ -305,7 +324,7 @@ export default function WorkoutsScreen() {
               activeOpacity={0.85}
               onPress={() => setIsRangeEditorVisible(true)}
             >
-              <Ionicons name="options-outline" size={16} color={colors.primary[700]} />
+              <Ionicons name="options-outline" size={16} color={theme.colors.primary} />
               <Text style={styles.editButtonText}>Editar</Text>
             </TouchableOpacity>
           </View>
@@ -331,7 +350,7 @@ export default function WorkoutsScreen() {
 
           {!hasAnyHistory ? (
             <Card style={styles.emptyCard}>
-              <Ionicons name="analytics-outline" size={42} color={colors.gray[300]} />
+              <Ionicons name="analytics-outline" size={42} color={theme.colors.iconMuted} />
               <Text style={styles.emptyTitle}>Todavia no tienes historial</Text>
               <Text style={styles.emptyText}>
                 Cuando completes tus primeras sesiones veras aqui tus graficas y ejercicios.
@@ -342,7 +361,7 @@ export default function WorkoutsScreen() {
 
           {hasAnyHistory && !hasRangeData ? (
             <Card style={styles.emptyCard}>
-              <Ionicons name="filter-outline" size={40} color={colors.gray[300]} />
+              <Ionicons name="filter-outline" size={40} color={theme.colors.iconMuted} />
               <Text style={styles.emptyTitle}>Sin datos en este rango</Text>
               <Text style={styles.emptyText}>
                 Cambia la ventana temporal para recuperar el progreso de tus ejercicios.
@@ -385,7 +404,7 @@ export default function WorkoutsScreen() {
             ))
           ) : (
             <Card style={styles.emptyCard}>
-              <Ionicons name="barbell-outline" size={40} color={colors.gray[300]} />
+              <Ionicons name="barbell-outline" size={40} color={theme.colors.iconMuted} />
               <Text style={styles.emptyTitle}>Sin sesiones recientes</Text>
               <Text style={styles.emptyText}>
                 Tu historial aparecera aqui en cuanto registres entrenamientos.
@@ -406,247 +425,256 @@ export default function WorkoutsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  title: {
-    fontSize: fontSize['2xl'],
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  subtitle: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl + 80,
-    gap: spacing.lg,
-  },
-  errorCard: {
-    gap: spacing.sm,
-  },
-  errorTitle: {
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  errorText: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  summaryCard: {
-    width: '48%',
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.white,
-    padding: spacing.md,
-    ...shadows.sm,
-  },
-  summaryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primary[50],
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  summaryValue: {
-    marginTop: spacing.md,
-    fontSize: fontSize.xl,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  summaryLabel: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-    textTransform: 'uppercase',
-  },
-  chartCard: {
-    padding: spacing.lg,
-  },
-  sectionContainer: {
-    gap: spacing.md,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  sectionSubtitle: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.primary[50],
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  editButtonText: {
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-    color: colors.primary[700],
-  },
-  exerciseCard: {
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.white,
-    padding: spacing.md,
-    ...shadows.sm,
-  },
-  exerciseCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  exerciseCopy: {
-    flex: 1,
-  },
-  exerciseName: {
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  exerciseMeta: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  exerciseStatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.md,
-  },
-  exerciseStatPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.gray[50],
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  exerciseStatLabel: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  exerciseStatValue: {
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  deltaPill: {
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  deltaText: {
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-  },
-  historyCard: {
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.white,
-    padding: spacing.md,
-    ...shadows.sm,
-  },
-  historyTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  historyTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    flex: 1,
-  },
-  historyIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyCopy: {
-    flex: 1,
-  },
-  historyName: {
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  historyDate: {
-    marginTop: 2,
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-    textTransform: 'capitalize',
-  },
-  historyStatus: {
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  historyStatsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    marginTop: spacing.md,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-  },
-  historyStat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  historyStatText: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  emptyCard: {
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.xl,
-  },
-  emptyTitle: {
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: colors.gray[900],
-    textAlign: 'center',
-  },
-  emptyText: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    textAlign: 'center',
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+      backgroundColor: theme.colors.background,
+    },
+    title: {
+      fontSize: fontSize['2xl'],
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    scrollView: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scrollContent: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.xxl + 80,
+      gap: spacing.lg,
+    },
+    errorCard: {
+      gap: spacing.sm,
+    },
+    errorTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    errorText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    summaryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    summaryCard: {
+      width: '48%',
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.md,
+      ...shadows.sm,
+    },
+    summaryIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.colors.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    summaryValue: {
+      marginTop: spacing.md,
+      fontSize: fontSize.xl,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    summaryLabel: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+    },
+    chartCard: {
+      padding: spacing.lg,
+    },
+    sectionContainer: {
+      gap: spacing.md,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: spacing.md,
+    },
+    sectionTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    sectionSubtitle: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    editButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.primarySoft,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    editButtonText: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.primary,
+    },
+    exerciseCard: {
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.md,
+      ...shadows.sm,
+    },
+    exerciseCardTop: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+    exerciseCopy: {
+      flex: 1,
+    },
+    exerciseName: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    exerciseMeta: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    exerciseStatsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: spacing.md,
+      marginTop: spacing.md,
+    },
+    exerciseStatPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.surfaceAlt,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    exerciseStatLabel: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    exerciseStatValue: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    deltaPill: {
+      borderRadius: borderRadius.full,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    deltaText: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+    },
+    historyCard: {
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.md,
+      ...shadows.sm,
+    },
+    historyTopRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    historyTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      flex: 1,
+    },
+    historyIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: borderRadius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    historyCopy: {
+      flex: 1,
+    },
+    historyName: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    historyDate: {
+      marginTop: 2,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      textTransform: 'capitalize',
+    },
+    historyStatus: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+    },
+    historyStatsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.md,
+      marginTop: spacing.md,
+      paddingTop: spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+    historyStat: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    historyStatText: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    emptyCard: {
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingVertical: spacing.xl,
+    },
+    emptyTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+      textAlign: 'center',
+    },
+    emptyText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+  });

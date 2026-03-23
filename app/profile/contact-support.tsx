@@ -11,11 +11,11 @@ import {
 } from '../../src/constants/support';
 import {
   borderRadius,
-  colors,
   fontSize,
   shadows,
   spacing,
 } from '../../src/constants/colors';
+import { useAppTheme, useThemedStyles } from '../../src/theme';
 
 const openExternalUrl = async (url: string, fallbackTitle: string, fallbackMessage: string) => {
   try {
@@ -33,6 +33,9 @@ const openExternalUrl = async (url: string, fallbackTitle: string, fallbackMessa
 };
 
 export default function ContactSupportScreen() {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   const handleEmailPress = async () => {
     await openExternalUrl(
       buildSupportMailtoUrl(),
@@ -56,7 +59,7 @@ export default function ContactSupportScreen() {
     >
       <View style={styles.summaryCard}>
         <View style={styles.summaryIcon}>
-          <Ionicons name="chatbubbles-outline" size={24} color={colors.primary[600]} />
+          <Ionicons name="chatbubbles-outline" size={24} color={theme.colors.primary} />
         </View>
         <View style={styles.summaryContent}>
           <Text style={styles.summaryTitle}>Estamos listos para ayudarte</Text>
@@ -70,7 +73,7 @@ export default function ContactSupportScreen() {
       <View style={styles.channelCard}>
         <View style={styles.channelHeader}>
           <View style={styles.channelIcon}>
-            <Ionicons name="mail-outline" size={20} color={colors.primary[600]} />
+            <Ionicons name="mail-outline" size={20} color={theme.colors.primary} />
           </View>
           <View style={styles.channelContent}>
             <Text style={styles.channelTitle}>Correo</Text>
@@ -90,7 +93,7 @@ export default function ContactSupportScreen() {
       <View style={styles.channelCard}>
         <View style={styles.channelHeader}>
           <View style={styles.channelIcon}>
-            <Ionicons name="logo-whatsapp" size={20} color={colors.primary[600]} />
+            <Ionicons name="logo-whatsapp" size={20} color={theme.colors.primary} />
           </View>
           <View style={styles.channelContent}>
             <Text style={styles.channelTitle}>WhatsApp</Text>
@@ -111,78 +114,83 @@ export default function ContactSupportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  summaryCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    ...shadows.sm,
-  },
-  summaryIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary[50],
-  },
-  summaryContent: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-  summaryTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  summaryDescription: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    lineHeight: 20,
-    color: colors.gray[600],
-  },
-  channelCard: {
-    marginTop: spacing.lg,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    ...shadows.sm,
-  },
-  channelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  channelIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary[50],
-  },
-  channelContent: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-  channelTitle: {
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: colors.gray[800],
-  },
-  channelValue: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  channelDescription: {
-    marginTop: spacing.md,
-    fontSize: fontSize.sm,
-    lineHeight: 20,
-    color: colors.gray[600],
-  },
-  channelButton: {
-    marginTop: spacing.lg,
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    summaryCard: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.lg,
+      padding: spacing.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.sm,
+    },
+    summaryIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primarySoft,
+    },
+    summaryContent: {
+      flex: 1,
+      marginLeft: spacing.md,
+    },
+    summaryTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    summaryDescription: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
+    },
+    channelCard: {
+      marginTop: spacing.lg,
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.lg,
+      padding: spacing.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.sm,
+    },
+    channelHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    channelIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primarySoft,
+    },
+    channelContent: {
+      flex: 1,
+      marginLeft: spacing.md,
+    },
+    channelTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    channelValue: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    channelDescription: {
+      marginTop: spacing.md,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
+    },
+    channelButton: {
+      marginTop: spacing.lg,
+    },
+  });

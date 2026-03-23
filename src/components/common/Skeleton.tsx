@@ -8,7 +8,8 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { colors, borderRadius, spacing } from '../../constants/colors';
+import { borderRadius, spacing } from '../../constants/colors';
+import { useAppTheme, useThemedStyles } from '../../theme';
 
 interface SkeletonProps {
   width?: number | `${number}%`;
@@ -27,6 +28,8 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   style,
 }) => {
   const translateX = useSharedValue(-SCREEN_WIDTH);
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
 
   useEffect(() => {
     translateX.value = withRepeat(
@@ -35,9 +38,9 @@ export const Skeleton: React.FC<SkeletonProps> = ({
         easing: Easing.linear,
       }),
       -1,
-      false
+      false,
     );
-  }, []);
+  }, [translateX]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -56,7 +59,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
       ]}
     >
       <AnimatedLinearGradient
-        colors={['transparent', 'rgba(255,255,255,0.4)', 'transparent']}
+        colors={['transparent', theme.colors.skeletonHighlight, 'transparent']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={[styles.shimmer, animatedStyle]}
@@ -65,91 +68,114 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   );
 };
 
-// Preset: Skeleton para tarjeta de entrenamiento
+const SkeletonContainer: React.FC<{
+  children: React.ReactNode;
+  variant: 'workout' | 'chart' | 'stat' | 'listItem';
+}> = ({ children, variant }) => {
+  const styles = useThemedStyles(createStyles);
+  return <View style={styles[variant]}>{children}</View>;
+};
+
+const SkeletonChartLabels: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const styles = useThemedStyles(createStyles);
+  return <View style={styles.chartLabels}>{children}</View>;
+};
+
+const SkeletonListItemContent: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const styles = useThemedStyles(createStyles);
+  return <View style={styles.listItemContent}>{children}</View>;
+};
+
 export const WorkoutCardSkeleton: React.FC = () => (
-  <View style={styles.workoutCard}>
+  <SkeletonContainer variant="workout">
     <Skeleton width="60%" height={24} />
     <Skeleton width="40%" height={16} style={{ marginTop: spacing.sm }} />
     <Skeleton width="100%" height={160} style={{ marginTop: spacing.md }} borderRadius={borderRadius.lg} />
-  </View>
+  </SkeletonContainer>
 );
 
-// Preset: Skeleton para ActivityChart
 export const ChartSkeleton: React.FC = () => (
-  <View style={styles.chartContainer}>
+  <SkeletonContainer variant="chart">
     <Skeleton width={120} height={24} />
     <Skeleton width="100%" height={100} style={{ marginTop: spacing.md }} borderRadius={borderRadius.lg} />
-    <View style={styles.chartLabels}>
+    <SkeletonChartLabels>
       {[1, 2, 3, 4, 5, 6, 7].map((i) => (
         <Skeleton key={i} width={30} height={14} />
       ))}
-    </View>
-  </View>
+    </SkeletonChartLabels>
+  </SkeletonContainer>
 );
 
-// Preset: Skeleton para QuickStats
 export const StatCardSkeleton: React.FC = () => (
-  <View style={styles.statCard}>
+  <SkeletonContainer variant="stat">
     <Skeleton width={24} height={24} borderRadius={borderRadius.full} />
     <Skeleton width={40} height={28} style={{ marginTop: spacing.sm }} />
     <Skeleton width={60} height={14} style={{ marginTop: spacing.xs }} />
-  </View>
+  </SkeletonContainer>
 );
 
-// Preset: Skeleton para lista de items
 export const ListItemSkeleton: React.FC = () => (
-  <View style={styles.listItem}>
+  <SkeletonContainer variant="listItem">
     <Skeleton width={40} height={40} borderRadius={borderRadius.full} />
-    <View style={styles.listItemContent}>
+    <SkeletonListItemContent>
       <Skeleton width="70%" height={16} />
       <Skeleton width="50%" height={14} style={{ marginTop: spacing.xs }} />
-    </View>
-  </View>
+    </SkeletonListItemContent>
+  </SkeletonContainer>
 );
 
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.gray[200],
-    overflow: 'hidden',
-  },
-  shimmer: {
-    ...StyleSheet.absoluteFillObject,
-    width: '50%',
-  },
-  workoutCard: {
-    padding: spacing.lg,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.xl,
-  },
-  chartContainer: {
-    padding: spacing.lg,
-    backgroundColor: colors.gray[100],
-    borderRadius: borderRadius.xl,
-  },
-  chartLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: spacing.md,
-  },
-  statCard: {
-    flex: 1,
-    padding: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.lg,
-    marginBottom: spacing.sm,
-  },
-  listItemContent: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    container: {
+      backgroundColor: theme.colors.skeletonBase,
+      overflow: 'hidden',
+    },
+    shimmer: {
+      ...StyleSheet.absoluteFillObject,
+      width: '50%',
+    },
+    workout: {
+      padding: spacing.lg,
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    chart: {
+      padding: spacing.lg,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderRadius: borderRadius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    chartLabels: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: spacing.md,
+    },
+    stat: {
+      flex: 1,
+      padding: spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.lg,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    listItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: borderRadius.lg,
+      marginBottom: spacing.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    listItemContent: {
+      flex: 1,
+      marginLeft: spacing.md,
+    },
+  });
 
 export default Skeleton;
