@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +6,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../src/store/authStore';
 import { useAppTheme, useThemedStyles, getThemePreferenceLabel } from '../../src/theme';
+import {
+  MEASUREMENT_PREFERENCE_LABELS,
+  type MeasurementPreference,
+  useMeasurementPreferenceStore,
+} from '../../src/store/measurementPreferenceStore';
 import { borderRadius, brandColors, fontSize, shadows, spacing } from '../../src/constants/colors';
 
 type MenuItemProps = {
@@ -46,6 +51,13 @@ export default function ProfileScreen() {
   const { user, logout, uploadAvatar, isLoading } = useAuthStore();
   const { preference, theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
+  const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
+  const setMeasurementPreference = useMeasurementPreferenceStore((state) => state.setPreference);
+
+  useEffect(() => {
+    void initializeMeasurementPreference();
+  }, [initializeMeasurementPreference]);
 
   const handlePickImage = async () => {
     try {
@@ -102,6 +114,38 @@ export default function ProfileScreen() {
       'Proximamente',
       `La funcion "${feature}" estara disponible proximamente.`,
       [{ text: 'OK' }],
+    );
+  };
+
+  const handleMeasurementPreferenceSelect = async (
+    nextPreference: MeasurementPreference,
+  ) => {
+    try {
+      await setMeasurementPreference(nextPreference);
+    } catch {
+      Alert.alert('Error', 'No se pudo guardar tu preferencia de unidades.');
+    }
+  };
+
+  const handleMeasurementPreferencePress = () => {
+    Alert.alert(
+      'Unidades de medida',
+      'Selecciona el sistema que quieres usar para mostrar tus medidas.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Estados Unidos (USA)',
+          onPress: () => {
+            void handleMeasurementPreferenceSelect('us');
+          },
+        },
+        {
+          text: 'Mexico',
+          onPress: () => {
+            void handleMeasurementPreferenceSelect('mx');
+          },
+        },
+      ],
     );
   };
 
@@ -177,8 +221,8 @@ export default function ProfileScreen() {
           <MenuItem
             icon="fitness-outline"
             label="Unidades de medida"
-            value="Metrico"
-            onPress={() => handleNotImplemented('Unidades de medida')}
+            value={MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
+            onPress={handleMeasurementPreferencePress}
           />
         </View>
 
