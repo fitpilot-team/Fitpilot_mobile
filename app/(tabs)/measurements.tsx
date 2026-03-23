@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Button, Card, LoadingSpinner } from '../../src/components/common';
+import { Button, Card, FloatingButton, LoadingSpinner } from '../../src/components/common';
 import {
   MeasurementDetailModal,
   MeasurementFormModal,
@@ -314,13 +314,6 @@ export default function MeasurementsScreen() {
             Unidades: {MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.headerAction}
-          onPress={() => setIsFormVisible(true)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="add-outline" size={22} color="#ffffff" />
-        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -689,6 +682,12 @@ export default function MeasurementsScreen() {
         ) : null}
       </ScrollView>
 
+      <FloatingButton
+        accessibilityLabel="Registrar nueva medicion"
+        icon={<Ionicons name="add-outline" size={28} color="#ffffff" />}
+        onPress={() => setIsFormVisible(true)}
+      />
+
       <MeasurementDetailModal
         visible={isDetailVisible}
         detail={selectedMeasurementDetail}
@@ -714,13 +713,10 @@ const createStyles = (theme: AppTheme) =>
     },
     header: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
       paddingBottom: spacing.sm,
       backgroundColor: theme.colors.background,
-      gap: spacing.md,
     },
     headerCopy: {
       flex: 1,
@@ -740,22 +736,13 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.xs,
       color: theme.colors.iconMuted,
     },
-    headerAction: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.primary,
-      ...shadows.md,
-    },
     scrollView: {
       flex: 1,
       backgroundColor: theme.colors.background,
     },
     scrollContent: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: spacing.xxl + 60,
+      paddingBottom: spacing.xxl + 92,
     },
     errorCard: {
       marginBottom: spacing.md,
