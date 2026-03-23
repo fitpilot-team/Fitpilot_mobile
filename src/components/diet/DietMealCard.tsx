@@ -1,5 +1,5 @@
-import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -119,47 +119,65 @@ const SectionHeader: React.FC<{
 const RecipeCard: React.FC<{
   recipe: ClientDietRecipeCard;
   onPress: () => void;
-}> = ({ recipe, onPress }) => (
-  <Pressable style={styles.recipeCard} onPress={onPress}>
-    {recipe.imageUrl ? (
-      <Image source={{ uri: recipe.imageUrl }} style={styles.recipeImage} resizeMode="cover" />
-    ) : (
-      <LinearGradient
-        colors={['#E8EFF7', '#D8E7F4', '#C5DCF0']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.recipePlaceholder}
-      >
-        <Ionicons name="restaurant-outline" size={28} color={brandColors.navy} />
-      </LinearGradient>
-    )}
+}> = ({ recipe, onPress }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
 
-    <View style={styles.recipeContent}>
-      <View style={styles.recipeTopRow}>
-        <View style={styles.recipeBadge}>
-          <Text style={styles.recipeBadgeText}>Receta</Text>
+  return (
+    <Pressable style={styles.recipeCard} onPress={onPress}>
+      {recipe.imageUrl ? (
+        <Image source={{ uri: recipe.imageUrl }} style={styles.recipeImage} resizeMode="cover" />
+      ) : (
+        <LinearGradient
+          colors={['#E8EFF7', '#D8E7F4', '#C5DCF0']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.recipePlaceholder}
+        >
+          <Ionicons name="restaurant-outline" size={28} color={brandColors.navy} />
+        </LinearGradient>
+      )}
+
+      <View style={styles.recipeContent}>
+        <View style={styles.recipeTopRow}>
+          <View style={styles.recipeBadge}>
+            <Text style={styles.recipeBadgeText}>Receta</Text>
+          </View>
+          <Text style={styles.recipeCount}>
+            {recipe.ingredientCount} ingrediente{recipe.ingredientCount === 1 ? '' : 's'}
+          </Text>
         </View>
-        <Text style={styles.recipeCount}>
-          {recipe.ingredientCount} ingrediente{recipe.ingredientCount === 1 ? '' : 's'}
+
+        <Text style={styles.recipeTitle}>{recipe.title}</Text>
+        <Text style={styles.recipeSubtitle}>
+          Ingredientes y porciones de esta preparación dentro de tu plan.
         </Text>
-      </View>
 
-      <Text style={styles.recipeTitle}>{recipe.title}</Text>
-      <Text style={styles.recipeSubtitle}>
-        Ingredientes y porciones de esta preparación dentro de tu plan.
-      </Text>
+        <TouchableOpacity
+          style={styles.recipeToggle}
+          onPress={() => setIsExpanded(!isExpanded)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.recipeToggleText}>
+            {isExpanded ? 'Ocultar ingredientes' : 'Ver ingredientes'}
+          </Text>
+          <Ionicons
+            name={isExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={18}
+            color={brandColors.navy}
+          />
+        </TouchableOpacity>
 
-      <View style={styles.recipeToggle}>
-        <Text style={styles.recipeToggleText}>Abrir receta</Text>
-        <Ionicons
-          name="chevron-forward-outline"
-          size={18}
-          color={brandColors.navy}
-        />
+        {isExpanded && recipe.ingredients.length > 0 && (
+          <View style={styles.expandedIngredients}>
+            {recipe.ingredients.map((ingredient) => (
+              <IngredientRow key={ingredient.id} ingredient={ingredient} accent="recipe" />
+            ))}
+          </View>
+        )}
       </View>
-    </View>
-  </Pressable>
-);
+    </Pressable>
+  );
+};
 
 export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
   const caloriesLabel = formatCalories(meal.totalCalories);
@@ -370,6 +388,10 @@ const styles = StyleSheet.create({
     color: brandColors.navy,
     fontSize: fontSize.sm,
     fontWeight: '700',
+  },
+  expandedIngredients: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
   },
   foodRow: {
     flexDirection: 'row',

@@ -11,6 +11,8 @@ const TABLET_EXPANDED_WIDTH = 164;
 const TABLET_COLLAPSED_WIDTH = 84;
 const TABLET_TOP_PADDING = 72;
 const TABLET_BOTTOM_PADDING = 18;
+const PHONE_TAB_BAR_HEIGHT = 60;
+const PHONE_TAB_BAR_VERTICAL_PADDING = 8;
 const IPHONE_TAB_BAR_HORIZONTAL_PADDING = 12;
 const IPHONE_TAB_BAR_TOP_PADDING = 4;
 const IPHONE_TAB_BAR_BOTTOM_OFFSET = 8;
@@ -90,6 +92,7 @@ const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
 
 export default function TabLayout() {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isTablet = isTabletLayout(width, height);
   const isHoverEnabled = Platform.OS === 'web';
   const isIPhone = Platform.OS === 'ios';
@@ -99,6 +102,16 @@ export default function TabLayout() {
   const isRailExpanded = useMemo(
     () => (isHoverEnabled ? isRailPinnedExpanded || isRailHovered : isRailPinnedExpanded),
     [isHoverEnabled, isRailHovered, isRailPinnedExpanded]
+  );
+  const androidPhoneTabBarStyle = useMemo(
+    () => [
+      styles.phoneTabBar,
+      {
+        height: PHONE_TAB_BAR_HEIGHT + insets.bottom,
+        paddingBottom: PHONE_TAB_BAR_VERTICAL_PADDING + insets.bottom,
+      },
+    ],
+    [insets.bottom]
   );
 
   useEffect(() => {
@@ -141,7 +154,7 @@ export default function TabLayout() {
             ]
           : isIPhone
             ? styles.iphonePhoneTabBar
-            : styles.phoneTabBar,
+            : androidPhoneTabBarStyle,
         tabBarItemStyle: isTablet
           ? [
               styles.tabletTabBarItem,
@@ -230,18 +243,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderTopColor: colors.gray[200],
     borderTopWidth: 1,
-    paddingTop: 8,
-    paddingBottom: 8,
-    height: 60,
+    paddingTop: PHONE_TAB_BAR_VERTICAL_PADDING,
+    paddingBottom: PHONE_TAB_BAR_VERTICAL_PADDING,
+    height: PHONE_TAB_BAR_HEIGHT,
   },
   iphonePhoneTabBar: {
     backgroundColor: 'transparent',
     borderTopWidth: 0,
     borderWidth: 0,
     borderRadius: 0,
-    height: 60,
-    paddingTop: 8,
-    paddingBottom: 8,
+    height: PHONE_TAB_BAR_HEIGHT,
+    paddingTop: PHONE_TAB_BAR_VERTICAL_PADDING,
+    paddingBottom: PHONE_TAB_BAR_VERTICAL_PADDING,
     shadowOpacity: 0,
     shadowRadius: 0,
     elevation: 0,
