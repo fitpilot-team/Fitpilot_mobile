@@ -5,6 +5,9 @@ type PublicExtra = {
   trainingApiUrl?: string;
   termsUrl?: string;
   privacyUrl?: string;
+  eas?: {
+    projectId?: string;
+  };
 };
 
 const resolveRequiredUrl = (
@@ -52,6 +55,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     process.env.EXPO_PUBLIC_PRIVACY_URL,
     extra.privacyUrl,
   );
+  const easProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() || undefined;
   const isProd = appEnv === 'production';
 
   return {
@@ -102,6 +106,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       termsUrl,
       privacyUrl,
       appEnv,
+      ...(easProjectId
+        ? {
+            eas: {
+              ...extra.eas,
+              projectId: easProjectId,
+            },
+          }
+        : {}),
     },
   };
 };

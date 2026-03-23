@@ -16,6 +16,12 @@ export const nutritionTheme = {
   accentBorder: '#BBF7D0',
 };
 
+export const dietTheme = {
+  label: '#2B7A46',
+  activeDayBackground: '#EAF7EE',
+  activeDayBorder: '#C7E3D0',
+};
+
 export const colors = {
   primary: {
     50: '#eff6ff',

@@ -20,7 +20,15 @@ import {
   DietMenuSelectorModal,
   DietWeekCalendar,
 } from '../../src/components/diet';
-import { borderRadius, brandColors, colors, fontSize, spacing, nutritionTheme } from '../../src/constants/colors';
+import {
+  borderRadius,
+  brandColors,
+  colors,
+  dietTheme,
+  fontSize,
+  spacing,
+  nutritionTheme,
+} from '../../src/constants/colors';
 import { useAuthStore } from '../../src/store/authStore';
 import {
   getClientDietCalendar,
@@ -28,7 +36,12 @@ import {
   getTodayDietDateKey,
 } from '../../src/services/diet';
 import { getDashboardContentWidth } from '../../src/utils/layout';
-import { formatLocalDate, getLocalWeekKey } from '../../src/utils/date';
+import {
+  addDaysToDateKey,
+  formatLocalDate,
+  getLocalWeekKey,
+  getStartOfLocalWeekDateKey,
+} from '../../src/utils/date';
 import type { ClientDietMenu, ClientDietWeekDay } from '../../src/types';
 
 const formatLongDate = (value: string) =>
@@ -37,6 +50,48 @@ const formatLongDate = (value: string) =>
     day: 'numeric',
     month: 'long',
   });
+
+type LoadDietMode = 'initial' | 'refresh' | 'week-change';
+
+interface LoadDietOptions {
+  mode?: LoadDietMode;
+  anchorDate?: string;
+  preferredSelectedDate?: string;
+}
+
+const resolveSelectedDietDate = (
+  days: ClientDietWeekDay[],
+  anchorDate: string,
+  preferredSelectedDate?: string,
+) => {
+  const today = getTodayDietDateKey();
+
+  if (preferredSelectedDate && days.some((day) => day.assignedDate === preferredSelectedDate)) {
+    return preferredSelectedDate;
+  }
+
+  if (
+    getLocalWeekKey(anchorDate) === getLocalWeekKey(today) &&
+    days.some((day) => day.assignedDate === today)
+  ) {
+    return today;
+  }
+
+  return days[0]?.assignedDate || anchorDate;
+};
+
+const formatWeekRangeLabel = (
+  days: ClientDietWeekDay[],
+  fallbackDate: string,
+) => {
+  const weekStart = days[0]?.assignedDate || getStartOfLocalWeekDateKey(fallbackDate) || fallbackDate;
+  const weekEnd = days[days.length - 1]?.assignedDate || addDaysToDateKey(weekStart, 6) || weekStart;
+
+  const startLabel = formatLocalDate(weekStart, { day: 'numeric', month: 'short' });
+  const endLabel = formatLocalDate(weekEnd, { day: 'numeric', month: 'short' });
+
+  return `${startLabel} - ${endLabel}`;
+};
 
 export default function DietScreen() {
   const { width } = useWindowDimensions();
@@ -51,24 +106,31 @@ export default function DietScreen() {
   const [isMenuSelectorVisible, setIsMenuSelectorVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isWeekChanging, setIsWeekChanging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [renderVersion, setRenderVersion] = useState(0);
 
   const loadDiet = useCallback(
-    async (mode: 'initial' | 'refresh' = 'initial') => {
+    async ({
+      mode = 'initial',
+      anchorDate = getTodayDietDateKey(),
+      preferredSelectedDate,
+    }: LoadDietOptions = {}) => {
       if (!user) {
         return;
       }
 
       if (mode === 'refresh') {
         setRefreshing(true);
+      } else if (mode === 'week-change') {
+        setIsWeekChanging(true);
       } else {
         setIsLoading(true);
       }
 
       try {
-        const days = await getClientDietCalendar(user.id);
-        const today = getTodayDietDateKey();
+        const days = await getClientDietCalendar(user.id, anchorDate);
+        const nextSelectedDate = resolveSelectedDietDate(days, anchorDate, preferredSelectedDate);
 
         setDietDays(days);
         setMenuPoolByDate({});
@@ -78,26 +140,22 @@ export default function DietScreen() {
         setError(null);
         setIsMenuSelectorVisible(false);
         setRenderVersion((currentValue) => currentValue + 1);
-        setSelectedDate((currentDate) => {
-          if (
-            getLocalWeekKey(currentDate) === getLocalWeekKey(today) &&
-            days.some((day) => day.assignedDate === currentDate)
-          ) {
-            return currentDate;
-          }
-
-          return days.find((day) => day.assignedDate === today)?.assignedDate || today;
-        });
+        setSelectedDate(nextSelectedDate);
       } catch (loadError: any) {
-        setDietDays([]);
-        setMenuPoolByDate({});
-        setMenuPoolLoadingByDate({});
-        setMenuPoolErrorByDate({});
-        setPreviewMenuIdByDate({});
+        if (mode === 'initial') {
+          setDietDays([]);
+          setMenuPoolByDate({});
+          setMenuPoolLoadingByDate({});
+          setMenuPoolErrorByDate({});
+          setPreviewMenuIdByDate({});
+        }
+
         setError(loadError?.message || 'No se pudo cargar tu dieta.');
       } finally {
         if (mode === 'refresh') {
           setRefreshing(false);
+        } else if (mode === 'week-change') {
+          setIsWeekChanging(false);
         } else {
           setIsLoading(false);
         }
@@ -154,7 +212,10 @@ export default function DietScreen() {
   );
 
   useEffect(() => {
-    loadDiet();
+    loadDiet({
+      anchorDate: selectedDate,
+      preferredSelectedDate: selectedDate,
+    });
   }, [loadDiet]);
 
   const selectedDay = useMemo(
@@ -223,6 +284,18 @@ export default function DietScreen() {
     await loadMenuPool(selectedDate);
   }, [loadMenuPool, selectedDate]);
 
+  const handleWeekChange = useCallback(async (nextDate: string) => {
+    if (isWeekChanging) {
+      return;
+    }
+
+    await loadDiet({
+      mode: 'week-change',
+      anchorDate: nextDate,
+      preferredSelectedDate: nextDate,
+    });
+  }, [isWeekChanging, loadDiet]);
+
   const handleSelectPreviewMenu = useCallback((menu: ClientDietMenu) => {
     if (!selectedDay) {
       return;
@@ -243,6 +316,11 @@ export default function DietScreen() {
     setRenderVersion((currentValue) => currentValue + 1);
   }, [selectedDay]);
 
+  const weekRangeLabel = useMemo(
+    () => formatWeekRangeLabel(dietDays, selectedDate),
+    [dietDays, selectedDate],
+  );
+
   if (!user) {
     router.replace('/login');
     return null;
@@ -260,7 +338,11 @@ export default function DietScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => loadDiet('refresh')}
+            onRefresh={() => loadDiet({
+              mode: 'refresh',
+              anchorDate: selectedDate,
+              preferredSelectedDate: selectedDate,
+            })}
             tintColor={brandColors.navy}
           />
         }
@@ -276,11 +358,23 @@ export default function DietScreen() {
 
         {selectedDay ? (
           <>
-            <Animated.View entering={FadeInDown.delay(80).duration(350)}>
+            <Animated.View entering={FadeInDown.delay(80).duration(350)} style={styles.calendarSection}>
+              <View style={styles.calendarHeader}>
+                <View>
+                  <Text style={styles.calendarEyebrow}>Semana activa</Text>
+                  <Text style={styles.calendarTitle}>{weekRangeLabel}</Text>
+                </View>
+                {isWeekChanging ? (
+                  <View style={styles.calendarStatus}>
+                    <ActivityIndicator size="small" color={dietTheme.label} />
+                  </View>
+                ) : null}
+              </View>
               <DietWeekCalendar
                 days={dietDays}
                 selectedDate={selectedDate}
                 onSelect={setSelectedDate}
+                onWeekChange={handleWeekChange}
                 contentWidth={contentWidth}
               />
             </Animated.View>
@@ -386,7 +480,10 @@ export default function DietScreen() {
               </Text>
               <Button
                 title="Reintentar"
-                onPress={() => loadDiet()}
+                onPress={() => loadDiet({
+                  anchorDate: selectedDate,
+                  preferredSelectedDate: selectedDate,
+                })}
                 variant="primary"
                 style={styles.retryButton}
               />
@@ -427,7 +524,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   eyebrow: {
-    color: nutritionTheme.accentStrong,
+    color: dietTheme.label,
     fontSize: fontSize.xs,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -444,6 +541,35 @@ const styles = StyleSheet.create({
     color: colors.gray[500],
     fontSize: fontSize.base,
     lineHeight: 22,
+  },
+  calendarSection: {
+    marginTop: spacing.xs,
+  },
+  calendarHeader: {
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  calendarEyebrow: {
+    color: dietTheme.label,
+    fontSize: fontSize.xs,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  calendarTitle: {
+    marginTop: 2,
+    color: colors.gray[900],
+    fontSize: fontSize.lg,
+    fontWeight: '800',
+  },
+  calendarStatus: {
+    minHeight: 22,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   heroSection: {
     marginTop: spacing.md,

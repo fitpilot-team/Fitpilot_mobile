@@ -1,12 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import { Card } from '../common';
 import {
   borderRadius,
   brandColors,
   colors,
+  dietTheme,
   fontSize,
   spacing,
 } from '../../constants/colors';
@@ -116,10 +118,9 @@ const SectionHeader: React.FC<{
 
 const RecipeCard: React.FC<{
   recipe: ClientDietRecipeCard;
-  expanded: boolean;
-  onToggle: () => void;
-}> = ({ recipe, expanded, onToggle }) => (
-  <View style={styles.recipeCard}>
+  onPress: () => void;
+}> = ({ recipe, onPress }) => (
+  <Pressable style={styles.recipeCard} onPress={onPress}>
     {recipe.imageUrl ? (
       <Image source={{ uri: recipe.imageUrl }} style={styles.recipeImage} resizeMode="cover" />
     ) : (
@@ -148,51 +149,20 @@ const RecipeCard: React.FC<{
         Ingredientes y porciones de esta preparación dentro de tu plan.
       </Text>
 
-      <Pressable style={styles.recipeToggle} onPress={onToggle}>
-        <Text style={styles.recipeToggleText}>
-          {expanded ? 'Ocultar ingredientes' : 'Ver ingredientes'}
-        </Text>
+      <View style={styles.recipeToggle}>
+        <Text style={styles.recipeToggleText}>Abrir receta</Text>
         <Ionicons
-          name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+          name="chevron-forward-outline"
           size={18}
           color={brandColors.navy}
         />
-      </Pressable>
-
-      {expanded ? (
-        <View style={styles.recipeIngredients}>
-          {recipe.ingredients.map((ingredient) => (
-            <IngredientRow
-              key={ingredient.id}
-              ingredient={ingredient}
-              accent="recipe"
-            />
-          ))}
-        </View>
-      ) : null}
+      </View>
     </View>
-  </View>
+  </Pressable>
 );
 
 export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
   const caloriesLabel = formatCalories(meal.totalCalories);
-  const [expandedRecipeIds, setExpandedRecipeIds] = useState<Record<string, boolean>>({});
-
-  const recipeKey = useMemo(
-    () => meal.recipes.map((recipe) => recipe.id).join('|'),
-    [meal.recipes],
-  );
-
-  useEffect(() => {
-    setExpandedRecipeIds({});
-  }, [meal.id, meal.totalEntries, recipeKey]);
-
-  const toggleRecipe = (recipeId: string) => {
-    setExpandedRecipeIds((currentState) => ({
-      ...currentState,
-      [recipeId]: !currentState[recipeId],
-    }));
-  };
 
   return (
     <Card style={styles.card} padding="none">
@@ -219,8 +189,12 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
                 <RecipeCard
                   key={recipe.id}
                   recipe={recipe}
-                  expanded={Boolean(expandedRecipeIds[recipe.id])}
-                  onToggle={() => toggleRecipe(recipe.id)}
+                  onPress={() => router.push({
+                    pathname: '/recipes/[recipeId]',
+                    params: {
+                      recipeId: String(recipe.recipeId),
+                    },
+                  })}
                 />
               ))}
             </View>
@@ -249,6 +223,13 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
 const styles = StyleSheet.create({
   card: {
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: dietTheme.activeDayBorder,
+    shadowColor: dietTheme.label,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   header: {
     flexDirection: 'row',
@@ -389,10 +370,6 @@ const styles = StyleSheet.create({
     color: brandColors.navy,
     fontSize: fontSize.sm,
     fontWeight: '700',
-  },
-  recipeIngredients: {
-    marginTop: spacing.md,
-    gap: spacing.sm,
   },
   foodRow: {
     flexDirection: 'row',

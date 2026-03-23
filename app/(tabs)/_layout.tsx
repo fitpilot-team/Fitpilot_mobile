@@ -3,6 +3,7 @@ import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'reac
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, brandColors } from '../../src/constants/colors';
 import { isTabletLayout } from '../../src/utils/layout';
 
@@ -10,6 +11,9 @@ const TABLET_EXPANDED_WIDTH = 164;
 const TABLET_COLLAPSED_WIDTH = 84;
 const TABLET_TOP_PADDING = 72;
 const TABLET_BOTTOM_PADDING = 18;
+const IPHONE_TAB_BAR_HORIZONTAL_PADDING = 12;
+const IPHONE_TAB_BAR_TOP_PADDING = 4;
+const IPHONE_TAB_BAR_BOTTOM_OFFSET = 8;
 
 interface TabletTabBarProps {
   props: BottomTabBarProps;
@@ -17,6 +21,10 @@ interface TabletTabBarProps {
   onHoverIn?: () => void;
   onHoverOut?: () => void;
   onToggle: () => void;
+}
+
+interface PhoneTabBarProps {
+  props: BottomTabBarProps;
 }
 
 const TabletTabBar: React.FC<TabletTabBarProps> = ({
@@ -57,10 +65,34 @@ const TabletTabBar: React.FC<TabletTabBarProps> = ({
   </Pressable>
 );
 
+const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      style={[
+        styles.phoneTabBarWrapper,
+        {
+          paddingTop: IPHONE_TAB_BAR_TOP_PADDING,
+          paddingBottom: insets.bottom + IPHONE_TAB_BAR_BOTTOM_OFFSET,
+          paddingHorizontal: IPHONE_TAB_BAR_HORIZONTAL_PADDING,
+        },
+      ]}
+    >
+      <View style={styles.iphonePhoneTabBarShadow}>
+        <View style={styles.iphonePhoneTabBarClip}>
+          <BottomTabBar {...props} />
+        </View>
+      </View>
+    </View>
+  );
+};
+
 export default function TabLayout() {
   const { width, height } = useWindowDimensions();
   const isTablet = isTabletLayout(width, height);
   const isHoverEnabled = Platform.OS === 'web';
+  const isIPhone = Platform.OS === 'ios';
   const [isRailPinnedExpanded, setIsRailPinnedExpanded] = useState(false);
   const [isRailHovered, setIsRailHovered] = useState(false);
 
@@ -87,6 +119,8 @@ export default function TabLayout() {
             onHoverOut={isHoverEnabled ? () => setIsRailHovered(false) : undefined}
             onToggle={() => setIsRailPinnedExpanded((currentValue) => !currentValue)}
           />
+        ) : isIPhone ? (
+          <PhoneTabBar props={props} />
         ) : (
           <BottomTabBar {...props} />
         )
@@ -105,7 +139,9 @@ export default function TabLayout() {
               styles.tabletTabBar,
               isRailExpanded ? styles.tabletTabBarExpanded : styles.tabletTabBarCollapsed,
             ]
-          : styles.phoneTabBar,
+          : isIPhone
+            ? styles.iphonePhoneTabBar
+            : styles.phoneTabBar,
         tabBarItemStyle: isTablet
           ? [
               styles.tabletTabBarItem,
@@ -187,6 +223,9 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  phoneTabBarWrapper: {
+    backgroundColor: 'transparent',
+  },
   phoneTabBar: {
     backgroundColor: colors.white,
     borderTopColor: colors.gray[200],
@@ -194,6 +233,36 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
     height: 60,
+  },
+  iphonePhoneTabBar: {
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    borderWidth: 0,
+    borderRadius: 0,
+    height: 60,
+    paddingTop: 8,
+    paddingBottom: 8,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+  },
+  iphonePhoneTabBarShadow: {
+    backgroundColor: colors.white,
+    borderRadius: 30,
+    borderCurve: 'continuous',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  iphonePhoneTabBarClip: {
+    backgroundColor: colors.white,
+    borderColor: colors.gray[200],
+    borderWidth: 1,
+    borderRadius: 30,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
   },
   phoneTabBarItem: {
     borderRadius: 0,
