@@ -3,6 +3,7 @@ import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'reac
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import { isTabletLayout } from '../../src/utils/layout';
 
@@ -10,6 +11,11 @@ const TABLET_EXPANDED_WIDTH = 164;
 const TABLET_COLLAPSED_WIDTH = 84;
 const TABLET_TOP_PADDING = 72;
 const TABLET_BOTTOM_PADDING = 18;
+const PHONE_TAB_BAR_HEIGHT = 60;
+const PHONE_TAB_BAR_VERTICAL_PADDING = 8;
+const IPHONE_TAB_BAR_HORIZONTAL_PADDING = 12;
+const IPHONE_TAB_BAR_TOP_PADDING = 4;
+const IPHONE_TAB_BAR_BOTTOM_OFFSET = 8;
 
 interface TabletTabBarProps {
   props: BottomTabBarProps;
@@ -17,6 +23,10 @@ interface TabletTabBarProps {
   onHoverIn?: () => void;
   onHoverOut?: () => void;
   onToggle: () => void;
+}
+
+interface PhoneTabBarProps {
+  props: BottomTabBarProps;
 }
 
 const TabletTabBar: React.FC<TabletTabBarProps> = ({
@@ -62,10 +72,36 @@ const TabletTabBar: React.FC<TabletTabBarProps> = ({
   );
 };
 
+const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
+  const styles = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View
+      style={[
+        styles.phoneTabBarWrapper,
+        {
+          paddingTop: IPHONE_TAB_BAR_TOP_PADDING,
+          paddingBottom: insets.bottom + IPHONE_TAB_BAR_BOTTOM_OFFSET,
+          paddingHorizontal: IPHONE_TAB_BAR_HORIZONTAL_PADDING,
+        },
+      ]}
+    >
+      <View style={styles.iphonePhoneTabBarShadow}>
+        <View style={styles.iphonePhoneTabBarClip}>
+          <BottomTabBar {...props} />
+        </View>
+      </View>
+    </View>
+  );
+};
+
 export default function TabLayout() {
   const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isTablet = isTabletLayout(width, height);
   const isHoverEnabled = Platform.OS === 'web';
+  const isIPhone = Platform.OS === 'ios';
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const [isRailPinnedExpanded, setIsRailPinnedExpanded] = useState(false);
@@ -74,6 +110,16 @@ export default function TabLayout() {
   const isRailExpanded = useMemo(
     () => (isHoverEnabled ? isRailPinnedExpanded || isRailHovered : isRailPinnedExpanded),
     [isHoverEnabled, isRailHovered, isRailPinnedExpanded]
+  );
+  const androidPhoneTabBarStyle = useMemo(
+    () => [
+      styles.phoneTabBar,
+      {
+        height: PHONE_TAB_BAR_HEIGHT + insets.bottom,
+        paddingBottom: PHONE_TAB_BAR_VERTICAL_PADDING + insets.bottom,
+      },
+    ],
+    [insets.bottom, styles.phoneTabBar]
   );
 
   useEffect(() => {
@@ -94,6 +140,8 @@ export default function TabLayout() {
             onHoverOut={isHoverEnabled ? () => setIsRailHovered(false) : undefined}
             onToggle={() => setIsRailPinnedExpanded((currentValue) => !currentValue)}
           />
+        ) : isIPhone ? (
+          <PhoneTabBar props={props} />
         ) : (
           <BottomTabBar {...props} />
         )
@@ -114,7 +162,9 @@ export default function TabLayout() {
               styles.tabletTabBar,
               isRailExpanded ? styles.tabletTabBarExpanded : styles.tabletTabBarCollapsed,
             ]
-          : styles.phoneTabBar,
+          : isIPhone
+            ? styles.iphonePhoneTabBar
+            : androidPhoneTabBarStyle,
         tabBarItemStyle: isTablet
           ? [
               styles.tabletTabBarItem,
@@ -197,13 +247,44 @@ export default function TabLayout() {
 
 const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
   StyleSheet.create({
+    phoneTabBarWrapper: {
+      backgroundColor: 'transparent',
+    },
     phoneTabBar: {
       backgroundColor: theme.colors.tabBarBackground,
       borderTopColor: theme.colors.tabBarBorder,
       borderTopWidth: 1,
-      paddingTop: 8,
-      paddingBottom: 8,
-      height: 60,
+      paddingTop: PHONE_TAB_BAR_VERTICAL_PADDING,
+      paddingBottom: PHONE_TAB_BAR_VERTICAL_PADDING,
+      height: PHONE_TAB_BAR_HEIGHT,
+    },
+    iphonePhoneTabBar: {
+      backgroundColor: 'transparent',
+      borderTopWidth: 0,
+      borderWidth: 0,
+      borderRadius: 0,
+      height: PHONE_TAB_BAR_HEIGHT,
+      paddingTop: PHONE_TAB_BAR_VERTICAL_PADDING,
+      paddingBottom: PHONE_TAB_BAR_VERTICAL_PADDING,
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      elevation: 0,
+    },
+    iphonePhoneTabBarShadow: {
+      backgroundColor: theme.colors.tabBarBackground,
+      borderRadius: 30,
+      shadowColor: theme.isDark ? '#020617' : '#0f172a',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: theme.isDark ? 0.28 : 0.08,
+      shadowRadius: 18,
+      elevation: 10,
+    },
+    iphonePhoneTabBarClip: {
+      backgroundColor: theme.colors.tabBarBackground,
+      borderColor: theme.colors.tabBarBorder,
+      borderWidth: 1,
+      borderRadius: 30,
+      overflow: 'hidden',
     },
     phoneTabBarItem: {
       borderRadius: 0,

@@ -1,5 +1,6 @@
 export { Button } from './Button';
 export { Card } from './Card';
+export { FloatingButton } from './FloatingButton';
 export { Input } from './Input';
 export { PhoneInput } from './PhoneInput';
 export { LoadingSpinner } from './LoadingSpinner';

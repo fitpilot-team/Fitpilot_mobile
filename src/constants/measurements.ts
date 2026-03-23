@@ -308,6 +308,125 @@ export const PERIMETER_CARD_FIELDS = PERIMETER_SECTIONS.flatMap(
   (section) => section.fields,
 );
 
+const roundTo = (value: number, decimals: number) => {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+};
+
+const getBodyMassIndexValue = (measurement: MeasurementHistoryItem) => {
+  if (measurement.weight_kg === null || measurement.weight_kg === undefined) {
+    return null;
+  }
+
+  if (measurement.height_cm === null || measurement.height_cm === undefined) {
+    return null;
+  }
+
+  const weightKg = Number(measurement.weight_kg);
+  const heightCm = Number(measurement.height_cm);
+
+  if (!Number.isFinite(weightKg) || !Number.isFinite(heightCm) || heightCm <= 0) {
+    return null;
+  }
+
+  const heightM = heightCm / 100;
+  const bmiValue = weightKg / (heightM * heightM);
+
+  return Number.isFinite(bmiValue) ? roundTo(bmiValue, 2) : null;
+};
+
+export type MeasurementProgressMetricKey =
+  | (typeof SUMMARY_METRICS)[number]['key']
+  | 'bmi'
+  | (typeof PERIMETER_CARD_FIELDS)[number]['key'];
+
+interface MeasurementProgressMetricBase
+  extends MeasurementFieldConfig<MeasurementProgressMetricKey> {
+  progressTitle: string;
+  progressSubtitle: string;
+  decimals?: number;
+}
+
+type DirectMeasurementProgressMetricConfig = MeasurementProgressMetricBase & {
+  source: 'field';
+  fieldKey: MeasurementHistoryFieldKey;
+};
+
+type DerivedMeasurementProgressMetricConfig = MeasurementProgressMetricBase & {
+  source: 'derived';
+  getValue: (measurement: MeasurementHistoryItem) => number | null;
+};
+
+export type MeasurementProgressMetricConfig =
+  | DirectMeasurementProgressMetricConfig
+  | DerivedMeasurementProgressMetricConfig;
+
+export const DEFAULT_MEASUREMENT_PROGRESS_SUBTITLE =
+  'Tendencia real, filtros por rango y detalle de cada registro.';
+
+export const MEASUREMENT_PROGRESS_METRICS = [
+  {
+    key: 'weight_kg',
+    source: 'field',
+    fieldKey: 'weight_kg',
+    label: 'Peso',
+    unit: 'kg',
+    icon: 'scale-outline',
+    progressTitle: 'Progreso de peso',
+    progressSubtitle: DEFAULT_MEASUREMENT_PROGRESS_SUBTITLE,
+  },
+  {
+    key: 'body_fat_pct',
+    source: 'field',
+    fieldKey: 'body_fat_pct',
+    label: 'Grasa corporal',
+    unit: '%',
+    icon: 'body-outline',
+    progressTitle: 'Progreso de grasa corporal',
+    progressSubtitle: DEFAULT_MEASUREMENT_PROGRESS_SUBTITLE,
+  },
+  {
+    key: 'muscle_mass_kg',
+    source: 'field',
+    fieldKey: 'muscle_mass_kg',
+    label: 'Masa muscular',
+    unit: 'kg',
+    icon: 'barbell-outline',
+    progressTitle: 'Progreso de masa muscular',
+    progressSubtitle: DEFAULT_MEASUREMENT_PROGRESS_SUBTITLE,
+  },
+  {
+    key: 'bmi',
+    source: 'derived',
+    label: 'IMC',
+    unit: 'kg/m2',
+    icon: 'analytics-outline',
+    progressTitle: 'Progreso de IMC',
+    progressSubtitle: DEFAULT_MEASUREMENT_PROGRESS_SUBTITLE,
+    decimals: 2,
+    getValue: getBodyMassIndexValue,
+  },
+  ...PERIMETER_CARD_FIELDS.map((field) => ({
+    ...field,
+    source: 'field' as const,
+    fieldKey: field.key,
+    progressTitle: `Progreso de ${field.label.toLowerCase()}`,
+    progressSubtitle: DEFAULT_MEASUREMENT_PROGRESS_SUBTITLE,
+  })),
+] satisfies MeasurementProgressMetricConfig[];
+
+export const MEASUREMENT_PROGRESS_METRIC_MAP = Object.fromEntries(
+  MEASUREMENT_PROGRESS_METRICS.map((metric) => [metric.key, metric]),
+) as Record<MeasurementProgressMetricKey, MeasurementProgressMetricConfig>;
+
+export const getMeasurementProgressMetricConfig = (metricKey?: string | null) => {
+  if (!metricKey) {
+    return null;
+  }
+
+  return MEASUREMENT_PROGRESS_METRIC_MAP[metricKey as MeasurementProgressMetricKey] ?? null;
+};
+
 export const DETAIL_MEASUREMENT_SECTIONS: MeasurementFieldSection<MeasurementHistoryFieldKey>[] = [
   {
     title: 'Datos base',
