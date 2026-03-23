@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { router } from 'expo-router';
 import {
   Alert,
   RefreshControl,
@@ -22,6 +23,8 @@ import {
 } from '../../src/components/measurements';
 import {
   CALCULATION_METADATA,
+  getMeasurementProgressMetricConfig,
+  type MeasurementProgressMetricKey,
   PERIMETER_CARD_FIELDS,
   RECENT_CALCULATION_CODES,
   SUMMARY_METRICS,
@@ -211,6 +214,13 @@ export default function MeasurementsScreen() {
     });
   }, [isLoadingMore, loadMeasurements, measurements.length, pagination]);
 
+  const handleOpenMeasurementProgress = useCallback((metricKey: MeasurementProgressMetricKey) => {
+    router.push({
+      pathname: '/measurements/progress/[metric]',
+      params: { metric: metricKey },
+    });
+  }, []);
+
   const openMeasurementDetail = useCallback(async (measurementId: string) => {
     setSelectedMeasurementId(measurementId);
     setIsDetailVisible(true);
@@ -338,6 +348,7 @@ export default function MeasurementsScreen() {
           <>
             <View style={styles.mainStatsContainer}>
               {summaryMetrics.map((metric, index) => {
+                const progressConfig = getMeasurementProgressMetricConfig(metric.key);
                 const appearance = getChangeAppearance(
                   metric.change,
                   metric.emphasizeDecrease ?? false,
@@ -351,20 +362,26 @@ export default function MeasurementsScreen() {
                   ? null
                   : getDisplayMeasurement(Math.abs(metric.change), metric.unit, 2);
 
-                return (
-                  <View
-                    key={metric.key}
-                    style={[
-                      styles.summaryCard,
-                      index === 0 ? styles.summaryCardLarge : null,
-                    ]}
-                  >
-                    <View style={styles.summaryIcon}>
-                      <Ionicons
-                        name={metric.icon as keyof typeof Ionicons.glyphMap}
-                        size={20}
-                        color={colors.primary[500]}
-                      />
+                const summaryContent = (
+                  <>
+                    <View style={styles.summaryCardHeader}>
+                      <View style={styles.summaryIcon}>
+                        <Ionicons
+                          name={metric.icon as keyof typeof Ionicons.glyphMap}
+                          size={20}
+                          color={colors.primary[500]}
+                        />
+                      </View>
+                      {progressConfig ? (
+                        <View style={styles.summaryActionPill}>
+                          <Ionicons
+                            name="analytics-outline"
+                            size={12}
+                            color={colors.primary[600]}
+                          />
+                          <Text style={styles.summaryActionText}>Ver grafica</Text>
+                        </View>
+                      ) : null}
                     </View>
                     <Text style={styles.summaryLabel}>{metric.label}</Text>
                     <Text style={styles.summaryValue}>
@@ -392,6 +409,42 @@ export default function MeasurementsScreen() {
                     ) : (
                       <Text style={styles.noChangeText}>Sin comparativo previo</Text>
                     )}
+                    {progressConfig ? (
+                      <Text style={styles.summaryHelperText}>
+                        Toca para ver el progreso completo.
+                      </Text>
+                    ) : null}
+                  </>
+                );
+
+                if (progressConfig) {
+                  return (
+                    <TouchableOpacity
+                      key={metric.key}
+                      style={[
+                        styles.summaryCard,
+                        index === 0 ? styles.summaryCardLarge : null,
+                        styles.summaryCardInteractive,
+                      ]}
+                      activeOpacity={0.92}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Ver progreso de ${metric.label.toLowerCase()}`}
+                      onPress={() => handleOpenMeasurementProgress(progressConfig.key)}
+                    >
+                      {summaryContent}
+                    </TouchableOpacity>
+                  );
+                }
+
+                return (
+                  <View
+                    key={metric.key}
+                    style={[
+                      styles.summaryCard,
+                      index === 0 ? styles.summaryCardLarge : null,
+                    ]}
+                  >
+                    {summaryContent}
                   </View>
                 );
               })}
@@ -422,21 +475,55 @@ export default function MeasurementsScreen() {
                 </View>
                 <View style={styles.calculationGrid}>
                   {recentCalculations.map((calculation) => {
+                    const progressConfig = getMeasurementProgressMetricConfig(calculation.code);
                     const displayValue = getDisplayMeasurement(
                       calculation.value,
                       calculation.unit,
                       calculation.unit ? 2 : 3,
                     );
 
-                    return (
-                      <View key={calculation.code} style={styles.calculationChip}>
-                        <Text style={styles.calculationChipLabel}>{calculation.label}</Text>
+                    const calculationContent = (
+                      <>
+                        <View style={styles.calculationChipHeader}>
+                          <Text style={styles.calculationChipLabel}>{calculation.label}</Text>
+                          {progressConfig ? (
+                            <View style={styles.calculationActionPill}>
+                              <Ionicons
+                                name="analytics-outline"
+                                size={12}
+                                color={colors.primary[600]}
+                              />
+                              <Text style={styles.calculationActionText}>Ver grafica</Text>
+                            </View>
+                          ) : null}
+                        </View>
                         <Text style={styles.calculationChipValue}>
                           {displayValue.value}
                           {displayValue.unit ? (
                             <Text style={styles.calculationChipUnit}> {displayValue.unit}</Text>
                           ) : null}
                         </Text>
+                      </>
+                    );
+
+                    if (progressConfig) {
+                      return (
+                        <TouchableOpacity
+                          key={calculation.code}
+                          style={[styles.calculationChip, styles.calculationChipInteractive]}
+                          activeOpacity={0.9}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Ver progreso de ${calculation.label.toLowerCase()}`}
+                          onPress={() => handleOpenMeasurementProgress(progressConfig.key)}
+                        >
+                          {calculationContent}
+                        </TouchableOpacity>
+                      );
+                    }
+
+                    return (
+                      <View key={calculation.code} style={styles.calculationChip}>
+                        {calculationContent}
                       </View>
                     );
                   })}
@@ -459,15 +546,33 @@ export default function MeasurementsScreen() {
               </Text>
               <View style={styles.perimeterGrid}>
                 {perimeterCards.map((field) => {
+                  const progressConfig = getMeasurementProgressMetricConfig(field.key);
                   const displayValue = getDisplayMeasurement(field.value, field.unit, 1);
 
                   return (
-                    <View key={field.key} style={styles.perimeterCard}>
-                      <Ionicons
-                        name={(field.icon ?? 'body-outline') as keyof typeof Ionicons.glyphMap}
-                        size={18}
-                        color={colors.gray[400]}
-                      />
+                    <TouchableOpacity
+                      key={field.key}
+                      style={[styles.perimeterCard, styles.perimeterCardInteractive]}
+                      activeOpacity={0.9}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Ver progreso de ${field.label.toLowerCase()}`}
+                      onPress={() => progressConfig && handleOpenMeasurementProgress(progressConfig.key)}
+                    >
+                      <View style={styles.perimeterCardHeader}>
+                        <Ionicons
+                          name={(field.icon ?? 'body-outline') as keyof typeof Ionicons.glyphMap}
+                          size={18}
+                          color={colors.gray[400]}
+                        />
+                        <View style={styles.perimeterActionPill}>
+                          <Ionicons
+                            name="analytics-outline"
+                            size={12}
+                            color={colors.primary[600]}
+                          />
+                          <Text style={styles.perimeterActionText}>Ver grafica</Text>
+                        </View>
+                      </View>
                       <Text style={styles.perimeterLabel}>{field.label}</Text>
                       <Text style={styles.perimeterValue}>
                         {displayValue.value}
@@ -475,7 +580,7 @@ export default function MeasurementsScreen() {
                           <Text style={styles.perimeterUnit}> {displayValue.unit}</Text>
                         ) : null}
                       </Text>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
@@ -674,6 +779,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.primary[50],
   },
+  summaryCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  summaryCardInteractive: {
+    borderWidth: 1,
+    borderColor: colors.primary[100],
+  },
   summaryLabel: {
     marginTop: spacing.sm,
     fontSize: fontSize.sm,
@@ -708,6 +823,25 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     fontSize: fontSize.xs,
     color: colors.gray[400],
+  },
+  summaryActionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary[50],
+  },
+  summaryActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary[600],
+  },
+  summaryHelperText: {
+    marginTop: spacing.sm,
+    fontSize: fontSize.xs,
+    color: colors.gray[500],
   },
   lastUpdate: {
     marginTop: spacing.md,
@@ -760,6 +894,30 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     backgroundColor: colors.gray[50],
   },
+  calculationChipInteractive: {
+    borderWidth: 1,
+    borderColor: colors.primary[100],
+  },
+  calculationChipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  calculationActionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary[50],
+  },
+  calculationActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary[600],
+  },
   calculationChipLabel: {
     fontSize: fontSize.xs,
     color: colors.gray[500],
@@ -796,6 +954,30 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: borderRadius.md,
     backgroundColor: colors.gray[50],
+  },
+  perimeterCardInteractive: {
+    borderWidth: 1,
+    borderColor: colors.primary[100],
+  },
+  perimeterCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  perimeterActionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary[50],
+  },
+  perimeterActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary[600],
   },
   perimeterLabel: {
     marginTop: spacing.xs,

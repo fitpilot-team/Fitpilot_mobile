@@ -3,7 +3,7 @@
     "name": "FitPilot",
     "slug": "fitpilot-mobile",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "scheme": "fitpilot",
     "userInterfaceStyle": "light",
@@ -42,6 +42,12 @@
       "expo-secure-store",
       "expo-asset",
       "expo-font",
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT_UP"
+        }
+      ],
       [
         "expo-image-picker",
         {

@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, StyleSheet } from 'react-native';
+import { Platform, View, StyleSheet } from 'react-native';
 import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { useAuthStore } from '../src/store/authStore';
 import { LoadingSpinner } from '../src/components/common';
 import { colors } from '../src/constants/colors';
@@ -18,6 +19,10 @@ export default function RootLayout() {
 
   useEffect(() => {
     initialize();
+
+    if (Platform.OS !== 'web') {
+      void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    }
   }, []);
 
   if (!isInitialized) {
@@ -51,6 +56,8 @@ export default function RootLayout() {
         <Stack.Screen name="profile/help" />
         <Stack.Screen name="profile/contact-support" />
         <Stack.Screen name="profile/legal/[document]" />
+        <Stack.Screen name="measurements/weight-progress" />
+        <Stack.Screen name="measurements/progress/[metric]" />
 
         {/* Workout session as modal over tabs */}
         <Stack.Screen
