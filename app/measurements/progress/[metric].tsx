@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocalSearchParams } from 'expo-router';
-import { MeasurementProgressScreen } from '../../../src/components/measurements/MeasurementProgressScreen';
+import { MeasurementProgressScreen } from '../weight-progress';
 
 export default function MeasurementProgressRoute() {
   const params = useLocalSearchParams<{ metric?: string | string[] }>();
@@ -8,4 +8,3 @@ export default function MeasurementProgressRoute() {
 
   return <MeasurementProgressScreen metricKey={metricParam} />;
 }
-
