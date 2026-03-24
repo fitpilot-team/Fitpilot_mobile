@@ -31,9 +31,9 @@ const ABANDON_REASONS: AbandonReasonOption[] = [
   },
   {
     value: 'injury',
-    label: 'LesiÃ³n o dolor',
+    label: 'Lesión o dolor',
     icon: 'bandage-outline',
-    description: 'SentÃ­ molestia o riesgo de lesiÃ³n',
+    description: 'Sentí molestia o riesgo de lesión',
   },
   {
     value: 'fatigue',
@@ -43,19 +43,19 @@ const ABANDON_REASONS: AbandonReasonOption[] = [
   },
   {
     value: 'motivation',
-    label: 'Sin motivaciÃ³n',
+    label: 'Sin motivación',
     icon: 'sad-outline',
-    description: 'No me sentÃ­a con ganas hoy',
+    description: 'No me sentía con ganas hoy',
   },
   {
     value: 'schedule',
     label: 'Conflicto de agenda',
     icon: 'calendar-outline',
-    description: 'SurgiÃ³ algo importante',
+    description: 'Surgió algo importante',
   },
   {
     value: 'other',
-    label: 'Otra razÃ³n',
+    label: 'Otra razón',
     icon: 'ellipsis-horizontal-outline',
     description: 'Especificar en notas',
   },
@@ -117,7 +117,7 @@ export const AbandonModal: React.FC<AbandonModalProps> = ({
           </View>
 
           <ScrollView style={styles.reasonsList} showsVerticalScrollIndicator={false}>
-            <Text style={styles.sectionLabel}>Â¿Por quÃ© abandonas el entrenamiento?</Text>
+            <Text style={styles.sectionLabel}>¿Por qué abandonas el entrenamiento?</Text>
 
             {ABANDON_REASONS.map((reason) => {
               const isSelected = selectedReason === reason.value;
@@ -152,7 +152,7 @@ export const AbandonModal: React.FC<AbandonModalProps> = ({
               <Text style={styles.notesLabel}>Notas adicionales (opcional)</Text>
               <TextInput
                 style={styles.notesInput}
-                placeholder="Describe mÃ¡s detalles si lo deseas..."
+                placeholder="Describe más detalles si lo deseas..."
                 placeholderTextColor={theme.colors.textMuted}
                 multiline
                 numberOfLines={3}

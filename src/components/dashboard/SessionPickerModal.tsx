@@ -78,7 +78,7 @@ export const SessionPickerModal: React.FC<SessionPickerModalProps> = ({
                 <View style={styles.sessionMeta}>
                   <View style={styles.sessionIndexPill}>
                     <Text style={styles.sessionIndexText}>
-                      SesiÃ³n {session.session_index}
+                      Sesión {session.session_index}
                     </Text>
                   </View>
                   {session.session_label ? (

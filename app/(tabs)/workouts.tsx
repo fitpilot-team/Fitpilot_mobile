@@ -23,7 +23,7 @@ import {
   getWorkoutAnalyticsDashboard,
   updateWorkoutAnalyticsPreferences,
 } from '../../src/services/workoutAnalytics';
-import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
@@ -102,7 +102,9 @@ const ExerciseCard = ({
     <TouchableOpacity style={styles.exerciseCard} activeOpacity={0.86} onPress={onPress}>
       <View style={styles.exerciseCardTop}>
         <View style={styles.exerciseCopy}>
-          <Text style={styles.exerciseName}>{exercise.exercise_name}</Text>
+          <Text style={styles.exerciseName} numberOfLines={2}>
+            {exercise.exercise_name}
+          </Text>
           <Text style={styles.exerciseMeta}>
             {exercise.last_performed_on
               ? `Ultima sesion ${formatLocalDate(exercise.last_performed_on, {
@@ -112,7 +114,7 @@ const ExerciseCard = ({
               : 'Sin fecha reciente'}
           </Text>
         </View>
-        <ExerciseSparkline values={exercise.sparkline_points} />
+        <ExerciseSparkline values={exercise.sparkline_points} width={132} />
       </View>
 
       <View style={styles.exerciseStatsRow}>
@@ -191,6 +193,7 @@ export default function WorkoutsScreen() {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
+  const contentInsetBottom = useBottomTabBarContentInset();
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
   const [dashboard, setDashboard] = useState<WorkoutAnalyticsDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -283,7 +286,7 @@ export default function WorkoutsScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
         onScroll={tabBarScroll.onScroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -457,7 +460,7 @@ const createStyles = (theme: AppTheme) =>
     },
     scrollContent: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: spacing.xxl + 80,
+      paddingBottom: spacing.xxl,
       gap: spacing.lg,
     },
     errorCard: {
@@ -553,15 +556,18 @@ const createStyles = (theme: AppTheme) =>
     exerciseCardTop: {
       flexDirection: 'row',
       justifyContent: 'space-between',
+      alignItems: 'flex-start',
       gap: spacing.md,
     },
     exerciseCopy: {
       flex: 1,
+      minWidth: 0,
     },
     exerciseName: {
       fontSize: fontSize.base,
       fontWeight: '700',
       color: theme.colors.textPrimary,
+      lineHeight: 28,
     },
     exerciseMeta: {
       marginTop: spacing.xs,

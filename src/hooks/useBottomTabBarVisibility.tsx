@@ -14,6 +14,8 @@ const SCROLL_VISIBILITY_DELTA = 12;
 
 type BottomTabBarVisibilityContextValue = {
   isVisible: boolean;
+  contentInsetBottom: number;
+  setContentInsetBottom: (value: number) => void;
   hideTabBar: () => void;
   showTabBar: () => void;
 };
@@ -27,6 +29,7 @@ export function BottomTabBarVisibilityProvider({
   children: React.ReactNode;
 }) {
   const [isVisible, setIsVisible] = useState(true);
+  const [contentInsetBottom, setContentInsetBottomState] = useState(0);
 
   const showTabBar = useCallback(() => {
     setIsVisible((currentValue) => (currentValue ? currentValue : true));
@@ -36,13 +39,19 @@ export function BottomTabBarVisibilityProvider({
     setIsVisible((currentValue) => (currentValue ? false : currentValue));
   }, []);
 
+  const setContentInsetBottom = useCallback((value: number) => {
+    setContentInsetBottomState((currentValue) => (currentValue === value ? currentValue : value));
+  }, []);
+
   const value = useMemo(
     () => ({
       isVisible,
+      contentInsetBottom,
+      setContentInsetBottom,
       hideTabBar,
       showTabBar,
     }),
-    [hideTabBar, isVisible, showTabBar],
+    [contentInsetBottom, hideTabBar, isVisible, setContentInsetBottom, showTabBar],
   );
 
   return (
@@ -103,4 +112,9 @@ export function useBottomTabBarScroll() {
     onScroll,
     scrollEventThrottle: 16 as const,
   };
+}
+
+export function useBottomTabBarContentInset(extraBottom = 0) {
+  const { contentInsetBottom } = useBottomTabBarVisibility();
+  return Math.max(contentInsetBottom + extraBottom, 0);
 }

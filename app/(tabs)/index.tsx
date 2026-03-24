@@ -17,7 +17,7 @@ import {
   UserHeader,
 } from '../../src/components/dashboard';
 import { spacing } from '../../src/constants/colors';
-import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { getMuscleVolume } from '../../src/services/api';
 import type { TipContext } from '../../src/utils/contextualTips';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
@@ -37,6 +37,7 @@ export default function HomeScreen() {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
+  const contentInsetBottom = useBottomTabBarContentInset();
   const { user } = useAuthStore();
   const {
     activeMacrocycle,
@@ -217,6 +218,7 @@ export default function HomeScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
+          { paddingBottom: contentInsetBottom },
           isTablet ? styles.scrollContentTablet : null,
         ]}
         onScroll={tabBarScroll.onScroll}
@@ -323,10 +325,10 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       backgroundColor: theme.colors.background,
     },
     scrollContent: {
-      paddingBottom: spacing.xxl + 60,
+      paddingBottom: spacing.xxl,
     },
     scrollContentTablet: {
-      paddingBottom: spacing.xxl,
+      paddingBottom: spacing.xl,
     },
     contentColumn: {
       width: '100%',

@@ -54,9 +54,11 @@
       "typedRoutes": true
     },
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "00000000-0000-0000-0000-000000000000"
+        "projectId": "976b1686-1a7c-4a3e-ad91-d73485307973"
       }
-    }
+    },
+    "owner": "alejandro_mtz_r"
   }
 }

@@ -7,12 +7,7 @@ import {
   type SharedWeeklyCalendarVariant,
   sharedWeeklyCalendarHeroLayoutPreset,
 } from '../calendar/SharedWeeklyCalendar';
-import {
-  borderRadius,
-  fontSize,
-  shadows,
-  spacing,
-} from '../../constants/colors';
+import { borderRadius, fontSize, shadows, spacing } from '../../constants/colors';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { MicrocycleDayProgress, MicrocycleMode, MicrocycleProgress } from '../../types';
 import {
@@ -238,7 +233,7 @@ export const MicrocycleTimeline: React.FC<MicrocycleTimelineProps> = ({
         <View style={styles.emptyCopy}>
           <Text style={styles.emptyTitle}>Sin microciclo activo</Text>
           <Text style={styles.emptySubtitle}>
-            Cuando exista una programaciÃ³n vigente, aparecerÃ¡ aquÃ­.
+            Cuando exista una programación vigente, aparecerá aquí.
           </Text>
         </View>
       </View>

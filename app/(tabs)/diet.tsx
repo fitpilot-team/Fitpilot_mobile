@@ -22,7 +22,7 @@ import {
 } from '../../src/components/diet';
 import { borderRadius, brandColors, fontSize, spacing, nutritionTheme } from '../../src/constants/colors';
 import { useAuthStore } from '../../src/store/authStore';
-import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import {
   getClientDietCalendar,
@@ -46,6 +46,7 @@ export default function DietScreen() {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
+  const contentInsetBottom = useBottomTabBarContentInset();
   const { user } = useAuthStore();
   const [dietDays, setDietDays] = useState<ClientDietWeekDay[]>([]);
   const [selectedDate, setSelectedDate] = useState(getTodayDietDateKey());
@@ -261,8 +262,9 @@ export default function DietScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentInsetAdjustmentBehavior="automatic"
         onScroll={tabBarScroll.onScroll}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -429,7 +431,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       backgroundColor: theme.colors.background,
     },
     scrollContent: {
-      paddingBottom: spacing.xxl + 64,
+      paddingBottom: spacing.xxl,
     },
     header: {
       paddingHorizontal: spacing.lg,

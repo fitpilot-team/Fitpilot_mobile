@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../src/store/authStore';
-import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles, getThemePreferenceLabel } from '../../src/theme';
 import {
   MEASUREMENT_PREFERENCE_LABELS,
@@ -53,6 +53,7 @@ export default function ProfileScreen() {
   const { preference, theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
+  const contentInsetBottom = useBottomTabBarContentInset();
   const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
   const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
   const setMeasurementPreference = useMeasurementPreferenceStore((state) => state.setPreference);
@@ -159,7 +160,7 @@ export default function ProfileScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
         onScroll={tabBarScroll.onScroll}
         scrollEventThrottle={tabBarScroll.scrollEventThrottle}
         showsVerticalScrollIndicator={false}
@@ -211,12 +212,6 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Preferencias</Text>
         <View style={styles.menuSection}>
           <MenuItem
-            icon="language-outline"
-            label="Idioma"
-            value="Espanol"
-            onPress={() => handleNotImplemented('Idioma')}
-          />
-          <MenuItem
             icon="moon-outline"
             label="Tema"
             value={getThemePreferenceLabel(preference)}
@@ -246,7 +241,7 @@ export default function ProfileScreen() {
             icon="document-text-outline"
             label="Términos y condiciones"
             onPress={() => {
-              const url = process.env.EXPO_PUBLIC_TERMS_URL;
+              const url = process.env.EXPO_PUBLIC_TERMS_URL || 'https://pro.fitpilot.fit/es/terms';
               if (url) {
                 Linking.openURL(url);
               } else {
@@ -258,7 +253,7 @@ export default function ProfileScreen() {
             icon="shield-checkmark-outline"
             label="Política de privacidad"
             onPress={() => {
-              const url = process.env.EXPO_PUBLIC_PRIVACY_URL;
+              const url = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://pro.fitpilot.fit/es/privacy';
               if (url) {
                 Linking.openURL(url);
               } else {
@@ -305,7 +300,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     scrollContent: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: spacing.xxl + 60,
+      paddingBottom: spacing.xxl,
     },
     userCard: {
       backgroundColor: theme.colors.surface,

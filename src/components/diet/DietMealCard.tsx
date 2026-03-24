@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
 import { Card } from '../common';
 import {
   borderRadius,
@@ -26,6 +25,7 @@ interface DietMealCardProps {
 }
 
 type DietMealCardStyles = ReturnType<typeof createStyles>;
+type IngredientAccent = 'recipe' | 'food';
 
 const LIGHT_RECIPE_PLACEHOLDER_COLORS = ['#E8EFF7', '#D8E7F4', '#C5DCF0'] as const;
 const DARK_RECIPE_PLACEHOLDER_COLORS = ['#23344C', '#1B2A42', '#152338'] as const;
@@ -38,6 +38,12 @@ const DARK_RECIPE_META = '#8FA2BC';
 const DARK_RECIPE_SUBTITLE = '#B8C7D9';
 const DARK_RECIPE_TOGGLE_BACKGROUND = 'rgba(12, 22, 38, 0.28)';
 const DARK_RECIPE_TOGGLE_ACCENT = '#4FD1C5';
+const DARK_RECIPE_INGREDIENT_ROW_BACKGROUND = 'rgba(255,255,255,0.04)';
+const DARK_RECIPE_INGREDIENT_ROW_BORDER = 'rgba(103, 182, 223, 0.18)';
+const DARK_RECIPE_INGREDIENT_CHIP_BACKGROUND = 'rgba(255,255,255,0.06)';
+const DARK_RECIPE_INGREDIENT_CHIP_BORDER = 'rgba(103, 182, 223, 0.14)';
+const DARK_RECIPE_INGREDIENT_CHIP_LABEL = '#8FA2BC';
+const DARK_RECIPE_INGREDIENT_CHIP_VALUE = '#F3F4F6';
 
 const formatCalories = (value: number | null) => {
   if (value === null || value <= 0) {
@@ -57,34 +63,40 @@ const formatMeasureValue = (value: number | null, suffix: string) => {
 
 const PortionChips: React.FC<{
   ingredient: ClientDietIngredientRow | ClientDietFoodRow;
+  accent: IngredientAccent;
   styles: DietMealCardStyles;
+  theme: AppTheme;
 }> = ({
   ingredient,
+  accent,
   styles,
+  theme,
 }) => {
+  const isDarkRecipe = theme.isDark && accent === 'recipe';
+
   return (
     <View style={styles.portionGrid}>
-      <View style={styles.portionChip}>
-        <Text style={styles.portionChipLabel}>
+      <View style={[styles.portionChip, isDarkRecipe ? styles.recipePortionChip : null]}>
+        <Text style={[styles.portionChipLabel, isDarkRecipe ? styles.recipePortionChipLabel : null]}>
           Unidad casera
         </Text>
-        <Text style={styles.portionChipValue}>
+        <Text style={[styles.portionChipValue, isDarkRecipe ? styles.recipePortionChipValue : null]}>
           {ingredient.portion.householdLabel || '—'}
         </Text>
       </View>
-      <View style={styles.portionChip}>
-        <Text style={styles.portionChipLabel}>
+      <View style={[styles.portionChip, isDarkRecipe ? styles.recipePortionChip : null]}>
+        <Text style={[styles.portionChipLabel, isDarkRecipe ? styles.recipePortionChipLabel : null]}>
           Equivalentes
         </Text>
-        <Text style={styles.portionChipValue}>
+        <Text style={[styles.portionChipValue, isDarkRecipe ? styles.recipePortionChipValue : null]}>
           {formatMeasureValue(ingredient.portion.equivalents, 'eq')}
         </Text>
       </View>
-      <View style={styles.portionChip}>
-        <Text style={styles.portionChipLabel}>
+      <View style={[styles.portionChip, isDarkRecipe ? styles.recipePortionChip : null]}>
+        <Text style={[styles.portionChipLabel, isDarkRecipe ? styles.recipePortionChipLabel : null]}>
           Gramos
         </Text>
-        <Text style={styles.portionChipValue}>
+        <Text style={[styles.portionChipValue, isDarkRecipe ? styles.recipePortionChipValue : null]}>
           {formatMeasureValue(ingredient.portion.grams, 'g')}
         </Text>
       </View>
@@ -94,23 +106,29 @@ const PortionChips: React.FC<{
 
 const IngredientRow: React.FC<{
   ingredient: ClientDietIngredientRow | ClientDietFoodRow;
+  accent?: IngredientAccent;
   styles: DietMealCardStyles;
   theme: AppTheme;
 }> = ({
   ingredient,
+  accent = 'food',
   styles,
   theme,
 }) => {
   const foodGroupVisual = getSmaeGroupVisual(ingredient.exchangeGroupName);
-  const borderColor = theme.isDark
-    ? theme.colors.border
-    : foodGroupVisual.borderColor;
+  const isDarkRecipe = theme.isDark && accent === 'recipe';
+  const borderColor = accent === 'recipe'
+    ? undefined
+    : theme.isDark
+      ? theme.colors.border
+      : foodGroupVisual.borderColor;
 
   return (
     <View
       style={[
         styles.foodRow,
-        { borderColor },
+        isDarkRecipe ? styles.recipeFoodRow : null,
+        accent === 'food' ? { borderColor } : null,
       ]}
     >
       <View style={[styles.foodIcon, { backgroundColor: foodGroupVisual.backgroundColor }]}>
@@ -125,18 +143,18 @@ const IngredientRow: React.FC<{
       <View style={styles.foodBody}>
         <View style={styles.foodHeader}>
           <View style={styles.foodText}>
-            <Text style={styles.foodLabel}>
+            <Text style={[styles.foodLabel, isDarkRecipe ? styles.recipeFoodLabel : null]}>
               {ingredient.label}
             </Text>
             {ingredient.exchangeGroupName ? (
-              <Text style={styles.foodSubtitle}>
+              <Text style={[styles.foodSubtitle, isDarkRecipe ? styles.recipeFoodSubtitle : null]}>
                 {ingredient.exchangeGroupName}
               </Text>
             ) : null}
           </View>
         </View>
 
-        <PortionChips ingredient={ingredient} styles={styles} />
+        <PortionChips ingredient={ingredient} accent={accent} styles={styles} theme={theme} />
       </View>
     </View>
   );
@@ -172,12 +190,14 @@ const SectionHeader: React.FC<{
 
 const RecipeCard: React.FC<{
   recipe: ClientDietRecipeCard;
-  onPress: () => void;
+  expanded: boolean;
+  onToggle: () => void;
   styles: DietMealCardStyles;
   theme: AppTheme;
 }> = ({
   recipe,
-  onPress,
+  expanded,
+  onToggle,
   styles,
   theme,
 }) => {
@@ -185,10 +205,7 @@ const RecipeCard: React.FC<{
   const toggleIconColor = theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : brandColors.navy;
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.recipeCard, pressed ? styles.recipeCardPressed : null]}
-    >
+    <View style={styles.recipeCard}>
       {recipe.imageUrl ? (
         <Image source={{ uri: recipe.imageUrl }} style={styles.recipeImage} resizeMode="cover" />
       ) : (
@@ -214,21 +231,35 @@ const RecipeCard: React.FC<{
 
         <Text style={styles.recipeTitle}>{recipe.title}</Text>
         <Text style={styles.recipeSubtitle}>
-          Abre la receta completa para ver la preparacion y todos sus ingredientes.
+          Ingredientes y porciones de esta preparación dentro de tu plan.
         </Text>
 
-        <View style={styles.recipeToggle}>
+        <Pressable style={styles.recipeToggle} onPress={onToggle}>
           <Text style={styles.recipeToggleText}>
-            Abrir receta
+            {expanded ? 'Ocultar ingredientes' : 'Ver ingredientes'}
           </Text>
           <Ionicons
-            name="chevron-forward-outline"
+            name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
             size={18}
             color={toggleIconColor}
           />
-        </View>
+        </Pressable>
+
+        {expanded ? (
+          <View style={styles.recipeIngredients}>
+            {recipe.ingredients.map((ingredient) => (
+              <IngredientRow
+                key={ingredient.id}
+                ingredient={ingredient}
+                accent="recipe"
+                styles={styles}
+                theme={theme}
+              />
+            ))}
+          </View>
+        ) : null}
       </View>
-    </Pressable>
+    </View>
   );
 };
 
@@ -236,6 +267,23 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const caloriesLabel = formatCalories(meal.totalCalories);
+  const [expandedRecipeIds, setExpandedRecipeIds] = useState<Record<string, boolean>>({});
+
+  const recipeKey = useMemo(
+    () => meal.recipes.map((recipe) => recipe.id).join('|'),
+    [meal.recipes],
+  );
+
+  useEffect(() => {
+    setExpandedRecipeIds({});
+  }, [meal.id, meal.totalEntries, recipeKey]);
+
+  const toggleRecipe = (recipeId: string) => {
+    setExpandedRecipeIds((currentState) => ({
+      ...currentState,
+      [recipeId]: !currentState[recipeId],
+    }));
+  };
 
   return (
     <Card style={styles.card} padding="none">
@@ -268,12 +316,8 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
                 <RecipeCard
                   key={recipe.id}
                   recipe={recipe}
-                  onPress={() => router.push({
-                    pathname: '/recipes/[recipeId]',
-                    params: {
-                      recipeId: String(recipe.recipeId),
-                    },
-                  })}
+                  expanded={Boolean(expandedRecipeIds[recipe.id])}
+                  onToggle={() => toggleRecipe(recipe.id)}
                   styles={styles}
                   theme={theme}
                 />
@@ -386,9 +430,6 @@ function createStyles(theme: AppTheme) {
       borderWidth: 1,
       borderColor: theme.isDark ? DARK_RECIPE_CARD_BORDER : '#DDE8F2',
     },
-    recipeCardPressed: {
-      opacity: 0.92,
-    },
     recipeImage: {
       width: '100%',
       height: 152,
@@ -456,6 +497,10 @@ function createStyles(theme: AppTheme) {
       fontSize: fontSize.sm,
       fontWeight: '700',
     },
+    recipeIngredients: {
+      marginTop: spacing.md,
+      gap: spacing.sm,
+    },
     foodRow: {
       flexDirection: 'row',
       gap: spacing.md,
@@ -463,6 +508,10 @@ function createStyles(theme: AppTheme) {
       borderRadius: borderRadius.lg,
       backgroundColor: theme.isDark ? theme.colors.surfaceAlt : '#FAFBFD',
       borderWidth: 1,
+    },
+    recipeFoodRow: {
+      backgroundColor: theme.isDark ? DARK_RECIPE_INGREDIENT_ROW_BACKGROUND : '#FAFBFD',
+      borderColor: theme.isDark ? DARK_RECIPE_INGREDIENT_ROW_BORDER : '#D8E7F4',
     },
     foodIcon: {
       width: 42,
@@ -488,10 +537,16 @@ function createStyles(theme: AppTheme) {
       fontSize: fontSize.base,
       fontWeight: '700',
     },
+    recipeFoodLabel: {
+      color: DARK_RECIPE_TITLE,
+    },
     foodSubtitle: {
       marginTop: 2,
       color: theme.colors.textMuted,
       fontSize: fontSize.sm,
+    },
+    recipeFoodSubtitle: {
+      color: DARK_RECIPE_SUBTITLE,
     },
     portionGrid: {
       flexDirection: 'row',
@@ -508,6 +563,10 @@ function createStyles(theme: AppTheme) {
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.sm,
     },
+    recipePortionChip: {
+      backgroundColor: DARK_RECIPE_INGREDIENT_CHIP_BACKGROUND,
+      borderColor: DARK_RECIPE_INGREDIENT_CHIP_BORDER,
+    },
     portionChipLabel: {
       color: theme.colors.textMuted,
       fontSize: fontSize.xs,
@@ -515,11 +574,17 @@ function createStyles(theme: AppTheme) {
       textTransform: 'uppercase',
       letterSpacing: 0.4,
     },
+    recipePortionChipLabel: {
+      color: DARK_RECIPE_INGREDIENT_CHIP_LABEL,
+    },
     portionChipValue: {
       marginTop: 4,
       color: theme.colors.textPrimary,
       fontSize: fontSize.sm,
       fontWeight: '700',
+    },
+    recipePortionChipValue: {
+      color: DARK_RECIPE_INGREDIENT_CHIP_VALUE,
     },
   });
 }

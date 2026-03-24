@@ -35,7 +35,7 @@ import {
   getMyMeasurementDetail,
   listMyMeasurements,
 } from '../../src/services/measurements';
-import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
@@ -84,6 +84,7 @@ export default function MeasurementsScreen() {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
+  const contentInsetBottom = useBottomTabBarContentInset(72);
   const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
   const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
   const [measurements, setMeasurements] = useState<MeasurementHistoryItem[]>([]);
@@ -320,7 +321,7 @@ export default function MeasurementsScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
         onScroll={tabBarScroll.onScroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -746,7 +747,7 @@ const createStyles = (theme: AppTheme) =>
     },
     scrollContent: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: spacing.xxl + 92,
+      paddingBottom: spacing.xxl,
     },
     errorCard: {
       marginBottom: spacing.md,

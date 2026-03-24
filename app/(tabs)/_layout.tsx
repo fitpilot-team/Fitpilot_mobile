@@ -21,6 +21,7 @@ const PHONE_TAB_BAR_VERTICAL_PADDING = 8;
 const IPHONE_TAB_BAR_HORIZONTAL_PADDING = 12;
 const IPHONE_TAB_BAR_TOP_PADDING = 4;
 const IPHONE_TAB_BAR_BOTTOM_OFFSET = 8;
+const HIDDEN_CONTENT_BOTTOM_INSET = 12;
 
 interface TabletTabBarProps {
   props: BottomTabBarProps;
@@ -81,8 +82,9 @@ const TabletTabBar: React.FC<TabletTabBarProps> = ({
 const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props, isFloating }) => {
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
-  const { isVisible } = useBottomTabBarVisibility();
+  const { isVisible, setContentInsetBottom } = useBottomTabBarVisibility();
   const translateY = useSharedValue(0);
+  const opacity = useSharedValue(1);
   const hiddenOffset = useMemo(
     () =>
       isFloating
@@ -94,13 +96,35 @@ const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props, isFloating }) => {
         : PHONE_TAB_BAR_HEIGHT + insets.bottom + PHONE_TAB_BAR_VERTICAL_PADDING + 24,
     [insets.bottom, isFloating],
   );
+  const visibleContentInset = useMemo(
+    () =>
+      isFloating
+        ? PHONE_TAB_BAR_HEIGHT +
+          insets.bottom +
+          IPHONE_TAB_BAR_TOP_PADDING +
+          IPHONE_TAB_BAR_BOTTOM_OFFSET +
+          16
+        : PHONE_TAB_BAR_HEIGHT + insets.bottom + PHONE_TAB_BAR_VERTICAL_PADDING + 16,
+    [insets.bottom, isFloating],
+  );
 
   useEffect(() => {
     translateY.value = withTiming(isVisible ? 0 : hiddenOffset, { duration: 220 });
-  }, [hiddenOffset, isVisible, translateY]);
+    opacity.value = withTiming(isVisible ? 1 : 0, { duration: 180 });
+    setContentInsetBottom(isVisible ? visibleContentInset : insets.bottom + HIDDEN_CONTENT_BOTTOM_INSET);
+  }, [
+    hiddenOffset,
+    insets.bottom,
+    isVisible,
+    opacity,
+    setContentInsetBottom,
+    translateY,
+    visibleContentInset,
+  ]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
+    opacity: opacity.value,
   }));
 
   if (!isFloating) {
@@ -285,6 +309,11 @@ export default function TabLayout() {
 const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
   StyleSheet.create({
     phoneFloatingTabBarWrapper: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 20,
       backgroundColor: 'transparent',
     },
     phoneTabBar: {

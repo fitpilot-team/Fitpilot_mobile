@@ -69,7 +69,7 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
     },
     {
       key: 'active-days',
-      label: 'DÃ­as activos',
+      label: 'Días activos',
       value: `${actualMetrics?.active_days ?? 0}`,
       icon: 'calendar-outline',
       tint: brandColors.sky,
@@ -93,7 +93,7 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
           style={[styles.toggleButton, mode === 'planned' && styles.toggleButtonActive]}
         >
           <Text style={[styles.toggleLabel, mode === 'planned' && styles.toggleLabelActive]}>
-            PlanificaciÃ³n
+            Planificación
           </Text>
         </Pressable>
         <Pressable
@@ -101,7 +101,7 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
           style={[styles.toggleButton, mode === 'actual' && styles.toggleButtonActive]}
         >
           <Text style={[styles.toggleLabel, mode === 'actual' && styles.toggleLabelActive]}>
-            EjecuciÃ³n real
+            Ejecución real
           </Text>
         </Pressable>
       </View>
