@@ -13,6 +13,7 @@ import {
   useMeasurementPreferenceStore,
 } from '../../src/store/measurementPreferenceStore';
 import { borderRadius, brandColors, fontSize, shadows, spacing } from '../../src/constants/colors';
+import { TabScreenWrapper } from '../../src/components/common';
 
 type MenuItemProps = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -153,129 +154,131 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Perfil</Text>
-      </View>
+    <TabScreenWrapper>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Perfil</Text>
+        </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
-        onScroll={tabBarScroll.onScroll}
-        scrollEventThrottle={tabBarScroll.scrollEventThrottle}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.userCard}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              {user?.profilePictureUrl ? (
-                <Image source={{ uri: user.profilePictureUrl }} style={styles.avatarImage} />
-              ) : (
-                <Ionicons name="person" size={40} color={theme.colors.primary} />
-              )}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
+          onScroll={tabBarScroll.onScroll}
+          scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.userCard}>
+            <View style={styles.avatarContainer}>
+              <View style={styles.avatar}>
+                {user?.profilePictureUrl ? (
+                  <Image source={{ uri: user.profilePictureUrl }} style={styles.avatarImage} />
+                ) : (
+                  <Ionicons name="person" size={40} color={theme.colors.primary} />
+                )}
+              </View>
+              <TouchableOpacity
+                style={styles.editAvatarButton}
+                activeOpacity={0.7}
+                onPress={handlePickImage}
+                disabled={isLoading}
+              >
+                <Ionicons name="camera" size={14} color="#ffffff" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.editAvatarButton}
-              activeOpacity={0.7}
-              onPress={handlePickImage}
-              disabled={isLoading}
-            >
-              <Ionicons name="camera" size={14} color="#ffffff" />
-            </TouchableOpacity>
+            <Text style={styles.userName}>{user?.displayName || 'Usuario'}</Text>
+            <Text style={styles.userEmail}>{user?.email}</Text>
+            <View style={styles.roleBadge}>
+              <Text style={styles.roleText}>Cliente</Text>
+            </View>
           </View>
-          <Text style={styles.userName}>{user?.displayName || 'Usuario'}</Text>
-          <Text style={styles.userEmail}>{user?.email}</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>Cliente</Text>
+
+          <Text style={styles.sectionTitle}>Cuenta</Text>
+          <View style={styles.menuSection}>
+            <MenuItem
+              icon="person-outline"
+              label="Informacion personal"
+              onPress={() => router.push('/profile/personal-info')}
+            />
+            <MenuItem
+              icon="lock-closed-outline"
+              label="Cambiar contrasena"
+              onPress={() => router.push('/profile/change-password')}
+            />
+            <MenuItem
+              icon="notifications-outline"
+              label="Notificaciones"
+              onPress={() => router.push('/profile/notifications-settings')}
+            />
           </View>
-        </View>
 
-        <Text style={styles.sectionTitle}>Cuenta</Text>
-        <View style={styles.menuSection}>
-          <MenuItem
-            icon="person-outline"
-            label="Informacion personal"
-            onPress={() => router.push('/profile/personal-info')}
-          />
-          <MenuItem
-            icon="lock-closed-outline"
-            label="Cambiar contrasena"
-            onPress={() => router.push('/profile/change-password')}
-          />
-          <MenuItem
-            icon="notifications-outline"
-            label="Notificaciones"
-            onPress={() => router.push('/profile/notifications-settings')}
-          />
-        </View>
+          <Text style={styles.sectionTitle}>Preferencias</Text>
+          <View style={styles.menuSection}>
+            <MenuItem
+              icon="moon-outline"
+              label="Tema"
+              value={getThemePreferenceLabel(preference)}
+              onPress={() => router.push('/profile/theme-settings')}
+            />
+            <MenuItem
+              icon="fitness-outline"
+              label="Unidades de medida"
+              value={MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
+              onPress={handleMeasurementPreferencePress}
+            />
+          </View>
 
-        <Text style={styles.sectionTitle}>Preferencias</Text>
-        <View style={styles.menuSection}>
-          <MenuItem
-            icon="moon-outline"
-            label="Tema"
-            value={getThemePreferenceLabel(preference)}
-            onPress={() => router.push('/profile/theme-settings')}
-          />
-          <MenuItem
-            icon="fitness-outline"
-            label="Unidades de medida"
-            value={MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
-            onPress={handleMeasurementPreferencePress}
-          />
-        </View>
+          <Text style={styles.sectionTitle}>Soporte</Text>
+          <View style={styles.menuSection}>
+            <MenuItem
+              icon="help-circle-outline"
+              label="Ayuda"
+              onPress={() => router.push('/profile/help')}
+            />
+            <MenuItem
+              icon="chatbubble-outline"
+              label="Contactar soporte"
+              onPress={() => router.push('/profile/contact-support')}
+            />
+            <MenuItem
+              icon="document-text-outline"
+              label="Términos y condiciones"
+              onPress={() => {
+                const url = process.env.EXPO_PUBLIC_TERMS_URL || 'https://pro.fitpilot.fit/es/terms';
+                if (url) {
+                  Linking.openURL(url);
+                } else {
+                  Alert.alert('No configurado', 'Enlace no disponible.');
+                }
+              }}
+            />
+            <MenuItem
+              icon="shield-checkmark-outline"
+              label="Política de privacidad"
+              onPress={() => {
+                const url = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://pro.fitpilot.fit/es/privacy';
+                if (url) {
+                  Linking.openURL(url);
+                } else {
+                  Alert.alert('No configurado', 'Enlace no disponible.');
+                }
+              }}
+            />
+          </View>
 
-        <Text style={styles.sectionTitle}>Soporte</Text>
-        <View style={styles.menuSection}>
-          <MenuItem
-            icon="help-circle-outline"
-            label="Ayuda"
-            onPress={() => router.push('/profile/help')}
-          />
-          <MenuItem
-            icon="chatbubble-outline"
-            label="Contactar soporte"
-            onPress={() => router.push('/profile/contact-support')}
-          />
-          <MenuItem
-            icon="document-text-outline"
-            label="Términos y condiciones"
-            onPress={() => {
-              const url = process.env.EXPO_PUBLIC_TERMS_URL || 'https://pro.fitpilot.fit/es/terms';
-              if (url) {
-                Linking.openURL(url);
-              } else {
-                Alert.alert('No configurado', 'Enlace no disponible.');
-              }
-            }}
-          />
-          <MenuItem
-            icon="shield-checkmark-outline"
-            label="Política de privacidad"
-            onPress={() => {
-              const url = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://pro.fitpilot.fit/es/privacy';
-              if (url) {
-                Linking.openURL(url);
-              } else {
-                Alert.alert('No configurado', 'Enlace no disponible.');
-              }
-            }}
-          />
-        </View>
+          <View style={styles.menuSection}>
+            <MenuItem
+              icon="log-out-outline"
+              label="Cerrar sesion"
+              onPress={handleLogout}
+              showChevron={false}
+              danger
+            />
+          </View>
 
-        <View style={styles.menuSection}>
-          <MenuItem
-            icon="log-out-outline"
-            label="Cerrar sesion"
-            onPress={handleLogout}
-            showChevron={false}
-            danger
-          />
-        </View>
-
-        <Text style={styles.versionText}>FitPilot v1.0.0</Text>
-      </ScrollView>
-    </SafeAreaView>
+          <Text style={styles.versionText}>FitPilot v1.0.0</Text>
+        </ScrollView>
+      </SafeAreaView>
+    </TabScreenWrapper>
   );
 }
 

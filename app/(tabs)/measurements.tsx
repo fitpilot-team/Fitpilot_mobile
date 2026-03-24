@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Button, Card, FloatingButton, LoadingSpinner } from '../../src/components/common';
+import { Button, Card, FloatingButton, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
 import {
   MeasurementDetailModal,
   MeasurementFormModal,
@@ -332,56 +332,57 @@ export default function MeasurementsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <View style={styles.headerCopy}>
-          <Text style={styles.title}>Medidas</Text>
-          <Text style={styles.subtitle}>Control antropometrico con datos reales</Text>
-          <Text style={styles.preferenceText}>
-            Unidades: {MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
-          </Text>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
-        onScroll={tabBarScroll.onScroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={theme.colors.primary}
-          />
-        }
-        scrollEventThrottle={tabBarScroll.scrollEventThrottle}
-      >
-        {error ? (
-          <Card style={styles.errorCard}>
-            <Text style={styles.errorTitle}>No fue posible cargar tus medidas</Text>
-            <Text style={styles.errorText}>{error}</Text>
-            <Button title="Reintentar" onPress={() => void loadMeasurements()} />
-          </Card>
-        ) : null}
-
-        {!error && !latestMeasurement ? (
-          <Card style={styles.emptyCard}>
-            <Ionicons name="analytics-outline" size={44} color={theme.colors.iconMuted} />
-            <Text style={styles.emptyTitle}>Todavia no tienes mediciones registradas</Text>
-            <Text style={styles.emptyText}>
-              Captura tu primer registro para empezar a ver peso, composicion y perimetros.
+    <TabScreenWrapper>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>Medidas</Text>
+            <Text style={styles.subtitle}>Control antropometrico con datos reales</Text>
+            <Text style={styles.preferenceText}>
+              Unidades: {MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
             </Text>
-            <Button
-              title="Registrar mi primera medicion"
-              onPress={() => setIsFormVisible(true)}
-              icon={<Ionicons name="add-outline" size={18} color="#ffffff" />}
-            />
-          </Card>
-        ) : null}
+          </View>
+        </View>
 
-        {latestMeasurement ? (
-          <>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
+          onScroll={tabBarScroll.onScroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={theme.colors.primary}
+            />
+          }
+          scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+        >
+          {error ? (
+            <Card style={styles.errorCard}>
+              <Text style={styles.errorTitle}>No fue posible cargar tus medidas</Text>
+              <Text style={styles.errorText}>{error}</Text>
+              <Button title="Reintentar" onPress={() => void loadMeasurements()} />
+            </Card>
+          ) : null}
+
+          {!error && !latestMeasurement ? (
+            <Card style={styles.emptyCard}>
+              <Ionicons name="analytics-outline" size={44} color={theme.colors.iconMuted} />
+              <Text style={styles.emptyTitle}>Todavia no tienes mediciones registradas</Text>
+              <Text style={styles.emptyText}>
+                Captura tu primer registro para empezar a ver peso, composicion y perimetros.
+              </Text>
+              <Button
+                title="Registrar mi primera medicion"
+                onPress={() => setIsFormVisible(true)}
+                icon={<Ionicons name="add-outline" size={18} color="#ffffff" />}
+              />
+            </Card>
+          ) : null}
+
+          {latestMeasurement ? (
+            <>
             <View style={styles.mainStatsContainer}>
               {summaryMetrics.map((metric, index) => {
                 const progressConfig = getMeasurementProgressMetricConfig(metric.key);
@@ -707,30 +708,31 @@ export default function MeasurementsScreen() {
                 />
               ) : null}
             </Card>
-          </>
-        ) : null}
-      </ScrollView>
+            </>
+          ) : null}
+        </ScrollView>
 
-      <FloatingButton
-        accessibilityLabel="Registrar nueva medicion"
-        icon={<Ionicons name="add-outline" size={28} color="#ffffff" />}
-        onPress={() => setIsFormVisible(true)}
-      />
+        <FloatingButton
+          accessibilityLabel="Registrar nueva medicion"
+          icon={<Ionicons name="add-outline" size={28} color="#ffffff" />}
+          onPress={() => setIsFormVisible(true)}
+        />
 
-      <MeasurementDetailModal
-        visible={isFocused && isDetailVisible}
-        detail={selectedMeasurementDetail}
-        isLoading={isDetailLoading}
-        onClose={handleCloseDetail}
-      />
+        <MeasurementDetailModal
+          visible={isFocused && isDetailVisible}
+          detail={selectedMeasurementDetail}
+          isLoading={isDetailLoading}
+          onClose={handleCloseDetail}
+        />
 
-      <MeasurementFormModal
-        visible={isFocused && isFormVisible}
-        isSubmitting={isSubmitting}
-        onClose={() => setIsFormVisible(false)}
-        onSubmit={handleCreateMeasurement}
-      />
-    </SafeAreaView>
+        <MeasurementFormModal
+          visible={isFocused && isFormVisible}
+          isSubmitting={isSubmitting}
+          onClose={() => setIsFormVisible(false)}
+          onSubmit={handleCreateMeasurement}
+        />
+      </SafeAreaView>
+    </TabScreenWrapper>
   );
 }
 

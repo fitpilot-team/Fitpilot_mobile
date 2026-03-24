@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
@@ -18,12 +17,8 @@ const TABLET_EXPANDED_WIDTH = 164;
 const TABLET_COLLAPSED_WIDTH = 84;
 const TABLET_TOP_PADDING = 72;
 const TABLET_BOTTOM_PADDING = 18;
-const PHONE_TAB_BAR_HEIGHT = 66;
-const PHONE_TAB_BAR_VERTICAL_PADDING = 9;
-const PHONE_TAB_BAR_HORIZONTAL_PADDING = 14;
-const PHONE_TAB_BAR_TOP_PADDING = 6;
-const PHONE_TAB_BAR_BOTTOM_OFFSET = 10;
-const HIDDEN_CONTENT_BOTTOM_INSET = 12;
+const PHONE_TAB_BAR_HEIGHT = 60;
+const PHONE_TAB_BAR_VERTICAL_PADDING = 8;
 
 interface TabletTabBarProps {
   props: BottomTabBarProps;
@@ -36,6 +31,14 @@ interface TabletTabBarProps {
 interface PhoneTabBarProps {
   props: BottomTabBarProps;
 }
+
+type TabBarIconRenderer = (props: {
+  focused: boolean;
+  color: string;
+  size: number;
+}) => React.ReactNode;
+
+type TabLayoutStyles = ReturnType<typeof createStyles>;
 
 const TabletTabBar: React.FC<TabletTabBarProps> = ({
   props,
@@ -81,26 +84,131 @@ const TabletTabBar: React.FC<TabletTabBarProps> = ({
 };
 
 const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
-  const { theme } = useAppTheme();
+  const { state, descriptors, navigation } = props;
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { isVisible } = useBottomTabBarVisibility();
+  const translateY = useSharedValue(0);
+  const opacity = useSharedValue(1);
+  const tabWidth = (width - 32) / state.routes.length;
+  const indicatorX = useSharedValue(state.index * tabWidth);
 
-  if (!isVisible) {
-    return null;
-  }
+  useEffect(() => {
+    indicatorX.value = withTiming(state.index * tabWidth, {
+      duration: 300,
+    });
+    translateY.value = withTiming(isVisible ? 0 : 100, { duration: 250 });
+    opacity.value = withTiming(isVisible ? 1 : 0, { duration: 200 });
+  }, [indicatorX, isVisible, opacity, state.index, tabWidth, translateY]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    opacity: opacity.value,
+  }));
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: indicatorX.value + (tabWidth - 48) / 2 }],
+  }));
 
   return (
-    <View
+    <Animated.View
+      pointerEvents={isVisible ? 'auto' : 'none'}
       style={[
         styles.phoneFloatingTabBarWrapper,
+        animatedStyle,
         {
-          paddingBottom: insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 16),
+          paddingHorizontal: 16,
         },
       ]}
     >
-      <BottomTabBar {...props} />
-    </View>
+      <BlurView
+        intensity={Platform.OS === 'ios' ? 45 : 90}
+        tint="dark"
+        style={styles.customTabBarBlur}
+      >
+        <View style={styles.customTabBarContainer}>
+          <Animated.View
+            style={[styles.customTabIconWrapperActive, styles.slidingIndicator, indicatorStyle]}
+          />
+          {state.routes.map((route, index) => {
+            const { options } = descriptors[route.key];
+            const isFocused = state.index === index;
+
+            const onPress = () => {
+              const event = navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
+
+              if (!isFocused && !event.defaultPrevented) {
+                navigation.navigate(route.name, route.params);
+              }
+            };
+
+            const label = options.title || route.name;
+
+            return (
+              <Pressable
+                key={route.key}
+                onPress={onPress}
+                style={styles.customTabItem}
+                accessibilityRole="button"
+                accessibilityState={isFocused ? { selected: true } : {}}
+              >
+                <AnimatedTabIcon
+                  focused={isFocused}
+                  icon={options.tabBarIcon as TabBarIconRenderer | undefined}
+                  styles={styles}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.customTabText,
+                    isFocused && styles.customTabTextActive,
+                  ]}
+                >
+                  {label === 'index' ? 'Inicio' : label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </BlurView>
+    </Animated.View>
+  );
+};
+
+type AnimatedTabIconProps = {
+  focused: boolean;
+  icon?: TabBarIconRenderer;
+  styles: TabLayoutStyles;
+};
+
+const AnimatedTabIcon: React.FC<AnimatedTabIconProps> = ({ focused, icon, styles }) => {
+  const scale = useSharedValue(focused ? 1.1 : 1);
+  const opacity = useSharedValue(focused ? 1 : 0.6);
+
+  useEffect(() => {
+    scale.value = withTiming(focused ? 1.15 : 1, { duration: 200 });
+    opacity.value = withTiming(focused ? 1 : 0.7, { duration: 200 });
+  }, [focused, opacity, scale]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View style={[styles.customTabIconWrapper, animatedStyle]}>
+      {icon?.({
+        focused,
+        color: '#FFFFFF',
+        size: 24,
+      })}
+    </Animated.View>
   );
 };
 
@@ -115,30 +223,7 @@ export default function TabLayout() {
 
   const isRailExpanded = useMemo(
     () => (isHoverEnabled ? isRailPinnedExpanded || isRailHovered : isRailPinnedExpanded),
-    [isHoverEnabled, isRailHovered, isRailPinnedExpanded]
-  );
-  const renderTabIcon = useMemo(
-    () =>
-      (
-        activeIcon: React.ComponentProps<typeof Ionicons>['name'],
-        inactiveIcon: React.ComponentProps<typeof Ionicons>['name'],
-      ) =>
-      ({
-        color,
-        size,
-        focused,
-      }: {
-        color: string;
-        size: number;
-        focused: boolean;
-      }) => (
-        <Ionicons
-          name={focused ? activeIcon : inactiveIcon}
-          size={size}
-          color={color}
-        />
-      ),
-    []
+    [isHoverEnabled, isRailHovered, isRailPinnedExpanded],
   );
 
   useEffect(() => {
@@ -165,24 +250,17 @@ export default function TabLayout() {
           )
         }
         screenOptions={{
-          animation: 'shift',
           sceneStyle: {
             backgroundColor: theme.colors.background,
           },
           tabBarPosition: isTablet ? 'left' : 'bottom',
           tabBarVariant: isTablet ? 'material' : 'uikit',
-          tabBarActiveTintColor: isTablet
-            ? theme.colors.tabBarActiveTint
-            : theme.isDark
-              ? '#F8FAFC'
-              : theme.colors.tabBarActiveTint,
-          tabBarInactiveTintColor: isTablet
-            ? theme.colors.tabBarInactiveTint
-            : theme.isDark
-              ? 'rgba(255,255,255,0.72)'
-              : theme.colors.textMuted,
-          tabBarActiveBackgroundColor: isTablet ? theme.colors.tabBarActiveBg : 'transparent',
-          tabBarInactiveBackgroundColor: isTablet ? theme.colors.tabBarBackground : 'transparent',
+          tabBarActiveTintColor: theme.colors.tabBarActiveTint,
+          tabBarInactiveTintColor: theme.colors.tabBarInactiveTint,
+          tabBarActiveBackgroundColor: isTablet
+            ? theme.colors.tabBarActiveBg
+            : theme.colors.tabBarBackground,
+          tabBarInactiveBackgroundColor: theme.colors.tabBarBackground,
           tabBarShowLabel: !isTablet || isRailExpanded,
           tabBarHideOnKeyboard: !isTablet,
           tabBarStyle: isTablet
@@ -198,7 +276,7 @@ export default function TabLayout() {
               ]
             : styles.phoneTabBarItem,
           tabBarLabelStyle: isTablet ? styles.tabletTabBarLabel : styles.phoneTabBarLabel,
-          tabBarIconStyle: isTablet ? styles.tabletTabBarIcon : styles.phoneTabBarIcon,
+          tabBarIconStyle: isTablet ? styles.tabletTabBarIcon : undefined,
           headerShown: false,
         }}
       >
@@ -206,35 +284,65 @@ export default function TabLayout() {
           name="index"
           options={{
             title: 'Inicio',
-            tabBarIcon: renderTabIcon('home', 'home-outline'),
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'home' : 'home-outline'}
+                size={size}
+                color={color}
+              />
+            ),
           }}
         />
         <Tabs.Screen
           name="diet"
           options={{
             title: 'Dieta',
-            tabBarIcon: renderTabIcon('restaurant', 'restaurant-outline'),
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'restaurant' : 'restaurant-outline'}
+                size={size}
+                color={color}
+              />
+            ),
           }}
         />
         <Tabs.Screen
           name="workouts"
           options={{
             title: isTablet ? 'Entreno' : 'Entrenamientos',
-            tabBarIcon: renderTabIcon('barbell', 'barbell-outline'),
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'barbell' : 'barbell-outline'}
+                size={size}
+                color={color}
+              />
+            ),
           }}
         />
         <Tabs.Screen
           name="measurements"
           options={{
             title: 'Medidas',
-            tabBarIcon: renderTabIcon('body', 'body-outline'),
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'body' : 'body-outline'}
+                size={size}
+                color={color}
+              />
+            ),
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
             title: 'Perfil',
-            tabBarIcon: renderTabIcon('person', 'person-outline'),
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'person' : 'person-outline'}
+                size={size}
+                color={color}
+              />
+            ),
           }}
         />
       </Tabs>
@@ -245,59 +353,71 @@ export default function TabLayout() {
 const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
   StyleSheet.create({
     phoneFloatingTabBarWrapper: {
-      backgroundColor: theme.colors.tabBarBackground,
-      borderTopWidth: 1,
-      borderTopColor: theme.colors.tabBarBorder,
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 20,
+      backgroundColor: 'transparent',
     },
     phoneTabBar: {
-      backgroundColor: 'transparent',
-      borderTopWidth: 0,
-      borderWidth: 0,
-      borderRadius: 0,
+      backgroundColor: theme.colors.tabBarBackground,
+      borderTopColor: theme.colors.tabBarBorder,
+      borderTopWidth: 1,
       paddingTop: PHONE_TAB_BAR_VERTICAL_PADDING,
       paddingBottom: PHONE_TAB_BAR_VERTICAL_PADDING,
       height: PHONE_TAB_BAR_HEIGHT,
-      shadowOpacity: 0,
-      shadowRadius: 0,
-      elevation: 0,
     },
     phoneTabBarItem: {
-      marginHorizontal: 0,
-      marginVertical: 2,
-      minHeight: 54,
       borderRadius: 0,
-      backgroundColor: 'transparent',
+    },
+    customTabBarBlur: {
+      borderRadius: 35,
+      overflow: 'hidden',
+      backgroundColor: 'rgba(24, 47, 80, 0.85)',
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.08)',
+    },
+    customTabBarContainer: {
+      flexDirection: 'row',
+      height: 72,
+      alignItems: 'center',
+      justifyContent: 'space-around',
+      paddingHorizontal: 8,
+    },
+    customTabItem: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+    },
+    customTabIconWrapper: {
+      width: 48,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 4,
+    },
+    customTabIconWrapperActive: {
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    },
+    slidingIndicator: {
+      position: 'absolute',
+      top: 20,
+    },
+    customTabText: {
+      fontSize: 10,
+      fontWeight: '500',
+      color: '#94a3b8',
+    },
+    customTabTextActive: {
+      color: '#FFFFFF',
+      fontWeight: '600',
     },
     phoneTabBarLabel: {
       fontSize: 11,
-      fontWeight: '600',
-      marginBottom: 2,
-    },
-    phoneTabBarIcon: {
-      marginTop: 3,
-    },
-    phoneTabBarIconShell: {
-      width: 40,
-      height: 30,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    phoneTabBarIconGlow: {
-      position: 'absolute',
-      width: 34,
-      height: 34,
-      borderRadius: 999,
-      backgroundColor: theme.isDark ? 'rgba(125,211,252,0.12)' : 'rgba(96,165,250,0.10)',
-      shadowColor: theme.isDark ? '#7dd3fc' : '#93c5fd',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: theme.isDark ? 0.26 : 0.12,
-      shadowRadius: 16,
-      elevation: 0,
-    },
-    phoneTabBarIconGlyphFocused: {
-      textShadowColor: theme.isDark ? 'rgba(186,230,253,0.42)' : 'rgba(147,197,253,0.26)',
-      textShadowOffset: { width: 0, height: 0 },
-      textShadowRadius: 12,
+      fontWeight: '500',
     },
     tabletRailContainer: {
       alignSelf: 'stretch',
