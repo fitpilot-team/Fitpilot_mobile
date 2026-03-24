@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Button, LoadingSpinner } from '../common';
 import { borderRadius, brandColors, colors, fontSize, spacing } from '../../constants/colors';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { ClientDietMenu } from '../../types';
 
 interface DietMenuSelectorModalProps {
@@ -38,6 +39,8 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
   onRetry,
   onSelect,
 }) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const { height } = useWindowDimensions();
   const availableHeight = Math.max(240, height - spacing.lg);
   const sheetHeight = Math.min(Math.max(height * 0.82, 320), availableHeight);
@@ -61,7 +64,7 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
               </Text>
             </View>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Ionicons name="close-outline" size={24} color={colors.gray[600]} />
+              <Ionicons name="close-outline" size={24} color={theme.colors.icon} />
             </TouchableOpacity>
           </View>
 
@@ -71,7 +74,7 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
             </View>
           ) : error && menus.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="alert-circle-outline" size={36} color={colors.gray[400]} />
+              <Ionicons name="alert-circle-outline" size={36} color={theme.colors.iconMuted} />
               <Text style={styles.emptyTitle}>No pudimos cargar el pool</Text>
               <Text style={styles.emptyText}>{error}</Text>
               {onRetry ? (
@@ -85,7 +88,7 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
             </View>
           ) : menus.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="restaurant-outline" size={36} color={colors.gray[400]} />
+              <Ionicons name="restaurant-outline" size={36} color={theme.colors.iconMuted} />
               <Text style={styles.emptyTitle}>Sin menus disponibles</Text>
               <Text style={styles.emptyText}>
                 Esta fecha no tiene alternativas visibles en el pool.
@@ -119,7 +122,7 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
                         <Ionicons
                           name={isSelected ? 'checkmark' : 'ellipse-outline'}
                           size={18}
-                          color={isSelected ? colors.white : colors.gray[400]}
+                          color={isSelected ? (theme.isDark ? theme.colors.background : colors.white) : theme.colors.iconMuted}
                         />
                       </View>
                     </View>
@@ -159,184 +162,185 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-  },
-  container: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
-  },
-  headerCopy: {
-    flex: 1,
-    paddingRight: spacing.md,
-  },
-  title: {
-    color: colors.gray[900],
-    fontSize: fontSize.xl,
-    fontWeight: '800',
-  },
-  subtitle: {
-    marginTop: spacing.xs,
-    color: colors.gray[700],
-    fontSize: fontSize.base,
-    fontWeight: '600',
-  },
-  supportingText: {
-    marginTop: spacing.xs,
-    color: colors.gray[500],
-    fontSize: fontSize.sm,
-    lineHeight: 20,
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.gray[100],
-  },
-  loadingState: {
-    flex: 1,
-    minHeight: 220,
-    justifyContent: 'center',
-  },
-  emptyState: {
-    flex: 1,
-    minHeight: 220,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-  },
-  emptyTitle: {
-    marginTop: spacing.md,
-    color: colors.gray[900],
-    fontSize: fontSize.lg,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  emptyText: {
-    marginTop: spacing.sm,
-    color: colors.gray[500],
-    fontSize: fontSize.base,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: spacing.lg,
-    minWidth: 160,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xl,
-    gap: spacing.md,
-  },
-  optionCard: {
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-    backgroundColor: colors.white,
-    padding: spacing.md,
-  },
-  optionCardSelected: {
-    borderColor: `${brandColors.sky}80`,
-    backgroundColor: `${brandColors.sky}10`,
-  },
-  optionHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
-  optionCopy: {
-    flex: 1,
-  },
-  optionTitle: {
-    color: colors.gray[900],
-    fontSize: fontSize.base,
-    fontWeight: '800',
-  },
-  optionSubtitle: {
-    marginTop: spacing.xs,
-    color: colors.gray[500],
-    fontSize: fontSize.sm,
-    lineHeight: 20,
-  },
-  checkCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.gray[100],
-  },
-  checkCircleSelected: {
-    backgroundColor: brandColors.navy,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  metaChip: {
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    backgroundColor: colors.gray[100],
-  },
-  metaChipText: {
-    color: colors.gray[600],
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  badge: {
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-  },
-  assignedBadge: {
-    backgroundColor: `${brandColors.navy}12`,
-  },
-  previewBadge: {
-    backgroundColor: `${brandColors.sky}16`,
-  },
-  badgeText: {
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  assignedBadgeText: {
-    color: brandColors.navy,
-  },
-  previewBadgeText: {
-    color: brandColors.sky,
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: theme.colors.overlay,
+    },
+    container: {
+      backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: borderRadius.xl,
+      borderTopRightRadius: borderRadius.xl,
+      overflow: 'hidden',
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    headerCopy: {
+      flex: 1,
+      paddingRight: spacing.md,
+    },
+    title: {
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.xl,
+      fontWeight: '800',
+    },
+    subtitle: {
+      marginTop: spacing.xs,
+      color: theme.colors.textSecondary,
+      fontSize: fontSize.base,
+      fontWeight: '600',
+    },
+    supportingText: {
+      marginTop: spacing.xs,
+      color: theme.colors.textMuted,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+    },
+    closeButton: {
+      width: 36,
+      height: 36,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    loadingState: {
+      flex: 1,
+      minHeight: 220,
+      justifyContent: 'center',
+    },
+    emptyState: {
+      flex: 1,
+      minHeight: 220,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.xl,
+    },
+    emptyTitle: {
+      marginTop: spacing.md,
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.lg,
+      fontWeight: '800',
+      textAlign: 'center',
+    },
+    emptyText: {
+      marginTop: spacing.sm,
+      color: theme.colors.textMuted,
+      fontSize: fontSize.base,
+      lineHeight: 22,
+      textAlign: 'center',
+    },
+    retryButton: {
+      marginTop: spacing.lg,
+      minWidth: 160,
+    },
+    content: {
+      flex: 1,
+    },
+    contentContainer: {
+      padding: spacing.lg,
+      paddingBottom: spacing.xl,
+      gap: spacing.md,
+    },
+    optionCard: {
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.card,
+      padding: spacing.md,
+    },
+    optionCardSelected: {
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.primarySoft,
+    },
+    optionHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.md,
+    },
+    optionCopy: {
+      flex: 1,
+    },
+    optionTitle: {
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.base,
+      fontWeight: '800',
+    },
+    optionSubtitle: {
+      marginTop: spacing.xs,
+      color: theme.colors.textSecondary,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+    },
+    checkCircle: {
+      width: 28,
+      height: 28,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    checkCircleSelected: {
+      backgroundColor: theme.colors.primary,
+    },
+    metaRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    metaChip: {
+      borderRadius: borderRadius.full,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 6,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    metaChipText: {
+      color: theme.colors.textSecondary,
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    badgeRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    badge: {
+      borderRadius: borderRadius.full,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 5,
+    },
+    assignedBadge: {
+      backgroundColor: theme.isDark ? 'rgba(96, 165, 250, 0.16)' : `${brandColors.navy}12`,
+    },
+    previewBadge: {
+      backgroundColor: theme.isDark ? 'rgba(103, 182, 223, 0.18)' : `${brandColors.sky}16`,
+    },
+    badgeText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    assignedBadgeText: {
+      color: theme.isDark ? theme.colors.primary : brandColors.navy,
+    },
+    previewBadgeText: {
+      color: brandColors.sky,
+    },
+  });
 
 export default DietMenuSelectorModal;

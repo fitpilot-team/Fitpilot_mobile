@@ -36,12 +36,20 @@ const formatMeasureValue = (value: number | null, suffix: string) => {
   return `${Number.isInteger(value) ? value : Number(value.toFixed(2))} ${suffix}`;
 };
 
-const buildIngredientMeta = (ingredient: ClientDietIngredientRow) =>
-  [
-    ingredient.portion.householdLabel,
-    formatMeasureValue(ingredient.portion.equivalents, 'eq'),
-    formatMeasureValue(ingredient.portion.grams, 'g'),
-  ].filter(Boolean) as string[];
+const METRIC_MEASURE_PATTERN = /(^|\s)(g|gr|gramo|gramos|kg|kilo|kilos|ml|mililitro|mililitros|l|litro|litros)$/i;
+
+const getIngredientMeasure = (ingredient: ClientDietIngredientRow) => {
+  if (ingredient.portion.grams !== null) {
+    return formatMeasureValue(ingredient.portion.grams, 'g');
+  }
+
+  const householdLabel = ingredient.portion.householdLabel?.trim();
+  if (!householdLabel) {
+    return null;
+  }
+
+  return METRIC_MEASURE_PATTERN.test(householdLabel) ? householdLabel : null;
+};
 
 const IngredientCard = ({
   ingredient,
@@ -52,7 +60,8 @@ const IngredientCard = ({
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
-  const meta = useMemo(() => buildIngredientMeta(ingredient), [ingredient]);
+  const measure = useMemo(() => getIngredientMeasure(ingredient), [ingredient]);
+  const hasPortionData = Boolean(ingredient.portion.householdLabel || measure);
 
   return (
     <View style={styles.ingredientCard}>
@@ -68,13 +77,20 @@ const IngredientCard = ({
         </View>
       </View>
 
-      {meta.length ? (
+      {hasPortionData ? (
         <View style={styles.ingredientMetaRow}>
-          {meta.map((item) => (
-            <View key={`${ingredient.id}-${item}`} style={styles.ingredientMetaPill}>
-              <Text style={styles.ingredientMetaText}>{item}</Text>
-            </View>
-          ))}
+          <View style={styles.ingredientMetaItem}>
+            <Text style={styles.ingredientMetaLabel}>Unidad casera</Text>
+            <Text numberOfLines={1} style={styles.ingredientMetaValue}>
+              {ingredient.portion.householdLabel || '—'}
+            </Text>
+          </View>
+          <View style={styles.ingredientMetaItem}>
+            <Text style={styles.ingredientMetaLabel}>Medida</Text>
+            <Text numberOfLines={1} style={[styles.ingredientMetaValue, styles.ingredientMetaValueRight]}>
+              {measure || '—'}
+            </Text>
+          </View>
         </View>
       ) : (
         <Text style={[styles.ingredientEmptyMeta, theme.isDark ? styles.ingredientEmptyMetaDark : null]}>
@@ -437,7 +453,12 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       flexWrap: 'wrap',
       gap: spacing.sm,
     },
-    ingredientMetaPill: {
+    ingredientMetaItem: {
+      flex: 1,
+      minWidth: 132,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       borderRadius: borderRadius.md,
       borderWidth: 1,
       borderColor: theme.colors.border,
@@ -445,10 +466,22 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.sm,
     },
-    ingredientMetaText: {
+    ingredientMetaLabel: {
+      color: theme.colors.textMuted,
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    ingredientMetaValue: {
       color: theme.colors.textSecondary,
       fontSize: fontSize.sm,
       fontWeight: '700',
+      flexShrink: 1,
+      marginLeft: spacing.sm,
+    },
+    ingredientMetaValueRight: {
+      textAlign: 'right',
     },
     ingredientEmptyMeta: {
       color: colors.gray[500],

@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import {
   Alert,
   RefreshControl,
@@ -81,15 +82,18 @@ const getChangeAppearance = (
 };
 
 export default function MeasurementsScreen() {
+  const isFocused = useIsFocused();
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset(72);
   const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
   const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
+  const wasFocusedRef = useRef(false);
   const [measurements, setMeasurements] = useState<MeasurementHistoryItem[]>([]);
   const [pagination, setPagination] = useState<MeasurementPagination | null>(null);
   const [detailCache, setDetailCache] = useState<Record<string, MeasurementDetail>>({});
+  const [hasLoadedMeasurements, setHasLoadedMeasurements] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -137,6 +141,7 @@ export default function MeasurementsScreen() {
         const apiError = loadError as ApiError;
         setError(apiError.message || 'No fue posible cargar tus medidas.');
       } finally {
+        setHasLoadedMeasurements(true);
         setIsLoading(false);
         setIsRefreshing(false);
         setIsLoadingMore(false);
@@ -152,6 +157,25 @@ export default function MeasurementsScreen() {
   useEffect(() => {
     void initializeMeasurementPreference();
   }, [initializeMeasurementPreference]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      wasFocusedRef.current = false;
+      setIsDetailVisible(false);
+      setSelectedMeasurementId(null);
+      setIsDetailLoading(false);
+      setIsFormVisible(false);
+      return;
+    }
+
+    const didRegainFocus = !wasFocusedRef.current;
+    wasFocusedRef.current = true;
+
+    if (didRegainFocus && ((!hasLoadedMeasurements && !isLoading) || error)) {
+      setIsLoading(true);
+      void loadMeasurements();
+    }
+  }, [error, hasLoadedMeasurements, isFocused, isLoading, loadMeasurements]);
 
   const summaryMetrics = useMemo(() => {
     if (!latestMeasurement) {
@@ -694,14 +718,14 @@ export default function MeasurementsScreen() {
       />
 
       <MeasurementDetailModal
-        visible={isDetailVisible}
+        visible={isFocused && isDetailVisible}
         detail={selectedMeasurementDetail}
         isLoading={isDetailLoading}
         onClose={handleCloseDetail}
       />
 
       <MeasurementFormModal
-        visible={isFormVisible}
+        visible={isFocused && isFormVisible}
         isSubmitting={isSubmitting}
         onClose={() => setIsFormVisible(false)}
         onSubmit={handleCreateMeasurement}
