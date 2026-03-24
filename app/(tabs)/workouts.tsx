@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Button, Card, LoadingSpinner } from '../../src/components/common';
+import { Button, Card, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
 import AnalyticsRangeSelector from '../../src/components/workout-analytics/AnalyticsRangeSelector';
 import ExerciseSparkline from '../../src/components/workout-analytics/ExerciseSparkline';
 import RepRangeEditorModal from '../../src/components/workout-analytics/RepRangeEditorModal';
@@ -278,157 +278,159 @@ export default function WorkoutsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Entrenamientos</Text>
-        <Text style={styles.subtitle}>Historial real y progreso de carga por ejercicio</Text>
-      </View>
+    <TabScreenWrapper>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Entrenamientos</Text>
+          <Text style={styles.subtitle}>Historial real y progreso de carga por ejercicio</Text>
+        </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
-        onScroll={tabBarScroll.onScroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor={theme.colors.primary}
-          />
-        }
-        scrollEventThrottle={tabBarScroll.scrollEventThrottle}
-      >
-        <AnalyticsRangeSelector value={range} onChange={setRange} />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
+          onScroll={tabBarScroll.onScroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={theme.colors.primary}
+            />
+          }
+          scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+        >
+          <AnalyticsRangeSelector value={range} onChange={setRange} />
 
-        {error ? (
-          <Card style={styles.errorCard}>
-            <Text style={styles.errorTitle}>No fue posible cargar tus datos</Text>
-            <Text style={styles.errorText}>{error}</Text>
-            <Button title="Reintentar" onPress={() => void loadDashboard()} />
+          {error ? (
+            <Card style={styles.errorCard}>
+              <Text style={styles.errorTitle}>No fue posible cargar tus datos</Text>
+              <Text style={styles.errorText}>{error}</Text>
+              <Button title="Reintentar" onPress={() => void loadDashboard()} />
+            </Card>
+          ) : null}
+
+          {summaryCards.length ? (
+            <View style={styles.summaryGrid}>
+              {summaryCards.map((card) => (
+                <SummaryCard key={card.label} value={card.value} label={card.label} icon={card.icon} />
+              ))}
+            </View>
+          ) : null}
+
+          <Card style={styles.chartCard}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Kg movidos por rango</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {dashboard?.summary.total_volume_kg
+                    ? `${formatVolumeKg(dashboard.summary.total_volume_kg)} acumulados en la ventana`
+                    : 'Sin carga registrada en esta ventana'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.editButton}
+                activeOpacity={0.85}
+                onPress={() => setIsRangeEditorVisible(true)}
+              >
+                <Ionicons name="options-outline" size={16} color={theme.colors.primary} />
+                <Text style={styles.editButtonText}>Editar</Text>
+              </TouchableOpacity>
+            </View>
+
+            <RepRangeVolumeChart
+              points={dashboard?.rep_range_chart ?? []}
+              repRanges={dashboard?.preferences.rep_ranges ?? []}
+              contentWidth={contentWidth}
+            />
           </Card>
-        ) : null}
 
-        {summaryCards.length ? (
-          <View style={styles.summaryGrid}>
-            {summaryCards.map((card) => (
-              <SummaryCard key={card.label} value={card.value} label={card.label} icon={card.icon} />
-            ))}
-          </View>
-        ) : null}
-
-        <Card style={styles.chartCard}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>Kg movidos por rango</Text>
-              <Text style={styles.sectionSubtitle}>
-                {dashboard?.summary.total_volume_kg
-                  ? `${formatVolumeKg(dashboard.summary.total_volume_kg)} acumulados en la ventana`
-                  : 'Sin carga registrada en esta ventana'}
-              </Text>
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Ejercicios</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {hasRangeData
+                    ? 'Toca un ejercicio para abrir su detalle temporal.'
+                    : 'No hay progresos visibles en la ventana actual.'}
+                </Text>
+              </View>
             </View>
-            <TouchableOpacity
-              style={styles.editButton}
-              activeOpacity={0.85}
-              onPress={() => setIsRangeEditorVisible(true)}
-            >
-              <Ionicons name="options-outline" size={16} color={theme.colors.primary} />
-              <Text style={styles.editButtonText}>Editar</Text>
-            </TouchableOpacity>
+
+            {!hasAnyHistory ? (
+              <Card style={styles.emptyCard}>
+                <Ionicons name="analytics-outline" size={42} color={theme.colors.iconMuted} />
+                <Text style={styles.emptyTitle}>Todavia no tienes historial</Text>
+                <Text style={styles.emptyText}>
+                  Cuando completes tus primeras sesiones veras aqui tus graficas y ejercicios.
+                </Text>
+                <Button title="Ir a inicio" onPress={() => router.push('/(tabs)')} />
+              </Card>
+            ) : null}
+
+            {hasAnyHistory && !hasRangeData ? (
+              <Card style={styles.emptyCard}>
+                <Ionicons name="filter-outline" size={40} color={theme.colors.iconMuted} />
+                <Text style={styles.emptyTitle}>Sin datos en este rango</Text>
+                <Text style={styles.emptyText}>
+                  Cambia la ventana temporal para recuperar el progreso de tus ejercicios.
+                </Text>
+                <Button title="Ver todo" onPress={() => setRange('all')} />
+              </Card>
+            ) : null}
+
+            {hasRangeData
+              ? dashboard?.exercise_summaries.map((exercise) => (
+                  <ExerciseCard
+                    key={exercise.exercise_id}
+                    exercise={exercise}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/workouts/exercises/[exerciseId]',
+                        params: { exerciseId: exercise.exercise_id, range },
+                      })
+                    }
+                  />
+                ))
+              : null}
           </View>
 
-          <RepRangeVolumeChart
-            points={dashboard?.rep_range_chart ?? []}
-            repRanges={dashboard?.preferences.rep_ranges ?? []}
-            contentWidth={contentWidth}
-          />
-        </Card>
-
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>Ejercicios</Text>
-              <Text style={styles.sectionSubtitle}>
-                {hasRangeData
-                  ? 'Toca un ejercicio para abrir su detalle temporal.'
-                  : 'No hay progresos visibles en la ventana actual.'}
-              </Text>
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Historial</Text>
+                <Text style={styles.sectionSubtitle}>Abre cualquier sesion para revisar o editar el log.</Text>
+              </View>
             </View>
-          </View>
 
-          {!hasAnyHistory ? (
-            <Card style={styles.emptyCard}>
-              <Ionicons name="analytics-outline" size={42} color={theme.colors.iconMuted} />
-              <Text style={styles.emptyTitle}>Todavia no tienes historial</Text>
-              <Text style={styles.emptyText}>
-                Cuando completes tus primeras sesiones veras aqui tus graficas y ejercicios.
-              </Text>
-              <Button title="Ir a inicio" onPress={() => router.push('/(tabs)')} />
-            </Card>
-          ) : null}
-
-          {hasAnyHistory && !hasRangeData ? (
-            <Card style={styles.emptyCard}>
-              <Ionicons name="filter-outline" size={40} color={theme.colors.iconMuted} />
-              <Text style={styles.emptyTitle}>Sin datos en este rango</Text>
-              <Text style={styles.emptyText}>
-                Cambia la ventana temporal para recuperar el progreso de tus ejercicios.
-              </Text>
-              <Button title="Ver todo" onPress={() => setRange('all')} />
-            </Card>
-          ) : null}
-
-          {hasRangeData
-            ? dashboard?.exercise_summaries.map((exercise) => (
-                <ExerciseCard
-                  key={exercise.exercise_id}
-                  exercise={exercise}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/workouts/exercises/[exerciseId]',
-                      params: { exerciseId: exercise.exercise_id, range },
-                    })
-                  }
+            {dashboard?.recent_history.length ? (
+              dashboard.recent_history.map((workout) => (
+                <HistoryCard
+                  key={workout.workout_log_id}
+                  workout={workout}
+                  onPress={() => router.push(`/workout/${workout.workout_log_id}`)}
                 />
               ))
-            : null}
-        </View>
-
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>Historial</Text>
-              <Text style={styles.sectionSubtitle}>Abre cualquier sesion para revisar o editar el log.</Text>
-            </View>
+            ) : (
+              <Card style={styles.emptyCard}>
+                <Ionicons name="barbell-outline" size={40} color={theme.colors.iconMuted} />
+                <Text style={styles.emptyTitle}>Sin sesiones recientes</Text>
+                <Text style={styles.emptyText}>
+                  Tu historial aparecera aqui en cuanto registres entrenamientos.
+                </Text>
+              </Card>
+            )}
           </View>
+        </ScrollView>
 
-          {dashboard?.recent_history.length ? (
-            dashboard.recent_history.map((workout) => (
-              <HistoryCard
-                key={workout.workout_log_id}
-                workout={workout}
-                onPress={() => router.push(`/workout/${workout.workout_log_id}`)}
-              />
-            ))
-          ) : (
-            <Card style={styles.emptyCard}>
-              <Ionicons name="barbell-outline" size={40} color={theme.colors.iconMuted} />
-              <Text style={styles.emptyTitle}>Sin sesiones recientes</Text>
-              <Text style={styles.emptyText}>
-                Tu historial aparecera aqui en cuanto registres entrenamientos.
-              </Text>
-            </Card>
-          )}
-        </View>
-      </ScrollView>
-
-      <RepRangeEditorModal
-        visible={isRangeEditorVisible}
-        repRanges={dashboard?.preferences.rep_ranges ?? []}
-        isSaving={isSavingRanges}
-        onClose={() => setIsRangeEditorVisible(false)}
-        onSave={handleSaveRepRanges}
-      />
-    </SafeAreaView>
+        <RepRangeEditorModal
+          visible={isRangeEditorVisible}
+          repRanges={dashboard?.preferences.rep_ranges ?? []}
+          isSaving={isSavingRanges}
+          onClose={() => setIsRangeEditorVisible(false)}
+          onSave={handleSaveRepRanges}
+        />
+      </SafeAreaView>
+    </TabScreenWrapper>
   );
 }
 

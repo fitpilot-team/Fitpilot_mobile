@@ -7,3 +7,4 @@ export { LoadingSpinner } from './LoadingSpinner';
 export { Logo } from './Logo';
 export { GlassCard } from './GlassCard';
 export { Skeleton, WorkoutCardSkeleton, ChartSkeleton, StatCardSkeleton, ListItemSkeleton } from './Skeleton';
+export { TabScreenWrapper } from './TabScreenWrapper';

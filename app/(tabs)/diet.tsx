@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Button, Card, LoadingSpinner } from '../../src/components/common';
+import { Button, Card, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
 import {
   DietHero,
   DietMealCard,
@@ -259,164 +259,166 @@ export default function DietScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView
-        style={styles.scrollView}
-        contentInsetAdjustmentBehavior="automatic"
-        onScroll={tabBarScroll.onScroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => loadDiet('refresh')}
-            tintColor={brandColors.navy}
-          />
-        }
-        scrollEventThrottle={tabBarScroll.scrollEventThrottle}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View entering={FadeInDown.duration(350)} style={styles.header}>
-          <Text style={styles.eyebrow}>Nutricion</Text>
-          <Text style={styles.title}>Dieta</Text>
-          <Text style={styles.subtitle}>
-            Consulta tu plan alimenticio del dia y las recetas asignadas.
-          </Text>
-        </Animated.View>
+    <TabScreenWrapper>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ScrollView
+          style={styles.scrollView}
+          contentInsetAdjustmentBehavior="automatic"
+          onScroll={tabBarScroll.onScroll}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadDiet('refresh')}
+              tintColor={brandColors.navy}
+            />
+          }
+          scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View entering={FadeInDown.duration(350)} style={styles.header}>
+            <Text style={styles.eyebrow}>Nutricion</Text>
+            <Text style={styles.title}>Dieta</Text>
+            <Text style={styles.subtitle}>
+              Consulta tu plan alimenticio del dia y las recetas asignadas.
+            </Text>
+          </Animated.View>
 
-        {selectedDay ? (
-          <>
-            <Animated.View entering={FadeInDown.delay(80).duration(350)}>
-              <DietWeekCalendar
-                days={dietDays}
-                selectedDate={selectedDate}
-                onSelect={setSelectedDate}
-                contentWidth={contentWidth}
-              />
-            </Animated.View>
-
-            {visibleMenu ? (
-              <Animated.View entering={FadeInDown.delay(140).duration(350)} style={styles.heroSection}>
-                <DietHero
-                  menu={visibleMenu}
-                  assignedDate={selectedDay.assignedDate}
-                  isToday={selectedDay.isToday}
-                  isPreview={isPreviewMenu}
+          {selectedDay ? (
+            <>
+              <Animated.View entering={FadeInDown.delay(80).duration(350)}>
+                <DietWeekCalendar
+                  days={dietDays}
+                  selectedDate={selectedDate}
+                  onSelect={setSelectedDate}
+                  contentWidth={contentWidth}
                 />
               </Animated.View>
-            ) : null}
 
-            <Animated.View entering={FadeInDown.delay(180).duration(350)} style={styles.selectorSection}>
-              <TouchableOpacity
-                style={[
-                  styles.selectorCard,
-                  !hasAvailablePool && styles.selectorCardDisabled,
-                ]}
-                onPress={handleOpenMenuSelector}
-                disabled={!hasAvailablePool}
-                activeOpacity={0.85}
-              >
-                <View style={styles.selectorCopy}>
-                  <Text style={styles.selectorEyebrow}>Menu visible</Text>
-                  <Text style={styles.selectorTitle}>
-                    {visibleMenu?.title || 'Sin menu asignado'}
-                  </Text>
-                  <Text style={styles.selectorSubtitle}>{selectorSubtitle}</Text>
+              {visibleMenu ? (
+                <Animated.View entering={FadeInDown.delay(140).duration(350)} style={styles.heroSection}>
+                  <DietHero
+                    menu={visibleMenu}
+                    assignedDate={selectedDay.assignedDate}
+                    isToday={selectedDay.isToday}
+                    isPreview={isPreviewMenu}
+                  />
+                </Animated.View>
+              ) : null}
+
+              <Animated.View entering={FadeInDown.delay(180).duration(350)} style={styles.selectorSection}>
+                <TouchableOpacity
+                  style={[
+                    styles.selectorCard,
+                    !hasAvailablePool && styles.selectorCardDisabled,
+                  ]}
+                  onPress={handleOpenMenuSelector}
+                  disabled={!hasAvailablePool}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.selectorCopy}>
+                    <Text style={styles.selectorEyebrow}>Menu visible</Text>
+                    <Text style={styles.selectorTitle}>
+                      {visibleMenu?.title || 'Sin menu asignado'}
+                    </Text>
+                    <Text style={styles.selectorSubtitle}>{selectorSubtitle}</Text>
+                  </View>
+
+                  <View style={styles.selectorAction}>
+                    {menuPoolLoadingByDate[selectedDate] ? (
+                      <ActivityIndicator size="small" color={nutritionTheme.accentStrong} />
+                    ) : (
+                      <Ionicons
+                        name={hasAvailablePool ? 'chevron-forward-outline' : 'remove-outline'}
+                        size={20}
+                        color={hasAvailablePool ? nutritionTheme.accentStrong : theme.colors.iconMuted}
+                      />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
+
+              <Animated.View entering={FadeInDown.delay(220).duration(350)} style={styles.mealsSection}>
+                <View style={styles.sectionHeader}>
+                  <View>
+                    <Text style={styles.sectionTitle}>Comidas del dia</Text>
+                    <Text style={styles.sectionSubtitle}>
+                      {visibleMenu
+                        ? `${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} organizados para ti`
+                        : 'No hay comidas programadas para esta fecha'}
+                    </Text>
+                  </View>
                 </View>
 
-                <View style={styles.selectorAction}>
-                  {menuPoolLoadingByDate[selectedDate] ? (
-                    <ActivityIndicator size="small" color={nutritionTheme.accentStrong} />
-                  ) : (
-                    <Ionicons
-                      name={hasAvailablePool ? 'chevron-forward-outline' : 'remove-outline'}
-                      size={20}
-                      color={hasAvailablePool ? nutritionTheme.accentStrong : theme.colors.iconMuted}
-                    />
-                  )}
-                </View>
-              </TouchableOpacity>
-            </Animated.View>
-
-            <Animated.View entering={FadeInDown.delay(220).duration(350)} style={styles.mealsSection}>
-              <View style={styles.sectionHeader}>
-                <View>
-                  <Text style={styles.sectionTitle}>Comidas del dia</Text>
-                  <Text style={styles.sectionSubtitle}>
-                    {visibleMenu
-                      ? `${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} organizados para ti`
-                      : 'No hay comidas programadas para esta fecha'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.mealList}>
-                {visibleMenu ? (
-                  visibleMenu.meals.length > 0 ? (
-                    visibleMenu.meals.map((meal, index) => (
-                      <Animated.View
-                        key={`${selectedDay.assignedDate}-${visibleMenu.menuId}-${renderVersion}-${meal.id}`}
-                        entering={FadeInDown.delay(300 + index * 60).duration(320)}
-                      >
-                        <DietMealCard meal={meal} />
-                      </Animated.View>
-                    ))
+                <View style={styles.mealList}>
+                  {visibleMenu ? (
+                    visibleMenu.meals.length > 0 ? (
+                      visibleMenu.meals.map((meal, index) => (
+                        <Animated.View
+                          key={`${selectedDay.assignedDate}-${visibleMenu.menuId}-${renderVersion}-${meal.id}`}
+                          entering={FadeInDown.delay(300 + index * 60).duration(320)}
+                        >
+                          <DietMealCard meal={meal} />
+                        </Animated.View>
+                      ))
+                    ) : (
+                      <Card style={styles.noMealsCard}>
+                        <Text style={styles.noMealsTitle}>Sin comidas cargadas</Text>
+                        <Text style={styles.noMealsText}>
+                          Tu menu fue encontrado, pero este dia todavia no contiene bloques de comida visibles.
+                        </Text>
+                      </Card>
+                    )
                   ) : (
                     <Card style={styles.noMealsCard}>
-                      <Text style={styles.noMealsTitle}>Sin comidas cargadas</Text>
+                      <Text style={styles.noMealsTitle}>Sin menu asignado</Text>
                       <Text style={styles.noMealsText}>
-                        Tu menu fue encontrado, pero este dia todavia no contiene bloques de comida visibles.
+                        No tienes un menu cargado para {formatLongDate(selectedDay.assignedDate)}.
                       </Text>
                     </Card>
-                  )
-                ) : (
-                  <Card style={styles.noMealsCard}>
-                    <Text style={styles.noMealsTitle}>Sin menu asignado</Text>
-                    <Text style={styles.noMealsText}>
-                      No tienes un menu cargado para {formatLongDate(selectedDay.assignedDate)}.
-                    </Text>
-                  </Card>
-                )}
-              </View>
+                  )}
+                </View>
+              </Animated.View>
+            </>
+          ) : (
+            <Animated.View entering={FadeInDown.delay(80).duration(350)} style={styles.emptyStateWrapper}>
+              <Card style={styles.emptyCard}>
+                <View style={styles.emptyIcon}>
+                  <Ionicons name={error ? 'alert-circle-outline' : 'restaurant-outline'} size={30} color={nutritionTheme.accentStrong} />
+                </View>
+                <Text style={styles.emptyTitle}>
+                  {error ? 'No pudimos cargar tu dieta' : 'Todavia no tienes una dieta asignada'}
+                </Text>
+                <Text style={styles.emptyText}>
+                  {error
+                    ? error
+                    : 'Cuando tu nutriologo publique un plan, aparecera aqui con sus comidas y recetas.'}
+                </Text>
+                <Button
+                  title="Reintentar"
+                  onPress={() => loadDiet()}
+                  variant="primary"
+                  style={styles.retryButton}
+                />
+              </Card>
             </Animated.View>
-          </>
-        ) : (
-          <Animated.View entering={FadeInDown.delay(80).duration(350)} style={styles.emptyStateWrapper}>
-            <Card style={styles.emptyCard}>
-              <View style={styles.emptyIcon}>
-                <Ionicons name={error ? 'alert-circle-outline' : 'restaurant-outline'} size={30} color={nutritionTheme.accentStrong} />
-              </View>
-              <Text style={styles.emptyTitle}>
-                {error ? 'No pudimos cargar tu dieta' : 'Todavia no tienes una dieta asignada'}
-              </Text>
-              <Text style={styles.emptyText}>
-                {error
-                  ? error
-                  : 'Cuando tu nutriologo publique un plan, aparecera aqui con sus comidas y recetas.'}
-              </Text>
-              <Button
-                title="Reintentar"
-                onPress={() => loadDiet()}
-                variant="primary"
-                style={styles.retryButton}
-              />
-            </Card>
-          </Animated.View>
-        )}
-      </ScrollView>
+          )}
+        </ScrollView>
 
-      <DietMenuSelectorModal
-        visible={isMenuSelectorVisible && Boolean(selectedDay?.assignedMenuId)}
-        dateLabel={selectedDay ? formatLongDate(selectedDay.assignedDate) : ''}
-        menus={selectedPoolMenus}
-        selectedMenuId={visibleMenu?.menuId ?? selectedDay?.assignedMenuId ?? null}
-        assignedMenuId={selectedDay?.assignedMenuId ?? null}
-        isLoading={Boolean(menuPoolLoadingByDate[selectedDate])}
-        error={menuPoolErrorByDate[selectedDate]}
-        onClose={handleCloseMenuSelector}
-        onRetry={handleRetryMenuPool}
-        onSelect={handleSelectPreviewMenu}
-      />
-    </SafeAreaView>
+        <DietMenuSelectorModal
+          visible={isMenuSelectorVisible && Boolean(selectedDay?.assignedMenuId)}
+          dateLabel={selectedDay ? formatLongDate(selectedDay.assignedDate) : ''}
+          menus={selectedPoolMenus}
+          selectedMenuId={visibleMenu?.menuId ?? selectedDay?.assignedMenuId ?? null}
+          assignedMenuId={selectedDay?.assignedMenuId ?? null}
+          isLoading={Boolean(menuPoolLoadingByDate[selectedDate])}
+          error={menuPoolErrorByDate[selectedDate]}
+          onClose={handleCloseMenuSelector}
+          onRetry={handleRetryMenuPool}
+          onSelect={handleSelectPreviewMenu}
+        />
+      </SafeAreaView>
+    </TabScreenWrapper>
   );
 }
 

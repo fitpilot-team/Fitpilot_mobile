@@ -16,9 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 import { Card, LoadingSpinner } from '../../src/components/common';
-import { borderRadius, colors, fontSize, spacing } from '../../src/constants/colors';
+import { borderRadius, fontSize, spacing } from '../../src/constants/colors';
 import { getMeasurementProgressMetricConfig } from '../../src/constants/measurements';
 import { listMyMeasurements } from '../../src/services/measurements';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type { ApiError, MeasurementHistoryItem } from '../../src/types';
 import {
   formatMeasurementDate,
@@ -192,6 +193,8 @@ const buildAreaPath = (points: ChartPoint[], baselineY: number) => {
 export function MeasurementProgressScreen({
   metricKey = 'weight_kg',
 }: MeasurementProgressScreenProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const metricConfig = useMemo(
     () => getMeasurementProgressMetricConfig(metricKey),
     [metricKey],
@@ -529,10 +532,10 @@ export function MeasurementProgressScreen({
       ? 'Sin cambio'
       : `${totalChange > 0 ? '+' : ''}${formatMeasurementNumber(totalChange, metricValueDecimals)}${unitSuffix}`;
   const changeDirectionColor = totalChange === null || totalChange === 0
-    ? colors.gray[500]
+    ? theme.colors.textMuted
     : totalChange > 0
-      ? colors.primary[600]
-      : colors.success;
+      ? theme.colors.primary
+      : theme.colors.success;
 
   const linePath = buildLinePath(chartPoints);
   const baselineY = CHART_HEIGHT - CHART_VERTICAL_PADDING;
@@ -626,7 +629,7 @@ export function MeasurementProgressScreen({
             style={({ pressed }) => [styles.backButton, pressed ? styles.pressed : null]}
             onPress={() => router.back()}
           >
-            <Ionicons name="arrow-back" size={22} color={colors.gray[900]} />
+            <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
           </Pressable>
 
           <View style={styles.headerCopy}>
@@ -660,7 +663,7 @@ export function MeasurementProgressScreen({
           style={({ pressed }) => [styles.backButton, pressed ? styles.pressed : null]}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={22} color={colors.gray[900]} />
+          <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
         </Pressable>
 
         <View style={styles.headerCopy}>
@@ -682,7 +685,7 @@ export function MeasurementProgressScreen({
           <Ionicons
             name="phone-landscape-outline"
             size={16}
-            color={autoRotationEnabled ? colors.white : colors.gray[700]}
+            color={autoRotationEnabled ? theme.colors.surface : theme.colors.textSecondary}
           />
           <Text
             style={[
@@ -703,7 +706,7 @@ export function MeasurementProgressScreen({
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={() => void loadMeasurements({ refresh: true })}
-            tintColor={colors.primary[500]}
+            tintColor={theme.colors.primary}
           />
         }
       >
@@ -730,7 +733,7 @@ export function MeasurementProgressScreen({
 
         {!error && allRecords.length === 0 ? (
           <Card style={styles.emptyCard}>
-            <Ionicons name={metricIconName} size={40} color={colors.gray[300]} />
+            <Ionicons name={metricIconName} size={40} color={theme.colors.iconMuted} />
             <Text style={styles.emptyTitle}>Todavia no hay registros de {metricLabelLower}</Text>
             <Text style={styles.emptyText}>
               En cuanto existan registros validos de {metricLabelLower}, aqui vas a poder revisar la evolucion completa.
@@ -789,7 +792,7 @@ export function MeasurementProgressScreen({
                       onPress={() => openCalendar('start')}
                       style={({ pressed }) => [styles.dateButton, pressed ? styles.pressed : null]}
                     >
-                      <Ionicons name="calendar-outline" size={16} color={colors.gray[600]} />
+                      <Ionicons name="calendar-outline" size={16} color={theme.colors.icon} />
                       <View style={styles.dateButtonText}>
                         <Text style={styles.dateButtonLabel}>Desde</Text>
                         <Text style={styles.dateButtonValue}>{formatRangeDate(customStartDate)}</Text>
@@ -800,7 +803,7 @@ export function MeasurementProgressScreen({
                       onPress={() => openCalendar('end')}
                       style={({ pressed }) => [styles.dateButton, pressed ? styles.pressed : null]}
                     >
-                      <Ionicons name="calendar-outline" size={16} color={colors.gray[600]} />
+                      <Ionicons name="calendar-outline" size={16} color={theme.colors.icon} />
                       <View style={styles.dateButtonText}>
                         <Text style={styles.dateButtonLabel}>Hasta</Text>
                         <Text style={styles.dateButtonValue}>{formatRangeDate(customEndDate)}</Text>
@@ -827,8 +830,16 @@ export function MeasurementProgressScreen({
                     <Svg width={chartWidth} height={CHART_HEIGHT}>
                       <Defs>
                         <LinearGradient id="weightFill" x1="0" y1="0" x2="0" y2="1">
-                          <Stop offset="0%" stopColor="#60A5FA" stopOpacity="0.25" />
-                          <Stop offset="100%" stopColor="#60A5FA" stopOpacity="0.02" />
+                          <Stop
+                            offset="0%"
+                            stopColor={theme.colors.primary}
+                            stopOpacity={theme.isDark ? '0.32' : '0.25'}
+                          />
+                          <Stop
+                            offset="100%"
+                            stopColor={theme.colors.primary}
+                            stopOpacity={theme.isDark ? '0.06' : '0.02'}
+                          />
                         </LinearGradient>
                       </Defs>
 
@@ -844,7 +855,7 @@ export function MeasurementProgressScreen({
                             y1={y}
                             x2={chartWidth - CHART_HORIZONTAL_PADDING}
                             y2={y}
-                            stroke={colors.gray[200]}
+                            stroke={theme.colors.border}
                             strokeDasharray="4 8"
                             strokeWidth={1}
                           />
@@ -857,7 +868,7 @@ export function MeasurementProgressScreen({
                         <Path
                           d={linePath}
                           fill="none"
-                          stroke={colors.primary[500]}
+                          stroke={theme.colors.primary}
                           strokeWidth={3}
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -871,7 +882,7 @@ export function MeasurementProgressScreen({
                               cx={point.x}
                               cy={point.y}
                               r={10}
-                              fill="rgba(59, 130, 246, 0.14)"
+                              fill={theme.isDark ? 'rgba(96, 165, 250, 0.22)' : 'rgba(59, 130, 246, 0.14)'}
                             />
                           ) : null}
                           <Circle
@@ -893,10 +904,10 @@ export function MeasurementProgressScreen({
                             }
                             fill={
                               selectedPoint?.id === point.id || index === chartPoints.length - 1
-                                ? colors.primary[600]
-                                : colors.white
+                                ? theme.colors.primary
+                                : theme.colors.surface
                             }
-                            stroke={colors.primary[500]}
+                            stroke={theme.colors.primary}
                             strokeWidth={2}
                             onPress={() => setSelectedPointId(point.id)}
                           />
@@ -924,7 +935,7 @@ export function MeasurementProgressScreen({
                 </>
               ) : (
                 <View style={styles.filteredEmptyState}>
-                  <Ionicons name="calendar-outline" size={28} color={colors.gray[400]} />
+                  <Ionicons name="calendar-outline" size={28} color={theme.colors.iconMuted} />
                   <Text style={styles.filteredEmptyTitle}>No hay registros en este rango</Text>
                   <Text style={styles.filteredEmptyText}>
                     Ajusta el periodo o selecciona fechas distintas para ver la grafica.
@@ -968,7 +979,7 @@ export function MeasurementProgressScreen({
                         <Ionicons
                           name={isSelected ? 'radio-button-on-outline' : 'chevron-forward-outline'}
                           size={18}
-                          color={isSelected ? colors.primary[600] : colors.gray[400]}
+                          color={isSelected ? theme.colors.primary : theme.colors.iconMuted}
                         />
                       </Pressable>
                     );
@@ -1008,7 +1019,7 @@ export function MeasurementProgressScreen({
                   pressed ? styles.pressed : null,
                 ]}
               >
-                <Ionicons name="close-outline" size={22} color={colors.gray[700]} />
+                <Ionicons name="close-outline" size={22} color={theme.colors.textSecondary} />
               </Pressable>
             </View>
 
@@ -1020,7 +1031,7 @@ export function MeasurementProgressScreen({
                   pressed ? styles.pressed : null,
                 ]}
               >
-                <Ionicons name="chevron-back-outline" size={20} color={colors.gray[700]} />
+                <Ionicons name="chevron-back-outline" size={20} color={theme.colors.textSecondary} />
               </Pressable>
 
               <Text style={styles.calendarMonthTitle}>
@@ -1034,7 +1045,7 @@ export function MeasurementProgressScreen({
                   pressed ? styles.pressed : null,
                 ]}
               >
-                <Ionicons name="chevron-forward-outline" size={20} color={colors.gray[700]} />
+                <Ionicons name="chevron-forward-outline" size={20} color={theme.colors.textSecondary} />
               </Pressable>
             </View>
 
@@ -1112,10 +1123,10 @@ export default function WeightProgressScreen() {
   return <MeasurementProgressScreen metricKey="weight_kg" />;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: theme.colors.background,
   },
   header: {
     flexDirection: 'row',
@@ -1131,7 +1142,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   headerCopy: {
     flex: 1,
@@ -1139,12 +1152,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: fontSize['2xl'],
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   subtitle: {
     marginTop: spacing.xs,
     fontSize: fontSize.sm,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   autoButton: {
     flexDirection: 'row',
@@ -1153,18 +1166,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.gray[100],
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   autoButtonActive: {
-    backgroundColor: colors.primary[600],
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   autoButtonText: {
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.gray[700],
+    color: theme.colors.textSecondary,
   },
   autoButtonTextActive: {
-    color: colors.white,
+    color: theme.colors.surface,
   },
   scrollView: {
     flex: 1,
@@ -1180,7 +1196,7 @@ const styles = StyleSheet.create({
   noticeText: {
     fontSize: fontSize.xs,
     lineHeight: 18,
-    color: colors.warning,
+    color: theme.colors.warning,
   },
   errorCard: {
     marginTop: spacing.sm,
@@ -1188,25 +1204,25 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: fontSize.lg,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   errorText: {
     marginTop: spacing.sm,
     marginBottom: spacing.md,
     fontSize: fontSize.sm,
-    color: colors.gray[600],
+    color: theme.colors.textSecondary,
   },
   retryButton: {
     alignSelf: 'flex-start',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.primary[600],
+    backgroundColor: theme.colors.primary,
   },
   retryButtonText: {
     fontSize: fontSize.sm,
     fontWeight: '700',
-    color: colors.white,
+    color: theme.colors.surface,
   },
   emptyCard: {
     alignItems: 'center',
@@ -1216,7 +1232,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     fontSize: fontSize.xl,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
     textAlign: 'center',
   },
   emptyText: {
@@ -1224,7 +1240,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     lineHeight: 20,
     textAlign: 'center',
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   metricsRow: {
     flexDirection: 'row',
@@ -1243,7 +1259,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: spacing.md,
     borderRadius: borderRadius.lg,
-    backgroundColor: colors.white,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   metricCardLandscape: {
     width: 220,
@@ -1252,13 +1270,13 @@ const styles = StyleSheet.create({
   },
   selectedMetricCard: {
     borderWidth: 1,
-    borderColor: colors.primary[100],
-    backgroundColor: colors.primary[50],
+    borderColor: theme.colors.primaryBorder,
+    backgroundColor: theme.colors.primarySoft,
   },
   metricLabel: {
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
@@ -1266,24 +1284,24 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     fontSize: fontSize['2xl'],
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   metricHint: {
     marginTop: spacing.xs,
     fontSize: fontSize.xs,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   selectedMetricValue: {
     marginTop: spacing.xs,
     fontSize: fontSize.xl,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   selectedMetricHint: {
     marginTop: spacing.xs,
     fontSize: fontSize.xs,
     lineHeight: 18,
-    color: colors.gray[600],
+    color: theme.colors.textSecondary,
   },
   chartCard: {},
   rangeSection: {
@@ -1299,18 +1317,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: 9,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.gray[100],
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   rangeChipActive: {
-    backgroundColor: colors.primary[600],
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   rangeChipText: {
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.gray[700],
+    color: theme.colors.textSecondary,
   },
   rangeChipTextActive: {
-    color: colors.white,
+    color: theme.colors.surface,
   },
   customRangeRow: {
     flexDirection: 'row',
@@ -1325,22 +1346,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm + 2,
     paddingVertical: spacing.sm + 2,
     borderRadius: borderRadius.md,
-    backgroundColor: colors.gray[50],
+    backgroundColor: theme.colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: colors.gray[200],
+    borderColor: theme.colors.border,
   },
   dateButtonText: {
     flex: 1,
   },
   dateButtonLabel: {
     fontSize: 11,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   dateButtonValue: {
     marginTop: 2,
     fontSize: fontSize.sm,
     fontWeight: '600',
-    color: colors.gray[800],
+    color: theme.colors.textPrimary,
   },
   chartLegend: {
     flexDirection: 'row',
@@ -1350,13 +1371,13 @@ const styles = StyleSheet.create({
   },
   legendLabel: {
     fontSize: fontSize.xs,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   legendValue: {
     marginTop: 2,
     fontSize: fontSize.base,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   legendRight: {
     alignItems: 'flex-end',
@@ -1382,18 +1403,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
-    color: colors.gray[400],
+    color: theme.colors.iconMuted,
   },
   axisLabelText: {
     marginTop: 2,
     fontSize: fontSize.sm,
     fontWeight: '600',
-    color: colors.gray[700],
+    color: theme.colors.textSecondary,
   },
   singlePointHint: {
     marginTop: spacing.md,
     fontSize: fontSize.xs,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
     textAlign: 'center',
   },
   filteredEmptyState: {
@@ -1407,14 +1428,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     fontSize: fontSize.base,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   filteredEmptyText: {
     marginTop: spacing.xs,
     fontSize: fontSize.sm,
     lineHeight: 20,
     textAlign: 'center',
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   listCard: {
     marginBottom: spacing.sm,
@@ -1422,12 +1443,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: fontSize.lg,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   sectionDescription: {
     marginTop: spacing.xs,
     fontSize: fontSize.sm,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   recordList: {
     marginTop: spacing.md,
@@ -1440,12 +1461,13 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.md,
     borderRadius: borderRadius.md,
-    backgroundColor: colors.gray[50],
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   recordRowSelected: {
-    backgroundColor: colors.primary[50],
-    borderWidth: 1,
-    borderColor: colors.primary[100],
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primaryBorder,
   },
   recordCopy: {
     flex: 1,
@@ -1453,17 +1475,17 @@ const styles = StyleSheet.create({
   recordValue: {
     fontSize: fontSize.base,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   recordDate: {
     marginTop: 2,
     fontSize: fontSize.xs,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   recordNote: {
     marginTop: spacing.xs,
     fontSize: fontSize.xs,
-    color: colors.gray[600],
+    color: theme.colors.textSecondary,
   },
   recordsEmpty: {
     marginTop: spacing.md,
@@ -1472,7 +1494,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
-    backgroundColor: 'rgba(17, 24, 39, 0.35)',
+    backgroundColor: theme.colors.overlay,
     zIndex: 20,
   },
   calendarBackdrop: {
@@ -1484,9 +1506,11 @@ const styles = StyleSheet.create({
     maxHeight: '82%',
     minHeight: 500,
     alignSelf: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: theme.colors.surface,
     borderRadius: borderRadius.xl,
     padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   calendarModalHeader: {
     flexDirection: 'row',
@@ -1501,12 +1525,12 @@ const styles = StyleSheet.create({
   calendarModalTitle: {
     fontSize: fontSize.lg,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
   },
   calendarModalSubtitle: {
     marginTop: spacing.xs,
     fontSize: fontSize.sm,
-    color: colors.gray[500],
+    color: theme.colors.textMuted,
   },
   calendarMonthHeader: {
     flexDirection: 'row',
@@ -1521,14 +1545,14 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.gray[100],
+    backgroundColor: theme.colors.surfaceAlt,
   },
   calendarMonthTitle: {
     flex: 1,
     textAlign: 'center',
     fontSize: fontSize.base,
     fontWeight: '700',
-    color: colors.gray[900],
+    color: theme.colors.textPrimary,
     textTransform: 'capitalize',
   },
   calendarWeekdaysRow: {
@@ -1545,7 +1569,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.gray[400],
+    color: theme.colors.iconMuted,
   },
   calendarGrid: {
     flexDirection: 'row',
@@ -1567,27 +1591,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   calendarDayOutsideMonth: {
-    backgroundColor: colors.gray[50],
+    backgroundColor: theme.colors.surfaceAlt,
   },
   calendarDayDisabled: {
     opacity: 0.32,
   },
   calendarDaySelected: {
-    backgroundColor: colors.primary[600],
+    backgroundColor: theme.colors.primary,
   },
   calendarDayText: {
     fontSize: fontSize.sm,
     fontWeight: '600',
-    color: colors.gray[800],
+    color: theme.colors.textSecondary,
   },
   calendarDayTextOutsideMonth: {
-    color: colors.gray[400],
+    color: theme.colors.iconMuted,
   },
   calendarDayTextDisabled: {
-    color: colors.gray[300],
+    color: theme.colors.iconMuted,
   },
   calendarDayTextSelected: {
-    color: colors.white,
+    color: theme.colors.surface,
   },
   calendarModalCloseButton: {
     width: 36,
@@ -1595,7 +1619,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.gray[100],
+    backgroundColor: theme.colors.surfaceAlt,
   },
   calendarModalFooter: {
     marginTop: spacing.md,
@@ -1605,12 +1629,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.primary[600],
+    backgroundColor: theme.colors.primary,
   },
   calendarModalDoneText: {
     fontSize: fontSize.sm,
     fontWeight: '700',
-    color: colors.white,
+    color: theme.colors.surface,
   },
   pressed: {
     opacity: 0.88,

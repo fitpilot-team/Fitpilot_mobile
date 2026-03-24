@@ -155,52 +155,55 @@ const MetricCard: React.FC<MetricCardProps> = ({
   const changeColor = isWeightOrFat
     ? isNegative ? theme.colors.success : isPositive ? theme.colors.error : theme.colors.textMuted
     : isPositive ? theme.colors.success : isNegative ? theme.colors.error : theme.colors.textMuted;
+  const gradientColors: readonly [string, string] = theme.isDark
+    ? [`${config.color}2A`, 'rgba(9, 17, 31, 0.94)']
+    : [`${config.color}12`, `${config.color}04`];
 
   return (
     <Animated.View
       entering={FadeInUp.delay(index * 100).duration(400)}
-      style={[styles.metricCard, shadows.sm]}
+      style={[styles.metricCardShell, shadows.sm]}
     >
       <LinearGradient
-        colors={[`${config.color}10`, `${config.color}05`]}
+        colors={gradientColors}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <View style={[styles.metricIcon, { backgroundColor: `${config.color}15` }]}>
-        <Ionicons name={config.icon} size={16} color={config.color} />
-      </View>
-
-      <View style={styles.metricValueRow}>
-        <Text style={styles.metricValue}>
-          {formatMeasurementNumber(
-            convertedMetric.value,
-            convertedMetric.unit === '%' ? 1 : 1,
-          )}
-        </Text>
-        <Text style={styles.metricUnit}>{convertedMetric.unit}</Text>
-      </View>
-
-      <Text style={styles.metricLabel}>{config.label}</Text>
-
-      {hasChange && metric.change_from_previous !== 0 && (
-        <View style={[styles.changeBadge, { backgroundColor: `${changeColor}15` }]}>
-          <Ionicons
-            name={isPositive ? 'arrow-up' : 'arrow-down'}
-            size={10}
-            color={changeColor}
-          />
-          <Text style={[styles.changeText, { color: changeColor }]}>
-            {convertedChange
-              ? formatMeasurementNumber(
-                  convertedChange.value,
-                  convertedChange.unit === '%' ? 1 : 1,
-                )
-              : '--'}
-          </Text>
+        style={styles.metricCard}
+      >
+        <View style={[styles.metricIcon, { backgroundColor: `${config.color}18` }]}>
+          <Ionicons name={config.icon} size={16} color={config.color} />
         </View>
-      )}
+
+        <View style={styles.metricValueRow}>
+          <Text style={styles.metricValue}>
+            {formatMeasurementNumber(
+              convertedMetric.value,
+              convertedMetric.unit === '%' ? 1 : 1,
+            )}
+          </Text>
+          <Text style={styles.metricUnit}>{convertedMetric.unit}</Text>
+        </View>
+
+        <Text style={styles.metricLabel}>{config.label}</Text>
+
+        {hasChange && metric.change_from_previous !== 0 && (
+          <View style={[styles.changeBadge, { backgroundColor: `${changeColor}18` }]}>
+            <Ionicons
+              name={isPositive ? 'arrow-up' : 'arrow-down'}
+              size={10}
+              color={changeColor}
+            />
+            <Text style={[styles.changeText, { color: changeColor }]}>
+              {convertedChange
+                ? formatMeasurementNumber(
+                    convertedChange.value,
+                    convertedChange.unit === '%' ? 1 : 1,
+                  )
+                : '--'}
+            </Text>
+          </View>
+        )}
+      </LinearGradient>
     </Animated.View>
   );
 };
@@ -248,15 +251,18 @@ const createStyles = (theme: AppTheme) =>
     metricGap: {
       width: spacing.sm,
     },
-    metricCard: {
+    metricCardShell: {
       width: '48%',
       maxWidth: 280,
-      backgroundColor: theme.colors.card,
       borderRadius: borderRadius.lg,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      padding: spacing.md,
       overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.colors.borderStrong : theme.colors.border,
+      backgroundColor: theme.isDark ? '#0f1826' : theme.colors.card,
+    },
+    metricCard: {
+      padding: spacing.md,
+      minHeight: 132,
     },
     metricIcon: {
       width: 32,

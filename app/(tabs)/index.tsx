@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAuthStore } from '../../src/store/authStore';
 import { useWorkoutStore } from '../../src/store/workoutStore';
-import { LoadingSpinner } from '../../src/components/common';
+import { LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
 import {
   ActivityChart,
   MetricsSummary,
@@ -213,104 +213,106 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: contentInsetBottom },
-          isTablet ? styles.scrollContentTablet : null,
-        ]}
-        onScroll={tabBarScroll.onScroll}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.colors.primary}
-          />
-        }
-        scrollEventThrottle={tabBarScroll.scrollEventThrottle}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={[styles.contentColumn, { maxWidth: contentWidth }]}>
-          <Animated.View entering={FadeInDown.duration(400)}>
-            <UserHeader
-              user={user}
-              macrocycle={activeMacrocycle}
-              contentWidth={contentWidth}
+    <TabScreenWrapper>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: contentInsetBottom },
+            isTablet ? styles.scrollContentTablet : null,
+          ]}
+          onScroll={tabBarScroll.onScroll}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.primary}
             />
-          </Animated.View>
+          }
+          scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={[styles.contentColumn, { maxWidth: contentWidth }]}>
+            <Animated.View entering={FadeInDown.duration(400)}>
+              <UserHeader
+                user={user}
+                macrocycle={activeMacrocycle}
+                contentWidth={contentWidth}
+              />
+            </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(100).duration(400)}>
-            <MicrocycleTimeline
-              microcycleProgress={microcycleProgress}
-              mode={microcycleMode}
-              onDayPress={handleDayPress}
-              contentWidth={contentWidth}
-            />
-          </Animated.View>
+            <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+              <MicrocycleTimeline
+                microcycleProgress={microcycleProgress}
+                mode={microcycleMode}
+                onDayPress={handleDayPress}
+                contentWidth={contentWidth}
+              />
+            </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(180).duration(400)}>
-            <MicrocycleStats
-              microcycleProgress={microcycleProgress}
-              mode={microcycleMode}
-              onModeChange={setMicrocycleMode}
-              isLoading={isLoading && !refreshing}
-            />
-          </Animated.View>
+            <Animated.View entering={FadeInDown.delay(180).duration(400)}>
+              <MicrocycleStats
+                microcycleProgress={microcycleProgress}
+                mode={microcycleMode}
+                onModeChange={setMicrocycleMode}
+                isLoading={isLoading && !refreshing}
+              />
+            </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(260).duration(400)}>
-            <TodayWorkoutCard
-              trainingDay={nextPlannedSession}
-              position={workoutPosition}
-              total={workoutTotal}
-              allCompleted={allCompleted}
-              onStartPress={handleStartNextSession}
-              isLoading={isStartingWorkout || (isLoading && !nextPlannedSession && !allCompleted)}
-              contentWidth={contentWidth}
-            />
-          </Animated.View>
+            <Animated.View entering={FadeInDown.delay(260).duration(400)}>
+              <TodayWorkoutCard
+                trainingDay={nextPlannedSession}
+                position={workoutPosition}
+                total={workoutTotal}
+                allCompleted={allCompleted}
+                onStartPress={handleStartNextSession}
+                isLoading={isStartingWorkout || (isLoading && !nextPlannedSession && !allCompleted)}
+                contentWidth={contentWidth}
+              />
+            </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(340).duration(400)}>
-            <ActivityChart
-              muscleVolume={muscleVolume}
-              isLoading={isLoadingVolume || (isLoading && !refreshing)}
-              countSecondaryMuscles={countSecondaryMuscles}
-              onToggleSecondary={setCountSecondaryMuscles}
-              contentWidth={contentWidth}
-            />
-          </Animated.View>
+            <Animated.View entering={FadeInDown.delay(340).duration(400)}>
+              <ActivityChart
+                muscleVolume={muscleVolume}
+                isLoading={isLoadingVolume || (isLoading && !refreshing)}
+                countSecondaryMuscles={countSecondaryMuscles}
+                onToggleSecondary={setCountSecondaryMuscles}
+                contentWidth={contentWidth}
+              />
+            </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(420).duration(400)}>
-            <ScienceTips context={tipContext} contentWidth={contentWidth} />
-          </Animated.View>
+            <Animated.View entering={FadeInDown.delay(420).duration(400)}>
+              <ScienceTips context={tipContext} contentWidth={contentWidth} />
+            </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(500).duration(400)}>
-            <MetricsSummary contentWidth={contentWidth} />
-          </Animated.View>
-        </View>
-      </ScrollView>
+            <Animated.View entering={FadeInDown.delay(500).duration(400)}>
+              <MetricsSummary contentWidth={contentWidth} />
+            </Animated.View>
+          </View>
+        </ScrollView>
 
-      <SessionPickerModal
-        visible={isSessionPickerVisible}
-        title={sessionPickerTitle}
-        subtitle={
-          selectedDay
-            ? `${selectedDay.sessions.length} sesión${selectedDay.sessions.length > 1 ? 'es' : ''} disponible${selectedDay.sessions.length > 1 ? 's' : ''}`
-            : null
-        }
-        sessions={selectedDay?.sessions ?? []}
-        onClose={() => {
-          setIsSessionPickerVisible(false);
-          setSelectedDay(null);
-        }}
-        onSelectSession={async (session) => {
-          setIsSessionPickerVisible(false);
-          setSelectedDay(null);
-          await openWorkoutSession(session);
-        }}
-      />
-    </SafeAreaView>
+        <SessionPickerModal
+          visible={isSessionPickerVisible}
+          title={sessionPickerTitle}
+          subtitle={
+            selectedDay
+              ? `${selectedDay.sessions.length} sesión${selectedDay.sessions.length > 1 ? 'es' : ''} disponible${selectedDay.sessions.length > 1 ? 's' : ''}`
+              : null
+          }
+          sessions={selectedDay?.sessions ?? []}
+          onClose={() => {
+            setIsSessionPickerVisible(false);
+            setSelectedDay(null);
+          }}
+          onSelectSession={async (session) => {
+            setIsSessionPickerVisible(false);
+            setSelectedDay(null);
+            await openWorkoutSession(session);
+          }}
+        />
+      </SafeAreaView>
+    </TabScreenWrapper>
   );
 }
 

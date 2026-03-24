@@ -445,6 +445,17 @@ export interface ClientDietRecipeCard {
   ingredients: ClientDietIngredientRow[];
 }
 
+export interface ClientDietRecipeDetail {
+  id: string;
+  recipeId: number;
+  title: string;
+  imageUrl: string | null;
+  description: string | null;
+  descriptionRich: unknown | null;
+  ingredientCount: number;
+  ingredients: ClientDietIngredientRow[];
+}
+
 export interface ClientDietMeal {
   id: string;
   name: string;
@@ -483,4 +494,3 @@ export interface ApiError {
 }
 
 export * from './measurements';
-
