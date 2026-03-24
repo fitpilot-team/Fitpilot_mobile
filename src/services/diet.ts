@@ -17,7 +17,6 @@ import {
   getTodayDateKey,
   toLocalDateKey,
 } from '../utils/date';
-import { getRecipeRichTextPlainText } from '../utils/recipeRichText';
 
 type NutritionPortionResponse = {
   household_label?: string | null;
@@ -528,17 +527,13 @@ export const getDietRecipeDetail = async (
     portion: derivePortionFromRecipeIngredient(ingredient),
   }));
 
-  const description = getRecipeRichTextPlainText(
-    recipe.description_rich,
-    recipe.description,
-  );
-
   return {
     id: `recipe-${recipe.id}`,
     recipeId: recipe.id,
     title: recipe.name?.trim() || 'Receta',
     imageUrl: recipe.image_url ?? null,
-    description: description || null,
+    description: recipe.description?.trim() || null,
+    descriptionRich: recipe.description_rich ?? null,
     ingredientCount: toNumber(recipe.ingredient_count) ?? ingredients.length,
     ingredients,
   };

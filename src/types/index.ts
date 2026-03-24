@@ -451,6 +451,7 @@ export interface ClientDietRecipeDetail {
   title: string;
   imageUrl: string | null;
   description: string | null;
+  descriptionRich: unknown | null;
   ingredientCount: number;
   ingredients: ClientDietIngredientRow[];
 }

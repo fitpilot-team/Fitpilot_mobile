@@ -17,6 +17,7 @@ import { borderRadius, brandColors, colors, fontSize, nutritionTheme, spacing } 
 import { getDietRecipeDetail } from '../../src/services/diet';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type { ApiError, ClientDietIngredientRow, ClientDietRecipeDetail } from '../../src/types';
+import { getRecipeRichTextBlocks } from '../../src/utils/recipeRichText';
 
 type RecipeTab = 'description' | 'ingredients';
 
@@ -158,7 +159,10 @@ export default function RecipeDetailScreen() {
     return <LoadingSpinner fullScreen text="Cargando receta..." />;
   }
 
-  const description = detail?.description || 'Esta receta no tiene descripcion disponible.';
+  const descriptionBlocks = getRecipeRichTextBlocks(
+    detail?.descriptionRich,
+    detail?.description,
+  );
   const placeholderColors = theme.isDark ? DARK_PLACEHOLDER_COLORS : LIGHT_PLACEHOLDER_COLORS;
   const recipeCountLabel = detail
     ? `${detail.ingredientCount} ingrediente${detail.ingredientCount === 1 ? '' : 's'}`
@@ -244,7 +248,45 @@ export default function RecipeDetailScreen() {
         {!error && activeTab === 'description' ? (
           <Card style={styles.contentCard}>
             <Text style={styles.sectionTitle}>Preparacion</Text>
-            <Text style={styles.descriptionText}>{description}</Text>
+            {descriptionBlocks.length > 0 ? (
+              <View style={styles.descriptionContent}>
+                {descriptionBlocks.map((block, blockIndex) => {
+                  switch (block.type) {
+                    case 'heading':
+                      return (
+                        <Text key={`heading-${blockIndex}`} style={styles.descriptionHeading}>
+                          {block.text}
+                        </Text>
+                      );
+                    case 'bulletList':
+                    case 'orderedList':
+                      return (
+                        <View key={`list-${blockIndex}`} style={styles.descriptionList}>
+                          {block.items.map((item, itemIndex) => (
+                            <View key={`list-${blockIndex}-${itemIndex}`} style={styles.descriptionListItem}>
+                              <Text style={styles.descriptionListMarker}>
+                                {block.type === 'orderedList' ? `${itemIndex + 1}.` : '•'}
+                              </Text>
+                              <Text style={styles.descriptionListText}>{item}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      );
+                    case 'paragraph':
+                    default:
+                      return (
+                        <Text key={`paragraph-${blockIndex}`} style={styles.descriptionText}>
+                          {block.text}
+                        </Text>
+                      );
+                  }
+                })}
+              </View>
+            ) : (
+              <Text style={styles.descriptionText}>
+                Esta receta no tiene descripcion disponible.
+              </Text>
+            )}
           </Card>
         ) : null}
 
@@ -401,7 +443,37 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       fontSize: fontSize.lg,
       fontWeight: '800',
     },
+    descriptionContent: {
+      gap: spacing.sm,
+    },
+    descriptionHeading: {
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.base,
+      fontWeight: '800',
+      lineHeight: 24,
+    },
     descriptionText: {
+      color: theme.colors.textSecondary,
+      fontSize: fontSize.base,
+      lineHeight: 24,
+    },
+    descriptionList: {
+      gap: spacing.sm,
+    },
+    descriptionListItem: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
+    },
+    descriptionListMarker: {
+      width: 18,
+      color: theme.colors.primary,
+      fontSize: fontSize.base,
+      fontWeight: '800',
+      lineHeight: 24,
+    },
+    descriptionListText: {
+      flex: 1,
       color: theme.colors.textSecondary,
       fontSize: fontSize.base,
       lineHeight: 24,

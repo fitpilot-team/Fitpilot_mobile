@@ -226,44 +226,56 @@ const RecipeCard: React.FC<{
   const toggleIconColor = theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : brandColors.navy;
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.recipeCard, pressed ? styles.recipeCardPressed : null]}
-    >
-      {recipe.imageUrl ? (
-        <Image source={{ uri: recipe.imageUrl }} style={styles.recipeImage} resizeMode="cover" />
-      ) : (
-        <LinearGradient
-          colors={placeholderColors}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.recipePlaceholder}
-        >
-          <Ionicons name="restaurant-outline" size={28} color={toggleIconColor} />
-        </LinearGradient>
-      )}
+    <View style={styles.recipeCard}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Abrir receta ${recipe.title}`}
+        style={({ pressed }) => [pressed ? styles.recipeCardPressed : null]}
+      >
+        {recipe.imageUrl ? (
+          <Image source={{ uri: recipe.imageUrl }} style={styles.recipeImage} resizeMode="cover" />
+        ) : (
+          <LinearGradient
+            colors={placeholderColors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.recipePlaceholder}
+          >
+            <Ionicons name="restaurant-outline" size={28} color={toggleIconColor} />
+          </LinearGradient>
+        )}
 
-      <View style={styles.recipeContent}>
-        <View style={styles.recipeTopRow}>
-          <View style={styles.recipeBadge}>
-            <Text style={styles.recipeBadgeText}>Receta</Text>
+        <View style={styles.recipeContent}>
+          <View style={styles.recipeTopRow}>
+            <View style={styles.recipeBadge}>
+              <Text style={styles.recipeBadgeText}>Receta</Text>
+            </View>
+            <Text style={styles.recipeCount}>
+              {recipe.ingredientCount} ingrediente{recipe.ingredientCount === 1 ? '' : 's'}
+            </Text>
           </View>
-          <Text style={styles.recipeCount}>
-            {recipe.ingredientCount} ingrediente{recipe.ingredientCount === 1 ? '' : 's'}
+
+          <Text style={styles.recipeTitle}>{recipe.title}</Text>
+          <Text style={styles.recipeSubtitle}>
+            Ingredientes y porciones de esta preparacion dentro de tu plan.
           </Text>
+
+          <View style={styles.recipeOpenRow}>
+            <Text style={styles.recipeOpenText}>Abrir receta completa</Text>
+            <Ionicons
+              name="arrow-forward-outline"
+              size={18}
+              color={theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : brandColors.navy}
+            />
+          </View>
         </View>
+      </Pressable>
 
-        <Text style={styles.recipeTitle}>{recipe.title}</Text>
-        <Text style={styles.recipeSubtitle}>
-          Ingredientes y porciones de esta preparación dentro de tu plan.
-        </Text>
-
+      <View style={styles.recipeActions}>
         <Pressable
           style={styles.recipeToggle}
-          onPress={(event) => {
-            event.stopPropagation();
-            onToggle();
-          }}
+          onPress={onToggle}
         >
           <Text style={styles.recipeToggleText}>
             {expanded ? 'Ocultar ingredientes' : 'Ver ingredientes'}
@@ -289,7 +301,7 @@ const RecipeCard: React.FC<{
           </View>
         ) : null}
       </View>
-    </Pressable>
+    </View>
   );
 };
 
@@ -482,6 +494,10 @@ function createStyles(theme: AppTheme) {
     recipeContent: {
       padding: spacing.md,
     },
+    recipeActions: {
+      paddingHorizontal: spacing.md,
+      paddingBottom: spacing.md,
+    },
     recipeTopRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -519,8 +535,25 @@ function createStyles(theme: AppTheme) {
       fontSize: fontSize.sm,
       lineHeight: 20,
     },
-    recipeToggle: {
+    recipeOpenRow: {
       marginTop: spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.isDark ? DARK_RECIPE_CARD_BORDER : '#D8E7F4',
+      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : colors.white,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    recipeOpenText: {
+      color: theme.isDark ? DARK_RECIPE_TITLE : brandColors.navy,
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+    },
+    recipeToggle: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
