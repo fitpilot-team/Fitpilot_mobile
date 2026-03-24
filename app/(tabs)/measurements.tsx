@@ -35,6 +35,7 @@ import {
   getMyMeasurementDetail,
   listMyMeasurements,
 } from '../../src/services/measurements';
+import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
@@ -82,6 +83,7 @@ const getChangeAppearance = (
 export default function MeasurementsScreen() {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const tabBarScroll = useBottomTabBarScroll();
   const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
   const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
   const [measurements, setMeasurements] = useState<MeasurementHistoryItem[]>([]);
@@ -319,6 +321,7 @@ export default function MeasurementsScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        onScroll={tabBarScroll.onScroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -327,6 +330,7 @@ export default function MeasurementsScreen() {
             tintColor={theme.colors.primary}
           />
         }
+        scrollEventThrottle={tabBarScroll.scrollEventThrottle}
       >
         {error ? (
           <Card style={styles.errorCard}>

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../src/store/authStore';
+import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles, getThemePreferenceLabel } from '../../src/theme';
 import {
   MEASUREMENT_PREFERENCE_LABELS,
@@ -51,6 +52,7 @@ export default function ProfileScreen() {
   const { user, logout, uploadAvatar, isLoading } = useAuthStore();
   const { preference, theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const tabBarScroll = useBottomTabBarScroll();
   const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
   const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
   const setMeasurementPreference = useMeasurementPreferenceStore((state) => state.setPreference);
@@ -158,6 +160,8 @@ export default function ProfileScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        onScroll={tabBarScroll.onScroll}
+        scrollEventThrottle={tabBarScroll.scrollEventThrottle}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.userCard}>

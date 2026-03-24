@@ -4,7 +4,12 @@ import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-t
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
+import {
+  BottomTabBarVisibilityProvider,
+  useBottomTabBarVisibility,
+} from '../../src/hooks/useBottomTabBarVisibility';
 import { isTabletLayout } from '../../src/utils/layout';
 
 const TABLET_EXPANDED_WIDTH = 164;
@@ -27,6 +32,7 @@ interface TabletTabBarProps {
 
 interface PhoneTabBarProps {
   props: BottomTabBarProps;
+  isFloating: boolean;
 }
 
 const TabletTabBar: React.FC<TabletTabBarProps> = ({
@@ -72,14 +78,45 @@ const TabletTabBar: React.FC<TabletTabBarProps> = ({
   );
 };
 
-const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
+const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props, isFloating }) => {
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
+  const { isVisible } = useBottomTabBarVisibility();
+  const translateY = useSharedValue(0);
+  const hiddenOffset = useMemo(
+    () =>
+      isFloating
+        ? PHONE_TAB_BAR_HEIGHT +
+          insets.bottom +
+          IPHONE_TAB_BAR_TOP_PADDING +
+          IPHONE_TAB_BAR_BOTTOM_OFFSET +
+          24
+        : PHONE_TAB_BAR_HEIGHT + insets.bottom + PHONE_TAB_BAR_VERTICAL_PADDING + 24,
+    [insets.bottom, isFloating],
+  );
+
+  useEffect(() => {
+    translateY.value = withTiming(isVisible ? 0 : hiddenOffset, { duration: 220 });
+  }, [hiddenOffset, isVisible, translateY]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  if (!isFloating) {
+    return (
+      <Animated.View pointerEvents={isVisible ? 'auto' : 'none'} style={animatedStyle}>
+        <BottomTabBar {...props} />
+      </Animated.View>
+    );
+  }
 
   return (
-    <View
+    <Animated.View
+      pointerEvents={isVisible ? 'auto' : 'none'}
       style={[
-        styles.phoneTabBarWrapper,
+        styles.phoneFloatingTabBarWrapper,
+        animatedStyle,
         {
           paddingTop: IPHONE_TAB_BAR_TOP_PADDING,
           paddingBottom: insets.bottom + IPHONE_TAB_BAR_BOTTOM_OFFSET,
@@ -92,7 +129,7 @@ const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
           <BottomTabBar {...props} />
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -130,124 +167,124 @@ export default function TabLayout() {
   }, [isTablet]);
 
   return (
-    <Tabs
-      tabBar={(props) =>
-        isTablet ? (
-          <TabletTabBar
-            props={props}
-            isExpanded={isRailExpanded}
-            onHoverIn={isHoverEnabled ? () => setIsRailHovered(true) : undefined}
-            onHoverOut={isHoverEnabled ? () => setIsRailHovered(false) : undefined}
-            onToggle={() => setIsRailPinnedExpanded((currentValue) => !currentValue)}
-          />
-        ) : isIPhone ? (
-          <PhoneTabBar props={props} />
-        ) : (
-          <BottomTabBar {...props} />
-        )
-      }
-      screenOptions={{
-        tabBarPosition: isTablet ? 'left' : 'bottom',
-        tabBarVariant: isTablet ? 'material' : 'uikit',
-        tabBarActiveTintColor: theme.colors.tabBarActiveTint,
-        tabBarInactiveTintColor: theme.colors.tabBarInactiveTint,
-        tabBarActiveBackgroundColor: isTablet
-          ? theme.colors.tabBarActiveBg
-          : theme.colors.tabBarBackground,
-        tabBarInactiveBackgroundColor: theme.colors.tabBarBackground,
-        tabBarShowLabel: !isTablet || isRailExpanded,
-        tabBarHideOnKeyboard: !isTablet,
-        tabBarStyle: isTablet
-          ? [
-              styles.tabletTabBar,
-              isRailExpanded ? styles.tabletTabBarExpanded : styles.tabletTabBarCollapsed,
-            ]
-          : isIPhone
-            ? styles.iphonePhoneTabBar
-            : androidPhoneTabBarStyle,
-        tabBarItemStyle: isTablet
-          ? [
-              styles.tabletTabBarItem,
-              isRailExpanded ? styles.tabletTabBarItemExpanded : styles.tabletTabBarItemCollapsed,
-            ]
-          : styles.phoneTabBarItem,
-        tabBarLabelStyle: isTablet ? styles.tabletTabBarLabel : styles.phoneTabBarLabel,
-        tabBarIconStyle: isTablet ? styles.tabletTabBarIcon : undefined,
-        headerShown: false,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Inicio',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'home' : 'home-outline'}
-              size={size}
-              color={color}
+    <BottomTabBarVisibilityProvider>
+      <Tabs
+        tabBar={(props) =>
+          isTablet ? (
+            <TabletTabBar
+              props={props}
+              isExpanded={isRailExpanded}
+              onHoverIn={isHoverEnabled ? () => setIsRailHovered(true) : undefined}
+              onHoverOut={isHoverEnabled ? () => setIsRailHovered(false) : undefined}
+              onToggle={() => setIsRailPinnedExpanded((currentValue) => !currentValue)}
             />
-          ),
+          ) : (
+            <PhoneTabBar props={props} isFloating={isIPhone} />
+          )
+        }
+        screenOptions={{
+          tabBarPosition: isTablet ? 'left' : 'bottom',
+          tabBarVariant: isTablet ? 'material' : 'uikit',
+          tabBarActiveTintColor: theme.colors.tabBarActiveTint,
+          tabBarInactiveTintColor: theme.colors.tabBarInactiveTint,
+          tabBarActiveBackgroundColor: isTablet
+            ? theme.colors.tabBarActiveBg
+            : theme.colors.tabBarBackground,
+          tabBarInactiveBackgroundColor: theme.colors.tabBarBackground,
+          tabBarShowLabel: !isTablet || isRailExpanded,
+          tabBarHideOnKeyboard: !isTablet,
+          tabBarStyle: isTablet
+            ? [
+                styles.tabletTabBar,
+                isRailExpanded ? styles.tabletTabBarExpanded : styles.tabletTabBarCollapsed,
+              ]
+            : isIPhone
+              ? styles.iphonePhoneTabBar
+              : androidPhoneTabBarStyle,
+          tabBarItemStyle: isTablet
+            ? [
+                styles.tabletTabBarItem,
+                isRailExpanded ? styles.tabletTabBarItemExpanded : styles.tabletTabBarItemCollapsed,
+              ]
+            : styles.phoneTabBarItem,
+          tabBarLabelStyle: isTablet ? styles.tabletTabBarLabel : styles.phoneTabBarLabel,
+          tabBarIconStyle: isTablet ? styles.tabletTabBarIcon : undefined,
+          headerShown: false,
         }}
-      />
-      <Tabs.Screen
-        name="diet"
-        options={{
-          title: 'Dieta',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'restaurant' : 'restaurant-outline'}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="workouts"
-        options={{
-          title: isTablet ? 'Entreno' : 'Entrenamientos',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'barbell' : 'barbell-outline'}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="measurements"
-        options={{
-          title: 'Medidas',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'body' : 'body-outline'}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'person' : 'person-outline'}
-              size={size}
-              color={color}
-            />
-          ),
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Inicio',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'home' : 'home-outline'}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="diet"
+          options={{
+            title: 'Dieta',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'restaurant' : 'restaurant-outline'}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="workouts"
+          options={{
+            title: isTablet ? 'Entreno' : 'Entrenamientos',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'barbell' : 'barbell-outline'}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="measurements"
+          options={{
+            title: 'Medidas',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'body' : 'body-outline'}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Perfil',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'person' : 'person-outline'}
+                size={size}
+                color={color}
+              />
+            ),
+          }}
+        />
+      </Tabs>
+    </BottomTabBarVisibilityProvider>
   );
 }
 
 const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
   StyleSheet.create({
-    phoneTabBarWrapper: {
+    phoneFloatingTabBarWrapper: {
       backgroundColor: 'transparent',
     },
     phoneTabBar: {
