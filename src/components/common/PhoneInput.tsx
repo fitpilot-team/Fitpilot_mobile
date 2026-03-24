@@ -1,22 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-} from 'react-native';
-import {
-  CountryPicker,
-  type CountryItem,
-} from '../../vendor/countryPicker';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import { CountryPicker, type CountryItem } from '../../vendor/countryPicker';
 import { Ionicons } from '@expo/vector-icons';
-import {
-  borderRadius,
-  spacing,
-  fontSize,
-  shadows,
-} from '../../constants/colors';
+import { borderRadius, spacing, fontSize, shadows } from '../../constants/colors';
 import { useAppTheme, useThemedStyles } from '../../theme';
 import {
   buildE164Phone,
@@ -92,7 +78,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
           onChangeText={handleNumberChange}
           editable={!disabled}
           keyboardType="phone-pad"
-          placeholder="NÃºmero de telÃ©fono"
+          placeholder="Número de teléfono"
           placeholderTextColor={theme.colors.textMuted}
         />
       </View>
@@ -105,7 +91,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
         show={isPickerVisible}
         lang="es"
         initialState={selectedCountry.dial_code}
-        inputPlaceholder="Busca un paÃ­s"
+        inputPlaceholder="Busca un país"
         searchMessage="No encontramos resultados"
         onBackdropPress={() => setIsPickerVisible(false)}
         pickerButtonOnPress={handleCountrySelect}

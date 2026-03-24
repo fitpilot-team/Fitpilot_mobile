@@ -15,11 +15,11 @@ interface UserHeaderProps {
 
 const objectiveLabels: Record<string, string> = {
   hypertrophy: 'aumentar masa muscular',
-  strength: 'fuerza mÃ¡xima',
+  strength: 'fuerza máxima',
   endurance: 'resistencia',
-  fat_loss: 'pÃ©rdida de grasa',
+  fat_loss: 'pérdida de grasa',
   general_fitness: 'fitness general',
-  athletic_performance: 'rendimiento atlÃ©tico',
+  athletic_performance: 'rendimiento atlético',
 };
 
 export const UserHeader: React.FC<UserHeaderProps> = ({

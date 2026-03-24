@@ -101,7 +101,9 @@ const ExerciseCard = ({
     <TouchableOpacity style={styles.exerciseCard} activeOpacity={0.86} onPress={onPress}>
       <View style={styles.exerciseCardTop}>
         <View style={styles.exerciseCopy}>
-          <Text style={styles.exerciseName}>{exercise.exercise_name}</Text>
+          <Text style={styles.exerciseName} numberOfLines={2}>
+            {exercise.exercise_name}
+          </Text>
           <Text style={styles.exerciseMeta}>
             {exercise.last_performed_on
               ? `Ultima sesion ${formatLocalDate(exercise.last_performed_on, {
@@ -111,7 +113,7 @@ const ExerciseCard = ({
               : 'Sin fecha reciente'}
           </Text>
         </View>
-        <ExerciseSparkline values={exercise.sparkline_points} />
+        <ExerciseSparkline values={exercise.sparkline_points} width={132} />
       </View>
 
       <View style={styles.exerciseStatsRow}>
@@ -549,15 +551,18 @@ const createStyles = (theme: AppTheme) =>
     exerciseCardTop: {
       flexDirection: 'row',
       justifyContent: 'space-between',
+      alignItems: 'flex-start',
       gap: spacing.md,
     },
     exerciseCopy: {
       flex: 1,
+      minWidth: 0,
     },
     exerciseName: {
       fontSize: fontSize.base,
       fontWeight: '700',
       color: theme.colors.textPrimary,
+      lineHeight: 28,
     },
     exerciseMeta: {
       marginTop: spacing.xs,

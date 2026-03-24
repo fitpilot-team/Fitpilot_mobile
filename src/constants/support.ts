@@ -66,7 +66,7 @@ export const supportLegalDocuments = {
     emptyStateTitle: 'Terminos no configurados',
     emptyStateDescription:
       'Todavia no tenemos una URL publica para este documento. Vuelve a intentarlo mas adelante o solicita ayuda al equipo de soporte.',
-    url: resolveOptionalUrl(process.env.EXPO_PUBLIC_TERMS_URL || extra.termsUrl),
+    url: resolveOptionalUrl(process.env.EXPO_PUBLIC_TERMS_URL || extra.termsUrl || 'https://pro.fitpilot.fit/es/terms'),
   },
   privacy: {
     title: 'Politica de privacidad',
@@ -74,7 +74,7 @@ export const supportLegalDocuments = {
     emptyStateTitle: 'Politica no configurada',
     emptyStateDescription:
       'Todavia no tenemos una URL publica para este documento. Vuelve a intentarlo mas adelante o solicita ayuda al equipo de soporte.',
-    url: resolveOptionalUrl(process.env.EXPO_PUBLIC_PRIVACY_URL || extra.privacyUrl),
+    url: resolveOptionalUrl(process.env.EXPO_PUBLIC_PRIVACY_URL || extra.privacyUrl || 'https://pro.fitpilot.fit/es/privacy'),
   },
 } satisfies Record<string, SupportLegalDocument>;
 

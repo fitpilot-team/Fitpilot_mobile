@@ -207,12 +207,6 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Preferencias</Text>
         <View style={styles.menuSection}>
           <MenuItem
-            icon="language-outline"
-            label="Idioma"
-            value="Espanol"
-            onPress={() => handleNotImplemented('Idioma')}
-          />
-          <MenuItem
             icon="moon-outline"
             label="Tema"
             value={getThemePreferenceLabel(preference)}
@@ -242,7 +236,7 @@ export default function ProfileScreen() {
             icon="document-text-outline"
             label="Términos y condiciones"
             onPress={() => {
-              const url = process.env.EXPO_PUBLIC_TERMS_URL;
+              const url = process.env.EXPO_PUBLIC_TERMS_URL || 'https://pro.fitpilot.fit/es/terms';
               if (url) {
                 Linking.openURL(url);
               } else {
@@ -254,7 +248,7 @@ export default function ProfileScreen() {
             icon="shield-checkmark-outline"
             label="Política de privacidad"
             onPress={() => {
-              const url = process.env.EXPO_PUBLIC_PRIVACY_URL;
+              const url = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://pro.fitpilot.fit/es/privacy';
               if (url) {
                 Linking.openURL(url);
               } else {
