@@ -17,6 +17,7 @@ import {
   UserHeader,
 } from '../../src/components/dashboard';
 import { spacing } from '../../src/constants/colors';
+import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { getMuscleVolume } from '../../src/services/api';
 import type { TipContext } from '../../src/utils/contextualTips';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
@@ -35,6 +36,7 @@ export default function HomeScreen() {
   const contentWidth = getDashboardContentWidth(width);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const tabBarScroll = useBottomTabBarScroll();
   const { user } = useAuthStore();
   const {
     activeMacrocycle,
@@ -217,6 +219,7 @@ export default function HomeScreen() {
           styles.scrollContent,
           isTablet ? styles.scrollContentTablet : null,
         ]}
+        onScroll={tabBarScroll.onScroll}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -224,6 +227,7 @@ export default function HomeScreen() {
             tintColor={theme.colors.primary}
           />
         }
+        scrollEventThrottle={tabBarScroll.scrollEventThrottle}
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.contentColumn, { maxWidth: contentWidth }]}>

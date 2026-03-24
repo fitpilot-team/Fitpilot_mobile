@@ -22,6 +22,7 @@ import {
 } from '../../src/components/diet';
 import { borderRadius, brandColors, fontSize, spacing, nutritionTheme } from '../../src/constants/colors';
 import { useAuthStore } from '../../src/store/authStore';
+import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import {
   getClientDietCalendar,
@@ -44,6 +45,7 @@ export default function DietScreen() {
   const contentWidth = getDashboardContentWidth(width);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const tabBarScroll = useBottomTabBarScroll();
   const { user } = useAuthStore();
   const [dietDays, setDietDays] = useState<ClientDietWeekDay[]>([]);
   const [selectedDate, setSelectedDate] = useState(getTodayDietDateKey());
@@ -260,6 +262,7 @@ export default function DietScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        onScroll={tabBarScroll.onScroll}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -267,6 +270,7 @@ export default function DietScreen() {
             tintColor={brandColors.navy}
           />
         }
+        scrollEventThrottle={tabBarScroll.scrollEventThrottle}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View entering={FadeInDown.duration(350)} style={styles.header}>

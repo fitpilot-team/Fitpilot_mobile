@@ -23,6 +23,7 @@ import {
   getWorkoutAnalyticsDashboard,
   updateWorkoutAnalyticsPreferences,
 } from '../../src/services/workoutAnalytics';
+import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
@@ -191,6 +192,7 @@ export default function WorkoutsScreen() {
   const { width } = useWindowDimensions();
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const tabBarScroll = useBottomTabBarScroll();
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
   const [dashboard, setDashboard] = useState<WorkoutAnalyticsDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -284,6 +286,7 @@ export default function WorkoutsScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        onScroll={tabBarScroll.onScroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -292,6 +295,7 @@ export default function WorkoutsScreen() {
             tintColor={theme.colors.primary}
           />
         }
+        scrollEventThrottle={tabBarScroll.scrollEventThrottle}
       >
         <AnalyticsRangeSelector value={range} onChange={setRange} />
 
