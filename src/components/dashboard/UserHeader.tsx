@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { spacing, fontSize, borderRadius } from '../../constants/colors';
+import { spacing, fontSize } from '../../constants/colors';
 import { Logo } from '../common/Logo';
 import type { User, Macrocycle } from '../../types';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';

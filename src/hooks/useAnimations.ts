@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import {
   useSharedValue,
   useAnimatedStyle,
@@ -8,7 +8,6 @@ import {
   interpolate,
   Extrapolate,
   Easing,
-  runOnJS,
 } from 'react-native-reanimated';
 
 /**
@@ -23,7 +22,7 @@ export const useEntryAnimation = (index: number = 0, delay: number = 100) => {
       index * delay,
       withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) })
     );
-  }, [index, delay]);
+  }, [delay, index, progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 1], [0, 1]),
@@ -51,11 +50,11 @@ export const usePressAnimation = (scaleValue: number = 0.96) => {
 
   const onPressIn = useCallback(() => {
     scale.value = withSpring(scaleValue, { damping: 15, stiffness: 400 });
-  }, [scaleValue]);
+  }, [scale, scaleValue]);
 
   const onPressOut = useCallback(() => {
     scale.value = withSpring(1, { damping: 15, stiffness: 400 });
-  }, []);
+  }, [scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -76,11 +75,11 @@ export const useCountAnimation = (targetValue: number, duration: number = 1000) 
       duration,
       easing: Easing.out(Easing.cubic),
     });
-  }, [targetValue, duration]);
+  }, [animatedValue, duration, targetValue]);
 
   const reset = useCallback(() => {
     animatedValue.value = 0;
-  }, []);
+  }, [animatedValue]);
 
   return { animatedValue, startCounting, reset };
 };
@@ -96,7 +95,7 @@ export const useBounceAnimation = () => {
     scale.value = withSpring(1.1, { damping: 10, stiffness: 400 }, () => {
       scale.value = withSpring(1, { damping: 15, stiffness: 400 });
     });
-  }, []);
+  }, [scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -113,11 +112,11 @@ export const useFadeAnimation = (initialVisible: boolean = false) => {
 
   const fadeIn = useCallback((duration: number = 300) => {
     opacity.value = withTiming(1, { duration, easing: Easing.out(Easing.ease) });
-  }, []);
+  }, [opacity]);
 
   const fadeOut = useCallback((duration: number = 300) => {
     opacity.value = withTiming(0, { duration, easing: Easing.out(Easing.ease) });
-  }, []);
+  }, [opacity]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -137,11 +136,11 @@ export const useSlideAnimation = (
 
   const slideIn = useCallback((duration: number = 400) => {
     progress.value = withTiming(1, { duration, easing: Easing.out(Easing.cubic) });
-  }, []);
+  }, [progress]);
 
   const slideOut = useCallback((duration: number = 400) => {
     progress.value = withTiming(0, { duration, easing: Easing.in(Easing.cubic) });
-  }, []);
+  }, [progress]);
 
   const animatedStyle = useAnimatedStyle(() => {
     const translateValue = interpolate(
@@ -176,7 +175,7 @@ export const useStaggeredEntrance = (itemCount: number, staggerDelay: number = 8
       duration: 300 + itemCount * staggerDelay,
       easing: Easing.out(Easing.cubic),
     });
-  }, [itemCount, staggerDelay]);
+  }, [itemCount, progress, staggerDelay]);
 
   const getItemStyle = useCallback(
     (index: number) => {
@@ -198,7 +197,7 @@ export const useStaggeredEntrance = (itemCount: number, staggerDelay: number = 8
         ],
       };
     },
-    [itemCount, staggerDelay]
+    [itemCount, progress, staggerDelay]
   );
 
   return { startAnimation, getItemStyle, progress };

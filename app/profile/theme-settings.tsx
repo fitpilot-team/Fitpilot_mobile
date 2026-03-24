@@ -6,12 +6,12 @@ import { borderRadius, fontSize, shadows, spacing } from '../../src/constants/co
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type { ThemePreference } from '../../src/store/themeStore';
 
-const THEME_OPTIONS: Array<{
+const THEME_OPTIONS: {
   value: ThemePreference;
   title: string;
   description: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
-}> = [
+}[] = [
   {
     value: 'system',
     title: 'Sistema',

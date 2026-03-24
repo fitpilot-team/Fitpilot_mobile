@@ -13,7 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../src/store/authStore';
 import { Button, Input, Logo } from '../src/components/common';
 import { brandColors, spacing, fontSize, borderRadius } from '../src/constants/colors';
-import { useAppTheme, useThemedStyles } from '../src/theme';
+import { useThemedStyles, type AppTheme } from '../src/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 400;
@@ -23,7 +23,6 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, isLoading, error, clearError, isAuthenticated } = useAuthStore();
-  const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
 
   useEffect(() => {
@@ -132,7 +131,7 @@ export default function LoginScreen() {
   );
 }
 
-const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       flex: 1,

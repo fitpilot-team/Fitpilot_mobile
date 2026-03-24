@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { useEffect } from 'react';
-import { StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useIsFocused } from '@react-navigation/native';
 
@@ -46,9 +45,3 @@ export const TabScreenWrapper = ({ children }: TabScreenWrapperProps) => {
     </Animated.View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});

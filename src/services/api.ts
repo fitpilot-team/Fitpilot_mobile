@@ -3,6 +3,7 @@ import axios, {
   AxiosInstance,
   AxiosRequestConfig,
   InternalAxiosRequestConfig,
+  isAxiosError,
 } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
@@ -10,7 +11,7 @@ import type { ApiError, LoginResponse, MuscleVolumeResponse } from '../types';
 
 type ValidationDetail = {
   msg?: string;
-  loc?: Array<string | number>;
+  loc?: (string | number)[];
 };
 
 type ApiErrorPayload = {
@@ -91,7 +92,7 @@ const createApiError = (
   error: AxiosError<ApiErrorPayload> | Error,
   fallbackMessage = 'Ha ocurrido un error inesperado',
 ) => {
-  if (!axios.isAxiosError<ApiErrorPayload>(error)) {
+  if (!isAxiosError<ApiErrorPayload>(error)) {
     const apiError = new Error(error.message || fallbackMessage) as ApiError;
     return apiError;
   }

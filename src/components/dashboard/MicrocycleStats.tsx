@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, brandColors, colors, fontSize, shadows, spacing } from '../../constants/colors';
-import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
+import { useThemedStyles, type AppTheme } from '../../theme';
 import type { MicrocycleMode, MicrocycleProgress } from '../../types';
 
 interface MicrocycleStatsProps {
@@ -26,7 +26,6 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
   onModeChange,
   isLoading = false,
 }) => {
-  const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const plannedMetrics = microcycleProgress?.planned_metrics;
   const actualMetrics = microcycleProgress?.actual_metrics;

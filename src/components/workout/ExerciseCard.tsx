@@ -235,7 +235,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   const cardioProtocolLabel = exercise?.cardio_subclass?.toUpperCase() || 'CARDIO';
   const cardioZoneLabel = formatZoneLabel(dayExercise.intensity_zone ?? exercise?.intensity_zone);
   const cardioMetrics = useMemo(() => {
-    const metrics: Array<{ key: string; label: string; value: string }> = [];
+    const metrics: { key: string; label: string; value: string }[] = [];
 
     const durationLabel = dayExercise.duration_seconds == null
       ? null
@@ -281,13 +281,15 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
     cardioZoneLabel,
   ]);
 
+  const setData = progress.sets_data;
+
   const setLogsByNumber = useMemo(() => {
-    const logs = new Map<number, (typeof progress.sets_data)[number]>();
-    progress.sets_data.forEach((setLog) => {
+    const logs = new Map<number, (typeof setData)[number]>();
+    setData.forEach((setLog) => {
       logs.set(setLog.set_number, setLog);
     });
     return logs;
-  }, [progress.sets_data]);
+  }, [setData]);
 
   useEffect(() => {
     if (editingField !== 'reps') {

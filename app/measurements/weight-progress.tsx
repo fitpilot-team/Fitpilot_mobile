@@ -76,7 +76,7 @@ const recordDateTimeFormatter = new Intl.DateTimeFormat('es-MX', {
   minute: '2-digit',
 });
 
-const RANGE_OPTIONS: Array<{ key: RangePreset; label: string }> = [
+const RANGE_OPTIONS: { key: RangePreset; label: string }[] = [
   { key: '7d', label: '1 semana' },
   { key: '30d', label: '1 mes' },
   { key: '90d', label: '3 meses' },

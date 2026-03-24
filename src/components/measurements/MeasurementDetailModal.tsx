@@ -225,12 +225,12 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                       unit: convertedValue.unit ?? undefined,
                     };
                   })
-                  .filter(Boolean) as Array<{
+                  .filter(Boolean) as {
                   key: string;
                   label: string;
                   value: string;
                   unit?: string;
-                }>;
+                }[];
 
                 if (rows.length === 0) {
                   return null;

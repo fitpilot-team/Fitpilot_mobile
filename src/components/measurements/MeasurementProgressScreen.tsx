@@ -15,7 +15,6 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { Card, LoadingSpinner } from '../common';
 import {
   getMeasurementProgressMetricConfig,
-  type MeasurementProgressMetricKey,
 } from '../../constants/measurements';
 import { borderRadius, fontSize, spacing } from '../../constants/colors';
 import { listMyMeasurements } from '../../services/measurements';
@@ -43,7 +42,7 @@ const HISTORY_PAGE_SIZE = 100;
 const CHART_HEIGHT = 220;
 const CHART_PADDING_X = 24;
 const CHART_PADDING_Y = 20;
-const RANGE_OPTIONS: Array<{ key: RangePreset; label: string }> = [
+const RANGE_OPTIONS: { key: RangePreset; label: string }[] = [
   { key: '7d', label: '7 dias' },
   { key: '30d', label: '30 dias' },
   { key: '90d', label: '90 dias' },
@@ -73,7 +72,7 @@ const resolveRangeStart = (range: RangePreset) => {
   return next.getTime();
 };
 
-const buildChartPath = (points: Array<{ x: number; y: number }>) => {
+const buildChartPath = (points: { x: number; y: number }[]) => {
   if (points.length === 0) {
     return '';
   }

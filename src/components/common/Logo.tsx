@@ -47,7 +47,7 @@ export const Logo: React.FC<LogoProps> = ({
         withTiming(1, { duration: 800, easing: Easing.out(Easing.cubic) })
       );
     }
-  }, [animated]);
+  }, [animated, progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 1], [0, 1]),

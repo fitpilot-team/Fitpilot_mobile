@@ -35,10 +35,10 @@ type NutritionFoodResponse = {
   name?: string | null;
   base_serving_size?: number | string | null;
   base_unit?: string | null;
-  food_nutrition_values?: Array<{
+  food_nutrition_values?: {
     base_serving_size?: number | string | null;
     base_unit?: string | null;
-  }>;
+  }[];
 };
 
 type NutritionRecipeIngredientResponse = {

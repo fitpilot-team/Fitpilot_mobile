@@ -9,7 +9,7 @@ import {
   shadows,
   spacing,
 } from '../../src/constants/colors';
-import { useAppTheme, useThemedStyles } from '../../src/theme';
+import { useThemedStyles, type AppTheme } from '../../src/theme';
 import { updateCurrentUser } from '../../src/services/account';
 import { useAuthStore } from '../../src/store/authStore';
 
@@ -28,7 +28,6 @@ type FormErrors = {
 export default function PersonalInfoScreen() {
   const { user, refreshUser } = useAuthStore();
   const styles = useThemedStyles(createStyles);
-  const { theme } = useAppTheme();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formState, setFormState] = useState<FormState>({
     name: '',
@@ -186,7 +185,7 @@ export default function PersonalInfoScreen() {
   );
 }
 
-const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     card: {
       backgroundColor: theme.colors.surface,

@@ -113,14 +113,6 @@ export default function ProfileScreen() {
     );
   };
 
-  const handleNotImplemented = (feature: string) => {
-    Alert.alert(
-      'Proximamente',
-      `La funcion "${feature}" estara disponible proximamente.`,
-      [{ text: 'OK' }],
-    );
-  };
-
   const handleMeasurementPreferenceSelect = async (
     nextPreference: MeasurementPreference,
   ) => {

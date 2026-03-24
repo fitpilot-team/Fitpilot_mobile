@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -27,7 +27,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 }) => {
   const { width } = useWindowDimensions();
   const videoRef = useRef<VideoView>(null);
-  const [isInFullscreen, setIsInFullscreen] = useState(false);
 
   const player = useVideoPlayer(visible ? videoUri : null, (player) => {
     player.loop = true;
@@ -46,13 +45,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       player.pause();
     }
   }, [visible, player]);
-
-  // Reset fullscreen state when modal closes
-  useEffect(() => {
-    if (!visible) {
-      setIsInFullscreen(false);
-    }
-  }, [visible]);
 
   const handleClose = useCallback(() => {
     player?.pause();
@@ -115,8 +107,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 player={player}
                 nativeControls={true}
                 contentFit="contain"
-                onFullscreenEnter={() => setIsInFullscreen(true)}
-                onFullscreenExit={() => setIsInFullscreen(false)}
               />
             )}
           </View>

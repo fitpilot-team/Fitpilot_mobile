@@ -18,6 +18,9 @@ export type CountryPickerProps = {
   style?: Record<string, unknown>;
 };
 
+// The package ships typings that currently break under this repo's TS setup.
+// Using require here isolates the vendor surface behind our own typed wrapper.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const countryPickerModule = require('react-native-country-codes-picker') as {
   CountryPicker: React.ComponentType<CountryPickerProps>;
   countryCodes: CountryItem[];

@@ -11,7 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInRight } from 'react-native-reanimated';
-import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
+import { spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import { categoryColors, categoryLabels, type ScienceTip } from '../../constants/scienceTips';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import { getContextualTips, type TipContext } from '../../utils/contextualTips';

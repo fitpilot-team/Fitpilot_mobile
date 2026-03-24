@@ -6,8 +6,6 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
-  withDelay,
-  withSequence,
   runOnJS,
   Easing,
 } from 'react-native-reanimated';
@@ -74,7 +72,7 @@ export const WorkoutToast: React.FC<WorkoutToastProps> = ({
       opacity.value = 0;
       scale.value = 0.8;
     }
-  }, [visible, config]);
+  }, [config, duration, onHide, opacity, scale, translateY, visible]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [

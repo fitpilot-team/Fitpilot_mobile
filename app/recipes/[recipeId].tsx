@@ -28,7 +28,7 @@ import { getRecipeRichTextBlocks } from '../../src/utils/recipeRichText';
 
 type RecipeTab = 'description' | 'ingredients';
 
-const tabOptions: Array<{ key: RecipeTab; label: string }> = [
+const tabOptions: { key: RecipeTab; label: string }[] = [
   { key: 'description', label: 'Descripcion' },
   { key: 'ingredients', label: 'Ingredientes' },
 ];

@@ -218,12 +218,12 @@ export default function MeasurementsScreen() {
         value: calculation.value,
         unit: calculation.unit,
       };
-    }).filter(Boolean) as Array<{
+    }).filter(Boolean) as {
       code: string;
       label: string;
       value: number;
       unit: string | null;
-    }>;
+    }[];
   }, [latestMeasurementDetail]);
 
   const getDisplayMeasurement = useCallback(

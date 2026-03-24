@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import { brandColors, fontSize, spacing } from '../../constants/colors';
-import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
+import { useThemedStyles, type AppTheme } from '../../theme';
 
 const SVG_ORIGINAL_WIDTH = 100;
 const SVG_ORIGINAL_HEIGHT = 100;
@@ -181,7 +181,6 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
   rowOffsetX = 0,
   heroOffsetX = 0,
 }) => {
-  const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
 
   const metrics = useMemo<CalendarMetrics>(() => {

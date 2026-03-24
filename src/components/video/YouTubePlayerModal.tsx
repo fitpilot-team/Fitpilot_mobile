@@ -48,7 +48,7 @@ export const YouTubePlayerModal: React.FC<YouTubePlayerModalProps> = ({
   youtubeUrl,
   onClose,
 }) => {
-  const { width, height } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const [isLoading, setIsLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
 

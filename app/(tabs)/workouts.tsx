@@ -13,10 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
-import AnalyticsRangeSelector from '../../src/components/workout-analytics/AnalyticsRangeSelector';
-import ExerciseSparkline from '../../src/components/workout-analytics/ExerciseSparkline';
-import RepRangeEditorModal from '../../src/components/workout-analytics/RepRangeEditorModal';
-import RepRangeVolumeChart from '../../src/components/workout-analytics/RepRangeVolumeChart';
+import { AnalyticsRangeSelector } from '../../src/components/workout-analytics/AnalyticsRangeSelector';
+import { ExerciseSparkline } from '../../src/components/workout-analytics/ExerciseSparkline';
+import { RepRangeEditorModal } from '../../src/components/workout-analytics/RepRangeEditorModal';
+import { RepRangeVolumeChart } from '../../src/components/workout-analytics/RepRangeVolumeChart';
 import { DEFAULT_WORKOUT_ANALYTICS_RANGE } from '../../src/constants/workoutAnalytics';
 import { borderRadius, fontSize, shadows, spacing } from '../../src/constants/colors';
 import {

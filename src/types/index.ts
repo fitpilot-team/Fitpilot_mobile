@@ -434,7 +434,7 @@ export interface ClientDietIngredientRow {
   portion: ClientDietPortion;
 }
 
-export interface ClientDietFoodRow extends ClientDietIngredientRow {}
+export type ClientDietFoodRow = ClientDietIngredientRow;
 
 export interface ClientDietRecipeCard {
   id: string;

@@ -56,11 +56,9 @@ export const MEASUREMENT_NUMERIC_FORM_KEYS = [
   'calf_right_cm',
 ] as const satisfies readonly MeasurementNumericFormKey[];
 
-export const SUMMARY_METRICS: Array<
-  MeasurementFieldConfig<'weight_kg' | 'body_fat_pct' | 'muscle_mass_kg'> & {
+export const SUMMARY_METRICS: (MeasurementFieldConfig<'weight_kg' | 'body_fat_pct' | 'muscle_mass_kg'> & {
     emphasizeDecrease?: boolean;
-  }
-> = [
+  })[] = [
   {
     key: 'weight_kg',
     label: 'Peso',

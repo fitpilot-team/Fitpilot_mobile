@@ -141,7 +141,7 @@ export const MicrocycleTimeline: React.FC<MicrocycleTimelineProps> = ({
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const todayDateKey = getTodayDateKey();
-  const days = microcycleProgress?.days ?? [];
+  const days = useMemo(() => microcycleProgress?.days ?? [], [microcycleProgress?.days]);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
 
   useEffect(() => {
