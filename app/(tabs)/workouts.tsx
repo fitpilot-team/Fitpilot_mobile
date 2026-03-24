@@ -23,7 +23,7 @@ import {
   getWorkoutAnalyticsDashboard,
   updateWorkoutAnalyticsPreferences,
 } from '../../src/services/workoutAnalytics';
-import { useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
@@ -193,6 +193,7 @@ export default function WorkoutsScreen() {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
+  const contentInsetBottom = useBottomTabBarContentInset();
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
   const [dashboard, setDashboard] = useState<WorkoutAnalyticsDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -285,7 +286,7 @@ export default function WorkoutsScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
         onScroll={tabBarScroll.onScroll}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -459,7 +460,7 @@ const createStyles = (theme: AppTheme) =>
     },
     scrollContent: {
       paddingHorizontal: spacing.lg,
-      paddingBottom: spacing.xxl + 80,
+      paddingBottom: spacing.xxl,
       gap: spacing.lg,
     },
     errorCard: {
