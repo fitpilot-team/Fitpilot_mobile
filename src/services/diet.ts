@@ -6,6 +6,7 @@ import type {
   ClientDietMeal,
   ClientDietPortion,
   ClientDietRecipeCard,
+  ClientDietRecipeDetail,
   ClientDietWeekDay,
   ClientRecipeSummary,
 } from '../types';
@@ -16,6 +17,7 @@ import {
   getTodayDateKey,
   toLocalDateKey,
 } from '../utils/date';
+import { getRecipeRichTextPlainText } from '../utils/recipeRichText';
 
 type NutritionPortionResponse = {
   household_label?: string | null;
@@ -61,8 +63,26 @@ type NutritionEmbeddedRecipeDetailResponse = {
 type NutritionRecipeDetailResponse = {
   id: number;
   name: string;
+  description?: string | null;
+  description_rich?: unknown | null;
   image_url: string | null;
   ingredient_count?: number | string | null;
+  ingredients?: NutritionRecipeDetailIngredientResponse[] | null;
+};
+
+type NutritionRecipeDetailIngredientResponse = {
+  id: number | string;
+  food_id?: number | null;
+  serving_unit_id?: number | null;
+  quantity?: number | string | null;
+  food?: NutritionFoodResponse | null;
+  serving_unit?: {
+    id?: number | null;
+    food_id?: number | null;
+    unit_name?: string | null;
+    gram_equivalent?: number | string | null;
+    is_exchange_unit?: boolean | null;
+  } | null;
 };
 
 type NutritionMenuItemResponse = {
@@ -183,6 +203,30 @@ const isGramBasedQuantity = (item: NutritionMenuItemResponse) => {
   );
 };
 
+const isGramBasedRecipeIngredient = (ingredient: NutritionRecipeDetailIngredientResponse) => {
+  if (ingredient.serving_unit_id === null || ingredient.serving_unit_id === undefined) {
+    return true;
+  }
+
+  const normalizedUnit = normalizeUnit(ingredient.serving_unit?.unit_name);
+  if (
+    normalizedUnit === 'g' ||
+    normalizedUnit === 'gr' ||
+    normalizedUnit === 'gramo' ||
+    normalizedUnit === 'gramos'
+  ) {
+    return true;
+  }
+
+  const normalizedBaseUnit = normalizeUnit(resolveFoodBaseUnit(ingredient.food));
+  return (
+    normalizedBaseUnit === 'g' ||
+    normalizedBaseUnit === 'gr' ||
+    normalizedBaseUnit === 'gramo' ||
+    normalizedBaseUnit === 'gramos'
+  );
+};
+
 const buildPortion = (
   householdLabel: string | null,
   equivalents: number | null,
@@ -221,6 +265,39 @@ const derivePortionFromMenuItem = (item: NutritionMenuItemResponse): ClientDietP
     grams !== null && baseServingSize !== null && baseServingSize > 0
       ? grams / baseServingSize
       : explicitEquivalent;
+
+  const householdLabel = unitName
+    ? quantity !== null
+      ? `${formatDisplayNumber(quantity)} ${unitName}`
+      : null
+    : grams !== null
+      ? `${formatDisplayNumber(grams)} g`
+      : null;
+
+  return buildPortion(householdLabel, equivalents, grams);
+};
+
+const derivePortionFromRecipeIngredient = (
+  ingredient: NutritionRecipeDetailIngredientResponse,
+): ClientDietPortion => {
+  const quantity = toNumber(ingredient.quantity);
+  const gramEquivalent = toNumber(ingredient.serving_unit?.gram_equivalent);
+  const baseServingSize = resolveFoodBaseServingSize(ingredient.food);
+  const unitName = ingredient.serving_unit?.unit_name?.trim() || null;
+
+  const grams =
+    quantity !== null
+      ? gramEquivalent !== null && gramEquivalent > 0
+        ? quantity * gramEquivalent
+        : isGramBasedRecipeIngredient(ingredient)
+          ? quantity
+          : null
+      : null;
+
+  const equivalents =
+    grams !== null && baseServingSize !== null && baseServingSize > 0
+      ? grams / baseServingSize
+      : null;
 
   const householdLabel = unitName
     ? quantity !== null
@@ -437,6 +514,33 @@ const mapDietMenu = (
     totalMeals: meals.length,
     totalItems,
     totalRecipes,
+  };
+};
+
+export const getDietRecipeDetail = async (
+  recipeId: number,
+): Promise<ClientDietRecipeDetail> => {
+  const recipe = await nutritionClient.get<NutritionRecipeDetailResponse>(`/recipes/${recipeId}`);
+  const ingredients = (recipe.ingredients ?? []).map((ingredient) => ({
+    id: String(ingredient.id),
+    label: ingredient.food?.name?.trim() || 'Ingrediente',
+    exchangeGroupName: null,
+    portion: derivePortionFromRecipeIngredient(ingredient),
+  }));
+
+  const description = getRecipeRichTextPlainText(
+    recipe.description_rich,
+    recipe.description,
+  );
+
+  return {
+    id: `recipe-${recipe.id}`,
+    recipeId: recipe.id,
+    title: recipe.name?.trim() || 'Receta',
+    imageUrl: recipe.image_url ?? null,
+    description: description || null,
+    ingredientCount: toNumber(recipe.ingredient_count) ?? ingredients.length,
+    ingredients,
   };
 };
 
