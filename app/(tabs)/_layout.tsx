@@ -19,6 +19,7 @@ const TABLET_TOP_PADDING = 72;
 const TABLET_BOTTOM_PADDING = 18;
 const PHONE_TAB_BAR_HEIGHT = 60;
 const PHONE_TAB_BAR_VERTICAL_PADDING = 8;
+const HIDDEN_CONTENT_BOTTOM_INSET = 12;
 
 interface TabletTabBarProps {
   props: BottomTabBarProps;
@@ -88,19 +89,36 @@ const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { isVisible } = useBottomTabBarVisibility();
+  const { isVisible, setContentInsetBottom } = useBottomTabBarVisibility();
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
   const tabWidth = (width - 32) / state.routes.length;
   const indicatorX = useSharedValue(state.index * tabWidth);
+  const visiblePaddingBottom = Math.max(insets.bottom, 16);
+  const hiddenOffset = PHONE_TAB_BAR_HEIGHT + visiblePaddingBottom + 24;
+  const visibleContentInset = PHONE_TAB_BAR_HEIGHT + visiblePaddingBottom + 16;
 
   useEffect(() => {
     indicatorX.value = withTiming(state.index * tabWidth, {
       duration: 300,
     });
-    translateY.value = withTiming(isVisible ? 0 : 100, { duration: 250 });
+    translateY.value = withTiming(isVisible ? 0 : hiddenOffset, { duration: 250 });
     opacity.value = withTiming(isVisible ? 1 : 0, { duration: 200 });
-  }, [indicatorX, isVisible, opacity, state.index, tabWidth, translateY]);
+    setContentInsetBottom(
+      isVisible ? visibleContentInset : insets.bottom + HIDDEN_CONTENT_BOTTOM_INSET,
+    );
+  }, [
+    hiddenOffset,
+    indicatorX,
+    insets.bottom,
+    isVisible,
+    opacity,
+    setContentInsetBottom,
+    state.index,
+    tabWidth,
+    translateY,
+    visibleContentInset,
+  ]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -118,7 +136,7 @@ const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
         styles.phoneFloatingTabBarWrapper,
         animatedStyle,
         {
-          paddingBottom: Math.max(insets.bottom, 16),
+          paddingBottom: visiblePaddingBottom,
           paddingHorizontal: 16,
         },
       ]}
@@ -250,6 +268,7 @@ export default function TabLayout() {
           )
         }
         screenOptions={{
+          animation: 'shift',
           sceneStyle: {
             backgroundColor: theme.colors.background,
           },

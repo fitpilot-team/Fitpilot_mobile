@@ -60,7 +60,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     slug: 'fitpilot-mobile',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/icon.png',
+    icon: './assets/AppIcon.png',
     scheme: 'fitpilot',
     userInterfaceStyle: 'automatic',
     splash: {
@@ -73,6 +73,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       supportsTablet: false,
       bundleIdentifier: 'com.fitpilot.mobile',
       infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
         NSAppTransportSecurity: {
           NSAllowsArbitraryLoads: !isProd,
           NSAllowsLocalNetworking: !isProd,
@@ -91,7 +92,21 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       output: 'static',
       favicon: './assets/favicon.png',
     },
-    plugins: ['expo-router', 'expo-secure-store', 'expo-asset', 'expo-font'],
+    plugins: [
+      'expo-router',
+      'expo-secure-store',
+      'expo-asset',
+      'expo-font',
+      [
+        'expo-image-picker',
+        {
+          photosPermission:
+            'Allow $(PRODUCT_NAME) to access your photos to let you set your profile picture.',
+          cameraPermission:
+            'Allow $(PRODUCT_NAME) to access your camera to let you set your profile picture.',
+        },
+      ],
+    ],
     experiments: {
       typedRoutes: true,
     },

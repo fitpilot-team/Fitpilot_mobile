@@ -56,7 +56,7 @@ const formatCalories = (value: number | null) => {
 
 const formatMeasureValue = (value: number | null, suffix: string) => {
   if (value === null) {
-    return '—';
+    return '--';
   }
 
   return `${Number.isInteger(value) ? value : Number(value.toFixed(2))} ${suffix}`;
@@ -71,10 +71,10 @@ const getIngredientMeasure = (ingredient: ClientDietIngredientRow | ClientDietFo
 
   const householdLabel = ingredient.portion.householdLabel?.trim();
   if (!householdLabel) {
-    return '—';
+    return '--';
   }
 
-  return METRIC_MEASURE_PATTERN.test(householdLabel) ? householdLabel : '—';
+  return METRIC_MEASURE_PATTERN.test(householdLabel) ? householdLabel : '--';
 };
 
 const PortionChips: React.FC<{
@@ -101,7 +101,7 @@ const PortionChips: React.FC<{
           numberOfLines={1}
           style={[styles.portionInfoValue, isDarkRecipe ? styles.recipePortionInfoValue : null]}
         >
-          {ingredient.portion.householdLabel || '—'}
+          {ingredient.portion.householdLabel || '--'}
         </Text>
       </View>
       <View style={[styles.portionInfoItem, isDarkRecipe ? styles.recipePortionInfoItem : null]}>

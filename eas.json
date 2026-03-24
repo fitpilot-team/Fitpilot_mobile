@@ -1,0 +1,33 @@
+{
+  "cli": {
+    "version": ">= 14.1.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_NUTRITION_API_URL": "https://nutrition-api.fitpilot.fit/v1",
+        "EXPO_PUBLIC_TRAINING_API_URL": "https://training-api.fitpilot.fit/api",
+        "EXPO_PUBLIC_TERMS_URL": "https://pro.fitpilot.fit/es/terms",
+        "EXPO_PUBLIC_PRIVACY_URL": "https://pro.fitpilot.fit/es/privacy"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_NUTRITION_API_URL": "https://nutrition-api.fitpilot.fit/v1",
+        "EXPO_PUBLIC_TRAINING_API_URL": "https://training-api.fitpilot.fit/api",
+        "EXPO_PUBLIC_TERMS_URL": "https://pro.fitpilot.fit/es/terms",
+        "EXPO_PUBLIC_PRIVACY_URL": "https://pro.fitpilot.fit/es/privacy"
+      }
+    }
+  }
+}

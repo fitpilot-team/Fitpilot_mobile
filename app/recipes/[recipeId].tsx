@@ -13,7 +13,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button, Card, LoadingSpinner } from '../../src/components/common';
-import { borderRadius, brandColors, colors, fontSize, nutritionTheme, spacing } from '../../src/constants/colors';
+import {
+  borderRadius,
+  brandColors,
+  colors,
+  fontSize,
+  nutritionTheme,
+  spacing,
+} from '../../src/constants/colors';
 import { getDietRecipeDetail } from '../../src/services/diet';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type { ApiError, ClientDietIngredientRow, ClientDietRecipeDetail } from '../../src/types';
@@ -83,13 +90,16 @@ const IngredientCard = ({
           <View style={styles.ingredientMetaItem}>
             <Text style={styles.ingredientMetaLabel}>Unidad casera</Text>
             <Text numberOfLines={1} style={styles.ingredientMetaValue}>
-              {ingredient.portion.householdLabel || '—'}
+              {ingredient.portion.householdLabel || '--'}
             </Text>
           </View>
           <View style={styles.ingredientMetaItem}>
             <Text style={styles.ingredientMetaLabel}>Medida</Text>
-            <Text numberOfLines={1} style={[styles.ingredientMetaValue, styles.ingredientMetaValueRight]}>
-              {measure || '—'}
+            <Text
+              numberOfLines={1}
+              style={[styles.ingredientMetaValue, styles.ingredientMetaValueRight]}
+            >
+              {measure || '--'}
             </Text>
           </View>
         </View>
@@ -202,7 +212,11 @@ export default function RecipeDetailScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.heroPlaceholder}
           >
-            <Ionicons name="restaurant-outline" size={34} color={theme.isDark ? brandColors.sky : nutritionTheme.accentStrong} />
+            <Ionicons
+              name="restaurant-outline"
+              size={34}
+              color={theme.isDark ? brandColors.sky : nutritionTheme.accentStrong}
+            />
             <Text style={styles.heroPlaceholderText}>Sin imagen disponible</Text>
           </LinearGradient>
         )}
@@ -265,7 +279,7 @@ export default function RecipeDetailScreen() {
                           {block.items.map((item, itemIndex) => (
                             <View key={`list-${blockIndex}-${itemIndex}`} style={styles.descriptionListItem}>
                               <Text style={styles.descriptionListMarker}>
-                                {block.type === 'orderedList' ? `${itemIndex + 1}.` : '•'}
+                                {block.type === 'orderedList' ? `${itemIndex + 1}.` : '\u2022'}
                               </Text>
                               <Text style={styles.descriptionListText}>{item}</Text>
                             </View>
