@@ -691,107 +691,107 @@ export default function WorkoutsScreen() {
     );
   }
 
+  const pageHeader = (
+    <View style={styles.pageHeaderShell}>
+      <View
+        style={[
+          styles.pageHeader,
+          { maxWidth: contentWidth },
+          isTablet ? styles.pageHeaderTablet : null,
+        ]}
+      >
+        <WorkoutAnalyticsHero
+          title="Todo tu progreso, mejor ordenado"
+          subtitle="Resumen ejecutivo arriba, listas completas solo cuando las necesitas."
+          rangeLabel={getRangeLabel(range)}
+          actionLabel={quickAction.label}
+          actionHint={quickAction.hint}
+          actionIcon={quickAction.icon}
+          metrics={heroMetrics}
+          onActionPress={quickAction.onPress}
+        />
+
+        <Card style={styles.controlsCard}>
+          <AnalyticsRangeSelector value={range} onChange={setRange} />
+          <WorkoutAnalyticsPillSelector
+            items={TAB_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+            value={activeTab}
+            onChange={handleTabChange}
+          />
+
+          {activeTab === 'exercises' ? (
+            <View style={styles.controlStack}>
+              <SearchField
+                value={exerciseSearchQuery}
+                placeholder="Buscar ejercicio"
+                onChangeText={setExerciseSearchQuery}
+                onClear={() => setExerciseSearchQuery('')}
+              />
+              <WorkoutAnalyticsPillSelector
+                items={EXERCISE_SORT_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
+                value={exerciseSort}
+                onChange={handleExerciseSortChange}
+              />
+            </View>
+          ) : null}
+
+          {activeTab === 'history' ? (
+            <View style={styles.controlStack}>
+              <WorkoutAnalyticsPillSelector
+                items={HISTORY_STATUS_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
+                value={historyStatus}
+                onChange={handleHistoryStatusChange}
+              />
+            </View>
+          ) : null}
+        </Card>
+
+        {error ? (
+          <View style={styles.inlineBanner}>
+            <Ionicons name="alert-circle-outline" size={16} color={theme.colors.warning} />
+            <Text style={styles.inlineBannerText}>{error}</Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
   return (
     <TabScreenWrapper>
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.screen}>
-          <View
-            style={[
-              styles.fixedTopArea,
-              { maxWidth: contentWidth },
-              isTablet ? styles.fixedTopAreaTablet : null,
+        {activeTab === 'overview' ? (
+          <FlatList
+            data={OVERVIEW_MODULES}
+            keyExtractor={(item) => item}
+            style={styles.list}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: contentInsetBottom + spacing.lg },
             ]}
-          >
-            <WorkoutAnalyticsHero
-              title="Todo tu progreso, mejor ordenado"
-              subtitle="Resumen ejecutivo arriba, listas completas solo cuando las necesitas."
-              rangeLabel={getRangeLabel(range)}
-              actionLabel={quickAction.label}
-              actionHint={quickAction.hint}
-              actionIcon={quickAction.icon}
-              metrics={heroMetrics}
-              onActionPress={quickAction.onPress}
-            />
-
-            <Card style={styles.controlsCard}>
-              <AnalyticsRangeSelector value={range} onChange={setRange} />
-              <WorkoutAnalyticsPillSelector
-                items={TAB_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-                value={activeTab}
-                onChange={handleTabChange}
+            ListHeaderComponent={pageHeader}
+            showsVerticalScrollIndicator={false}
+            onScroll={tabBarScroll.onScroll}
+            scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+            refreshControl={(
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={theme.colors.primary}
               />
+            )}
+            renderItem={({ item }) => {
+              const shellStyle = [styles.sectionShell, { maxWidth: contentWidth }];
 
-              {activeTab === 'exercises' ? (
-                <View style={styles.controlStack}>
-                  <SearchField
-                    value={exerciseSearchQuery}
-                    placeholder="Buscar ejercicio"
-                    onChangeText={setExerciseSearchQuery}
-                    onClear={() => setExerciseSearchQuery('')}
-                  />
-                  <WorkoutAnalyticsPillSelector
-                    items={EXERCISE_SORT_OPTIONS.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                    }))}
-                    value={exerciseSort}
-                    onChange={handleExerciseSortChange}
-                  />
-                </View>
-              ) : null}
-
-              {activeTab === 'history' ? (
-                <View style={styles.controlStack}>
-                  <WorkoutAnalyticsPillSelector
-                    items={HISTORY_STATUS_OPTIONS.map((option) => ({
-                      value: option.value,
-                      label: option.label,
-                    }))}
-                    value={historyStatus}
-                    onChange={handleHistoryStatusChange}
-                  />
-                </View>
-              ) : null}
-            </Card>
-
-            {error ? (
-              <View style={styles.inlineBanner}>
-                <Ionicons name="alert-circle-outline" size={16} color={theme.colors.warning} />
-                <Text style={styles.inlineBannerText}>{error}</Text>
-              </View>
-            ) : null}
-          </View>
-
-          <View
-            style={[
-              styles.listShell,
-              { maxWidth: contentWidth },
-              isTablet ? styles.listShellTablet : null,
-            ]}
-          >
-            {activeTab === 'overview' ? (
-              <FlatList
-                data={OVERVIEW_MODULES}
-                keyExtractor={(item) => item}
-                style={styles.list}
-                contentContainerStyle={[
-                  styles.listContent,
-                  { paddingBottom: contentInsetBottom + spacing.lg },
-                ]}
-                showsVerticalScrollIndicator={false}
-                onScroll={tabBarScroll.onScroll}
-                scrollEventThrottle={tabBarScroll.scrollEventThrottle}
-                refreshControl={(
-                  <RefreshControl
-                    refreshing={isRefreshing}
-                    onRefresh={handleRefresh}
-                    tintColor={theme.colors.primary}
-                  />
-                )}
-                renderItem={({ item }) => {
                   if (item === 'chart') {
                     return (
-                      <Card style={styles.featureCard} padding="lg">
+                      <View style={shellStyle}>
+                        <Card style={styles.featureCard} padding="lg">
                         <View style={styles.featureCardHeader}>
                           <View style={styles.sectionHeaderCopy}>
                             <Text style={styles.sectionTitle}>Kg movidos por rango</Text>
@@ -817,13 +817,14 @@ export default function WorkoutsScreen() {
                           repRanges={dashboard.preferences.rep_ranges}
                           contentWidth={chartWidth}
                         />
-                      </Card>
+                        </Card>
+                      </View>
                     );
                   }
 
                   if (item === 'exercises') {
                     return (
-                      <View style={styles.sectionBlock}>
+                      <View style={[styles.sectionBlock, shellStyle]}>
                         <SectionHeading
                           title="Ejercicios clave"
                           subtitle={
@@ -868,7 +869,7 @@ export default function WorkoutsScreen() {
                   }
 
                   return (
-                    <View style={styles.sectionBlock}>
+                    <View style={[styles.sectionBlock, shellStyle]}>
                       <SectionHeading
                         title="Sesiones recientes"
                         subtitle="Abre cualquier log para revisar o editar lo registrado."
@@ -896,49 +897,54 @@ export default function WorkoutsScreen() {
                     </View>
                   );
                 }}
-              />
-            ) : null}
+          />
+        ) : null}
 
-            {activeTab === 'exercises' ? (
-              <FlatList
-                data={filteredExercises}
-                keyExtractor={(item) => item.exercise_id}
-                style={styles.list}
-                contentContainerStyle={[
-                  styles.listContent,
-                  { paddingBottom: contentInsetBottom + spacing.lg },
-                ]}
-                showsVerticalScrollIndicator={false}
-                onScroll={tabBarScroll.onScroll}
-                scrollEventThrottle={tabBarScroll.scrollEventThrottle}
-                refreshControl={(
-                  <RefreshControl
-                    refreshing={isRefreshing}
-                    onRefresh={handleRefresh}
-                    tintColor={theme.colors.primary}
-                  />
-                )}
-                ListHeaderComponent={(
-                  <View style={styles.listMetaRow}>
+        {activeTab === 'exercises' ? (
+          <FlatList
+            data={filteredExercises}
+            keyExtractor={(item) => item.exercise_id}
+            style={styles.list}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: contentInsetBottom + spacing.lg },
+            ]}
+            ListHeaderComponent={(
+              <>
+                {pageHeader}
+                <View style={[styles.listMetaRow, styles.sectionShell, { maxWidth: contentWidth }]}>
                     <Text style={styles.listMetaTitle}>Lista completa</Text>
                     <Text style={styles.listMetaText}>
                       {filteredExercises.length} de {dashboard.exercise_summaries.length} ejercicios visibles
                     </Text>
                   </View>
-                )}
-                renderItem={({ item }) => (
-                  <ExerciseCard
-                    exercise={item}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/workouts/exercises/[exerciseId]',
-                        params: { exerciseId: item.exercise_id, range },
-                      })
-                    }
-                  />
-                )}
-                ListEmptyComponent={(
-                  <View style={styles.emptyListWrap}>
+              </>
+            )}
+            showsVerticalScrollIndicator={false}
+            onScroll={tabBarScroll.onScroll}
+            scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+            refreshControl={(
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={theme.colors.primary}
+              />
+            )}
+            renderItem={({ item }) => (
+              <View style={[styles.sectionShell, { maxWidth: contentWidth }]}>
+                <ExerciseCard
+                  exercise={item}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/workouts/exercises/[exerciseId]',
+                      params: { exerciseId: item.exercise_id, range },
+                    })
+                  }
+                />
+              </View>
+            )}
+            ListEmptyComponent={(
+              <View style={[styles.emptyListWrap, styles.sectionShell, { maxWidth: contentWidth }]}>
                     {!hasAnyHistory ? (
                       <EmptyStateCard
                         icon="analytics-outline"
@@ -962,54 +968,59 @@ export default function WorkoutsScreen() {
                         onActionPress={() => setExerciseSearchQuery('')}
                       />
                     )}
-                  </View>
-                )}
-              />
-            ) : null}
+              </View>
+            )}
+          />
+        ) : null}
 
-            {activeTab === 'history' ? (
-              <SectionList
-                sections={historySections}
-                keyExtractor={(item) => item.workout_log_id}
-                style={styles.list}
-                contentContainerStyle={[
-                  styles.listContent,
-                  { paddingBottom: contentInsetBottom + spacing.lg },
-                ]}
-                showsVerticalScrollIndicator={false}
-                onScroll={tabBarScroll.onScroll}
-                scrollEventThrottle={tabBarScroll.scrollEventThrottle}
-                stickySectionHeadersEnabled={false}
-                refreshControl={(
-                  <RefreshControl
-                    refreshing={isRefreshing || isHistoryRefreshing}
-                    onRefresh={handleRefresh}
-                    tintColor={theme.colors.primary}
-                  />
-                )}
-                onEndReached={handleHistoryLoadMore}
-                onEndReachedThreshold={0.35}
-                renderSectionHeader={({ section }) => (
-                  <View style={styles.monthHeader}>
+        {activeTab === 'history' ? (
+          <SectionList
+            sections={historySections}
+            keyExtractor={(item) => item.workout_log_id}
+            style={styles.list}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: contentInsetBottom + spacing.lg },
+            ]}
+            ListHeaderComponent={(
+              <>
+                {pageHeader}
+                <View style={[styles.listMetaRow, styles.sectionShell, { maxWidth: contentWidth }]}>
+                  <Text style={styles.listMetaTitle}>Historial completo</Text>
+                  <Text style={styles.listMetaText}>
+                    {historyPage?.total ?? 0} sesiones en la consulta actual
+                  </Text>
+                </View>
+              </>
+            )}
+            showsVerticalScrollIndicator={false}
+            onScroll={tabBarScroll.onScroll}
+            scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+            stickySectionHeadersEnabled={false}
+            refreshControl={(
+              <RefreshControl
+                refreshing={isRefreshing || isHistoryRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={theme.colors.primary}
+              />
+            )}
+            onEndReached={handleHistoryLoadMore}
+            onEndReachedThreshold={0.35}
+            renderSectionHeader={({ section }) => (
+              <View style={[styles.monthHeader, styles.sectionShell, { maxWidth: contentWidth }]}>
                     <Text style={styles.monthHeaderText}>{section.title}</Text>
                   </View>
-                )}
-                renderItem={({ item }) => (
-                  <HistoryCard
-                    workout={item}
-                    onPress={() => router.push(`/workout/${item.workout_log_id}`)}
-                  />
-                )}
-                ListHeaderComponent={(
-                  <View style={styles.listMetaRow}>
-                    <Text style={styles.listMetaTitle}>Historial completo</Text>
-                    <Text style={styles.listMetaText}>
-                      {historyPage?.total ?? 0} sesiones en la consulta actual
-                    </Text>
-                  </View>
-                )}
-                ListEmptyComponent={(
-                  <View style={styles.emptyListWrap}>
+            )}
+            renderItem={({ item }) => (
+              <View style={[styles.sectionShell, { maxWidth: contentWidth }]}>
+                <HistoryCard
+                  workout={item}
+                  onPress={() => router.push(`/workout/${item.workout_log_id}`)}
+                />
+              </View>
+            )}
+            ListEmptyComponent={(
+              <View style={[styles.emptyListWrap, styles.sectionShell, { maxWidth: contentWidth }]}>
                     {showFullHistorySpinner ? (
                       <View style={styles.loadingHistoryWrap}>
                         <ActivityIndicator size="small" color={theme.colors.primary} />
@@ -1032,10 +1043,10 @@ export default function WorkoutsScreen() {
                         onActionPress={() => setHistoryStatus('all')}
                       />
                     )}
-                  </View>
-                )}
-                ListFooterComponent={(
-                  <View style={styles.historyFooter}>
+              </View>
+            )}
+            ListFooterComponent={(
+              <View style={[styles.historyFooter, styles.sectionShell, { maxWidth: contentWidth }]}>
                     {isHistoryLoadingMore ? (
                       <ActivityIndicator size="small" color={theme.colors.primary} />
                     ) : null}
@@ -1048,12 +1059,10 @@ export default function WorkoutsScreen() {
                         <Text style={styles.retryFooterText}>Reintentar carga</Text>
                       </TouchableOpacity>
                     ) : null}
-                  </View>
-                )}
-              />
-            ) : null}
-          </View>
-        </View>
+              </View>
+            )}
+          />
+        ) : null}
 
         <RepRangeEditorModal
           visible={isRangeEditorVisible}
@@ -1073,18 +1082,18 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
       backgroundColor: theme.colors.background,
     },
-    screen: {
-      flex: 1,
+    pageHeaderShell: {
+      width: '100%',
       alignItems: 'center',
     },
-    fixedTopArea: {
+    pageHeader: {
       width: '100%',
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
-      paddingBottom: spacing.md,
+      paddingBottom: spacing.lg,
       gap: spacing.md,
     },
-    fixedTopAreaTablet: {
+    pageHeaderTablet: {
       paddingTop: spacing.lg,
     },
     controlsCard: {
@@ -1137,20 +1146,17 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       color: theme.colors.textSecondary,
     },
-    listShell: {
-      flex: 1,
-      width: '100%',
-      paddingHorizontal: spacing.lg,
-      paddingBottom: spacing.sm,
-    },
-    listShellTablet: {
-      paddingBottom: spacing.md,
-    },
     list: {
       flex: 1,
     },
     listContent: {
       gap: spacing.lg,
+      paddingTop: spacing.xs,
+    },
+    sectionShell: {
+      width: '100%',
+      alignSelf: 'center',
+      paddingHorizontal: spacing.lg,
     },
     sectionBlock: {
       gap: spacing.md,
