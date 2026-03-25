@@ -435,12 +435,29 @@ export interface ClientDietPortion {
 
 export interface ClientDietIngredientRow {
   id: string;
+  recipeIngredientId?: number;
+  foodId?: number | null;
+  exchangeGroupId?: number | null;
   label: string;
   exchangeGroupName: string | null;
+  isClientSwap?: boolean;
+  originalFoodId?: number | null;
+  originalLabel?: string | null;
   portion: ClientDietPortion;
 }
 
 export type ClientDietFoodRow = ClientDietIngredientRow;
+
+export interface ClientFoodSwapCandidate {
+  id: number;
+  name: string;
+  brand: string | null;
+  exchangeGroupId: number | null;
+  baseServingSize: number | null;
+  baseUnit: string | null;
+  caloriesKcal: number | null;
+  servingUnitsCount: number;
+}
 
 export interface ClientDietRecipeCard {
   id: string;

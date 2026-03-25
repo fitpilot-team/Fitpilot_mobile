@@ -13,6 +13,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button, Card, LoadingSpinner } from '../../src/components/common';
+import { RecipeIngredientSwapModal } from '../../src/components/diet';
 import {
   borderRadius,
   brandColors,
@@ -21,9 +22,20 @@ import {
   nutritionTheme,
   spacing,
 } from '../../src/constants/colors';
-import { getDietRecipeDetail } from '../../src/services/diet';
+import {
+  getDietRecipeDetail,
+  getFoodsByExchangeGroup,
+  resetDietRecipeIngredientSwap,
+  swapDietRecipeIngredient,
+} from '../../src/services/diet';
+import { useAuthStore } from '../../src/store/authStore';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
-import type { ApiError, ClientDietIngredientRow, ClientDietRecipeDetail } from '../../src/types';
+import type {
+  ApiError,
+  ClientDietIngredientRow,
+  ClientDietRecipeDetail,
+  ClientFoodSwapCandidate,
+} from '../../src/types';
 import { getRecipeRichTextBlocks } from '../../src/utils/recipeRichText';
 
 type RecipeTab = 'description' | 'ingredients';
@@ -62,17 +74,20 @@ const getIngredientMeasure = (ingredient: ClientDietIngredientRow) => {
 const IngredientCard = ({
   ingredient,
   index,
+  onPress,
 }: {
   ingredient: ClientDietIngredientRow;
   index: number;
+  onPress: () => void;
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const measure = useMemo(() => getIngredientMeasure(ingredient), [ingredient]);
   const hasPortionData = Boolean(ingredient.portion.householdLabel || measure);
+  const isSwappable = Boolean(ingredient.exchangeGroupId && ingredient.recipeIngredientId);
 
-  return (
-    <View style={styles.ingredientCard}>
+  const content = (
+    <>
       <View style={styles.ingredientHeader}>
         <View style={styles.ingredientIndex}>
           <Text style={styles.ingredientIndexText}>{index + 1}</Text>
@@ -108,13 +123,59 @@ const IngredientCard = ({
           Sin porcion detallada.
         </Text>
       )}
-    </View>
+
+      {isSwappable ? (
+        <View style={styles.ingredientActionRow}>
+          <View
+            style={[
+              styles.ingredientActionBadge,
+              ingredient.isClientSwap ? styles.ingredientActionBadgeActive : null,
+            ]}
+          >
+            <Ionicons
+              name="swap-horizontal-outline"
+              size={16}
+              color={ingredient.isClientSwap ? colors.white : theme.colors.primary}
+            />
+          </View>
+          <View style={styles.ingredientActionCopy}>
+            <Text style={styles.ingredientActionTitle}>
+              {ingredient.isClientSwap ? 'Cambio guardado' : 'Cambiar por equivalente'}
+            </Text>
+            <Text style={styles.ingredientActionText}>
+              {ingredient.isClientSwap && ingredient.originalLabel
+                ? `Actualmente personalizado desde ${ingredient.originalLabel}.`
+                : 'Toca para elegir otro alimento del mismo grupo.'}
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <Text style={styles.ingredientUnavailableText}>
+          Este ingrediente no tiene equivalentes disponibles.
+        </Text>
+      )}
+    </>
   );
+
+  if (isSwappable) {
+    return (
+      <TouchableOpacity
+        style={[styles.ingredientCard, styles.ingredientCardInteractive]}
+        activeOpacity={0.85}
+        onPress={onPress}
+      >
+        {content}
+      </TouchableOpacity>
+    );
+  }
+
+  return <View style={styles.ingredientCard}>{content}</View>;
 };
 
 export default function RecipeDetailScreen() {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const { user, isInitialized } = useAuthStore();
   const { recipeId } = useLocalSearchParams<{ recipeId?: string | string[] }>();
   const parsedRecipeId = useMemo(() => {
     const rawRecipeId = Array.isArray(recipeId) ? recipeId[0] : recipeId;
@@ -126,9 +187,24 @@ export default function RecipeDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIngredientId, setSelectedIngredientId] = useState<string | null>(null);
+  const [isSwapModalVisible, setIsSwapModalVisible] = useState(false);
+  const [swapFoods, setSwapFoods] = useState<ClientFoodSwapCandidate[]>([]);
+  const [swapFoodsLoading, setSwapFoodsLoading] = useState(false);
+  const [swapFoodsError, setSwapFoodsError] = useState<string | null>(null);
+  const [isSavingSwap, setIsSavingSwap] = useState(false);
+
+  const selectedIngredient = useMemo(
+    () => detail?.ingredients.find((ingredient) => ingredient.id === selectedIngredientId) ?? null,
+    [detail?.ingredients, selectedIngredientId],
+  );
 
   const loadDetail = useCallback(
     async (options?: { refresh?: boolean }) => {
+      if (!isInitialized || !user) {
+        return;
+      }
+
       if (!parsedRecipeId) {
         setError('No encontramos esta receta.');
         setIsLoading(false);
@@ -154,16 +230,143 @@ export default function RecipeDetailScreen() {
         setIsRefreshing(false);
       }
     },
-    [parsedRecipeId],
+    [isInitialized, parsedRecipeId, user],
   );
 
   useEffect(() => {
+    if (!isInitialized) {
+      return;
+    }
+
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
+
     void loadDetail();
-  }, [loadDetail]);
+  }, [isInitialized, loadDetail, user]);
 
   useEffect(() => {
     setActiveTab('description');
   }, [detail?.recipeId]);
+
+  const loadSwapFoods = useCallback(async (ingredient: ClientDietIngredientRow | null) => {
+    if (!ingredient?.exchangeGroupId) {
+      setSwapFoods([]);
+      setSwapFoodsError('Este ingrediente no tiene equivalentes disponibles.');
+      return;
+    }
+
+    setSwapFoodsLoading(true);
+    setSwapFoodsError(null);
+
+    try {
+      const response = await getFoodsByExchangeGroup(ingredient.exchangeGroupId);
+      setSwapFoods(response);
+    } catch (loadError) {
+      const apiError = loadError as ApiError;
+      setSwapFoods([]);
+      setSwapFoodsError(apiError.message || 'No fue posible cargar los equivalentes.');
+    } finally {
+      setSwapFoodsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isSwapModalVisible || !selectedIngredient) {
+      return;
+    }
+
+    void loadSwapFoods(selectedIngredient);
+  }, [isSwapModalVisible, loadSwapFoods, selectedIngredient]);
+
+  const handleOpenSwapModal = useCallback((ingredient: ClientDietIngredientRow) => {
+    if (!ingredient.exchangeGroupId || !ingredient.recipeIngredientId) {
+      return;
+    }
+
+    setSelectedIngredientId(ingredient.id);
+    setSwapFoods([]);
+    setSwapFoodsError(null);
+    setIsSwapModalVisible(true);
+  }, []);
+
+  const handleCloseSwapModal = useCallback(() => {
+    if (isSavingSwap) {
+      return;
+    }
+
+    setIsSwapModalVisible(false);
+    setSelectedIngredientId(null);
+    setSwapFoodsError(null);
+  }, [isSavingSwap]);
+
+  const handleRetrySwapFoods = useCallback(() => {
+    if (!selectedIngredient) {
+      return;
+    }
+
+    void loadSwapFoods(selectedIngredient);
+  }, [loadSwapFoods, selectedIngredient]);
+
+  const handleSelectSwapFood = useCallback(async (food: ClientFoodSwapCandidate) => {
+    if (!parsedRecipeId || !selectedIngredient?.recipeIngredientId) {
+      return;
+    }
+
+    setIsSavingSwap(true);
+    setSwapFoodsError(null);
+
+    try {
+      const response = await swapDietRecipeIngredient(
+        parsedRecipeId,
+        selectedIngredient.recipeIngredientId,
+        food.id,
+      );
+      setDetail(response);
+      setError(null);
+      setIsSwapModalVisible(false);
+      setSelectedIngredientId(null);
+    } catch (saveError) {
+      const apiError = saveError as ApiError;
+      setSwapFoodsError(apiError.message || 'No fue posible guardar el cambio.');
+    } finally {
+      setIsSavingSwap(false);
+    }
+  }, [parsedRecipeId, selectedIngredient?.recipeIngredientId]);
+
+  const handleResetSwap = useCallback(async () => {
+    if (!parsedRecipeId || !selectedIngredient?.recipeIngredientId) {
+      return;
+    }
+
+    setIsSavingSwap(true);
+    setSwapFoodsError(null);
+
+    try {
+      const response = await resetDietRecipeIngredientSwap(
+        parsedRecipeId,
+        selectedIngredient.recipeIngredientId,
+      );
+      setDetail(response);
+      setError(null);
+      setIsSwapModalVisible(false);
+      setSelectedIngredientId(null);
+    } catch (resetError) {
+      const apiError = resetError as ApiError;
+      setSwapFoodsError(apiError.message || 'No fue posible restaurar el ingrediente original.');
+    } finally {
+      setIsSavingSwap(false);
+    }
+  }, [parsedRecipeId, selectedIngredient?.recipeIngredientId]);
+
+  if (!isInitialized) {
+    return <LoadingSpinner fullScreen text="Validando sesion..." />;
+  }
+
+  if (!user) {
+    return null;
+  }
 
   if (isLoading && !detail) {
     return <LoadingSpinner fullScreen text="Cargando receta..." />;
@@ -308,7 +511,12 @@ export default function RecipeDetailScreen() {
           <View style={styles.ingredientsSection}>
             {detail?.ingredients.length ? (
               detail.ingredients.map((ingredient, index) => (
-                <IngredientCard key={ingredient.id} ingredient={ingredient} index={index} />
+                <IngredientCard
+                  key={ingredient.id}
+                  ingredient={ingredient}
+                  index={index}
+                  onPress={() => handleOpenSwapModal(ingredient)}
+                />
               ))
             ) : (
               <Card style={styles.contentCard}>
@@ -321,6 +529,19 @@ export default function RecipeDetailScreen() {
           </View>
         ) : null}
       </ScrollView>
+
+      <RecipeIngredientSwapModal
+        visible={isSwapModalVisible}
+        ingredient={selectedIngredient}
+        foods={swapFoods}
+        isLoading={swapFoodsLoading}
+        isSaving={isSavingSwap}
+        error={swapFoodsError}
+        onClose={handleCloseSwapModal}
+        onRetry={handleRetrySwapFoods}
+        onSelectFood={handleSelectSwapFood}
+        onReset={handleResetSwap}
+      />
     </SafeAreaView>
   );
 }
@@ -503,6 +724,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       padding: spacing.md,
       gap: spacing.md,
     },
+    ingredientCardInteractive: {
+      borderColor: theme.colors.primaryBorder,
+    },
     ingredientHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -575,6 +799,46 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     ingredientEmptyMetaDark: {
       color: theme.colors.textMuted,
+    },
+    ingredientActionRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.primarySoft,
+      padding: spacing.sm,
+    },
+    ingredientActionBadge: {
+      width: 30,
+      height: 30,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+    },
+    ingredientActionBadgeActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    ingredientActionCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    ingredientActionTitle: {
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.sm,
+      fontWeight: '800',
+    },
+    ingredientActionText: {
+      color: theme.colors.textSecondary,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+    },
+    ingredientUnavailableText: {
+      color: theme.colors.textMuted,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
     },
     errorCard: {
       gap: spacing.md,

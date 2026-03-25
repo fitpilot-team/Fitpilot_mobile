@@ -8,6 +8,7 @@ import type {
   ClientDietRecipeCard,
   ClientDietRecipeDetail,
   ClientDietWeekDay,
+  ClientFoodSwapCandidate,
   ClientRecipeSummary,
 } from '../types';
 import {
@@ -32,12 +33,23 @@ type NutritionRecipeSummaryResponse = {
 };
 
 type NutritionFoodResponse = {
+  id?: number | null;
   name?: string | null;
+  brand?: string | null;
+  exchange_group_id?: number | null;
   base_serving_size?: number | string | null;
   base_unit?: string | null;
+  calories_kcal?: number | string | null;
   food_nutrition_values?: {
     base_serving_size?: number | string | null;
     base_unit?: string | null;
+  }[];
+  serving_units?: {
+    id?: number | null;
+    food_id?: number | null;
+    unit_name?: string | null;
+    gram_equivalent?: number | string | null;
+    is_exchange_unit?: boolean | null;
   }[];
 };
 
@@ -74,6 +86,11 @@ type NutritionRecipeDetailIngredientResponse = {
   food_id?: number | null;
   serving_unit_id?: number | null;
   quantity?: number | string | null;
+  exchange_group_id?: number | null;
+  exchange_group_name?: string | null;
+  is_client_swap?: boolean | null;
+  original_food_id?: number | null;
+  original_food_name?: string | null;
   food?: NutritionFoodResponse | null;
   serving_unit?: {
     id?: number | null;
@@ -82,6 +99,19 @@ type NutritionRecipeDetailIngredientResponse = {
     gram_equivalent?: number | string | null;
     is_exchange_unit?: boolean | null;
   } | null;
+};
+
+type NutritionFoodSwapCandidateResponse = {
+  id: number;
+  name?: string | null;
+  brand?: string | null;
+  exchange_group_id?: number | null;
+  base_serving_size?: number | string | null;
+  base_unit?: string | null;
+  calories_kcal?: number | string | null;
+  serving_units?: {
+    id?: number | null;
+  }[] | null;
 };
 
 type NutritionMenuItemResponse = {
@@ -516,14 +546,19 @@ const mapDietMenu = (
   };
 };
 
-export const getDietRecipeDetail = async (
-  recipeId: number,
-): Promise<ClientDietRecipeDetail> => {
-  const recipe = await nutritionClient.get<NutritionRecipeDetailResponse>(`/recipes/${recipeId}`);
+const mapDietRecipeDetailResponse = (
+  recipe: NutritionRecipeDetailResponse,
+): ClientDietRecipeDetail => {
   const ingredients = (recipe.ingredients ?? []).map((ingredient) => ({
     id: String(ingredient.id),
+    recipeIngredientId: toNumber(ingredient.id) ?? undefined,
+    foodId: ingredient.food_id ?? null,
+    exchangeGroupId: ingredient.exchange_group_id ?? ingredient.food?.exchange_group_id ?? null,
     label: ingredient.food?.name?.trim() || 'Ingrediente',
-    exchangeGroupName: null,
+    exchangeGroupName: ingredient.exchange_group_name?.trim() || null,
+    isClientSwap: Boolean(ingredient.is_client_swap),
+    originalFoodId: ingredient.original_food_id ?? null,
+    originalLabel: ingredient.original_food_name?.trim() || null,
     portion: derivePortionFromRecipeIngredient(ingredient),
   }));
 
@@ -537,6 +572,57 @@ export const getDietRecipeDetail = async (
     ingredientCount: toNumber(recipe.ingredient_count) ?? ingredients.length,
     ingredients,
   };
+};
+
+export const getDietRecipeDetail = async (
+  recipeId: number,
+): Promise<ClientDietRecipeDetail> => {
+  const recipe = await nutritionClient.get<NutritionRecipeDetailResponse>(`/recipes/${recipeId}`);
+  return mapDietRecipeDetailResponse(recipe);
+};
+
+export const getFoodsByExchangeGroup = async (
+  groupId: number,
+): Promise<ClientFoodSwapCandidate[]> => {
+  const foods = await nutritionClient.get<NutritionFoodSwapCandidateResponse[]>(
+    `/foods/exchange-group/${groupId}`,
+    { skipErrorLogging: true },
+  );
+
+  return (foods ?? []).map((food) => ({
+    id: food.id,
+    name: food.name?.trim() || 'Alimento',
+    brand: food.brand?.trim() || null,
+    exchangeGroupId: food.exchange_group_id ?? null,
+    baseServingSize: toNumber(food.base_serving_size),
+    baseUnit: food.base_unit?.trim() || null,
+    caloriesKcal: toNumber(food.calories_kcal),
+    servingUnitsCount: Array.isArray(food.serving_units) ? food.serving_units.length : 0,
+  }));
+};
+
+export const swapDietRecipeIngredient = async (
+  recipeId: number,
+  recipeIngredientId: number,
+  foodId: number,
+): Promise<ClientDietRecipeDetail> => {
+  const recipe = await nutritionClient.put<NutritionRecipeDetailResponse>(
+    `/recipes/${recipeId}/ingredients/${recipeIngredientId}/client-swap`,
+    { food_id: foodId },
+  );
+
+  return mapDietRecipeDetailResponse(recipe);
+};
+
+export const resetDietRecipeIngredientSwap = async (
+  recipeId: number,
+  recipeIngredientId: number,
+): Promise<ClientDietRecipeDetail> => {
+  const recipe = await nutritionClient.delete<NutritionRecipeDetailResponse>(
+    `/recipes/${recipeId}/ingredients/${recipeIngredientId}/client-swap`,
+  );
+
+  return mapDietRecipeDetailResponse(recipe);
 };
 
 export const getTodayDietDateKey = getTodayDateKey;
