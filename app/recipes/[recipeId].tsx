@@ -97,6 +97,9 @@ const IngredientCard = ({
           {ingredient.exchangeGroupName ? (
             <Text style={styles.ingredientSubtitle}>{ingredient.exchangeGroupName}</Text>
           ) : null}
+          {ingredient.isClientSwap && ingredient.originalLabel ? (
+            <Text style={styles.ingredientOriginalLabel}>Original: {ingredient.originalLabel}</Text>
+          ) : null}
         </View>
       </View>
 
@@ -757,6 +760,12 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginTop: 2,
       color: theme.colors.textMuted,
       fontSize: fontSize.sm,
+    },
+    ingredientOriginalLabel: {
+      marginTop: spacing.xs,
+      color: theme.colors.textSecondary,
+      fontSize: fontSize.sm,
+      fontWeight: '600',
     },
     ingredientMetaRow: {
       flexDirection: 'row',

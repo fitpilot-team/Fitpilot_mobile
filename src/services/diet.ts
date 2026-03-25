@@ -53,22 +53,12 @@ type NutritionFoodResponse = {
   }[];
 };
 
-type NutritionRecipeIngredientResponse = {
-  id: number | string;
-  food_id?: number | null;
-  name?: string | null;
-  exchange_group_name?: string | null;
-  household_label?: string | null;
-  equivalents?: number | string | null;
-  grams?: number | string | null;
-};
-
 type NutritionEmbeddedRecipeDetailResponse = {
   id: number;
   title?: string | null;
   image_url?: string | null;
   ingredient_count?: number | string | null;
-  ingredients?: NutritionRecipeIngredientResponse[] | null;
+  ingredients?: NutritionRecipeDetailIngredientResponse[] | null;
 };
 
 type NutritionRecipeDetailResponse = {
@@ -435,17 +425,19 @@ const mapStandaloneFoodRow = (item: NutritionMenuItemResponse): ClientDietFoodRo
   portion: derivePortionFromMenuItem(item),
 });
 
-const mapEmbeddedRecipeIngredient = (
-  ingredient: NutritionRecipeIngredientResponse,
+const mapRecipeIngredientRow = (
+  ingredient: NutritionRecipeDetailIngredientResponse,
 ): ClientDietIngredientRow => ({
   id: String(ingredient.id),
-  label: ingredient.name?.trim() || 'Ingrediente',
+  recipeIngredientId: toNumber(ingredient.id) ?? undefined,
+  foodId: ingredient.food_id ?? null,
+  exchangeGroupId: ingredient.exchange_group_id ?? ingredient.food?.exchange_group_id ?? null,
+  label: ingredient.food?.name?.trim() || 'Ingrediente',
   exchangeGroupName: ingredient.exchange_group_name?.trim() || null,
-  portion: buildPortion(
-    ingredient.household_label?.trim() || null,
-    toNumber(ingredient.equivalents),
-    toNumber(ingredient.grams),
-  ),
+  isClientSwap: Boolean(ingredient.is_client_swap),
+  originalFoodId: ingredient.original_food_id ?? null,
+  originalLabel: ingredient.original_food_name?.trim() || null,
+  portion: derivePortionFromRecipeIngredient(ingredient),
 });
 
 const buildRecipeCardFromGroup = (
@@ -456,7 +448,7 @@ const buildRecipeCardFromGroup = (
 
   const ingredients =
     group.detail?.ingredients?.length
-      ? group.detail.ingredients.map(mapEmbeddedRecipeIngredient)
+      ? group.detail.ingredients.map(mapRecipeIngredientRow)
       : group.items.map((item) => ({
           id: String(item.id),
           label:
@@ -549,18 +541,7 @@ const mapDietMenu = (
 const mapDietRecipeDetailResponse = (
   recipe: NutritionRecipeDetailResponse,
 ): ClientDietRecipeDetail => {
-  const ingredients = (recipe.ingredients ?? []).map((ingredient) => ({
-    id: String(ingredient.id),
-    recipeIngredientId: toNumber(ingredient.id) ?? undefined,
-    foodId: ingredient.food_id ?? null,
-    exchangeGroupId: ingredient.exchange_group_id ?? ingredient.food?.exchange_group_id ?? null,
-    label: ingredient.food?.name?.trim() || 'Ingrediente',
-    exchangeGroupName: ingredient.exchange_group_name?.trim() || null,
-    isClientSwap: Boolean(ingredient.is_client_swap),
-    originalFoodId: ingredient.original_food_id ?? null,
-    originalLabel: ingredient.original_food_name?.trim() || null,
-    portion: derivePortionFromRecipeIngredient(ingredient),
-  }));
+  const ingredients = (recipe.ingredients ?? []).map(mapRecipeIngredientRow);
 
   return {
     id: `recipe-${recipe.id}`,

@@ -18,6 +18,7 @@ import {
   DietHero,
   DietMealCard,
   DietMenuSelectorModal,
+  RecipeIngredientSwapModal,
   DietWeekCalendar,
 } from '../../src/components/diet';
 import { borderRadius, brandColors, fontSize, spacing, nutritionTheme } from '../../src/constants/colors';
@@ -27,11 +28,22 @@ import { useAppTheme, useThemedStyles } from '../../src/theme';
 import {
   getClientDietCalendar,
   getClientDietMenuPool,
+  getFoodsByExchangeGroup,
+  resetDietRecipeIngredientSwap,
+  swapDietRecipeIngredient,
   getTodayDietDateKey,
 } from '../../src/services/diet';
 import { getDashboardContentWidth } from '../../src/utils/layout';
 import { formatLocalDate, getLocalWeekKey } from '../../src/utils/date';
-import type { ClientDietMenu, ClientDietWeekDay } from '../../src/types';
+import type {
+  ApiError,
+  ClientDietIngredientRow,
+  ClientDietMenu,
+  ClientDietRecipeCard,
+  ClientDietRecipeDetail,
+  ClientDietWeekDay,
+  ClientFoodSwapCandidate,
+} from '../../src/types';
 
 const formatLongDate = (value: string) =>
   formatLocalDate(value, {
@@ -39,6 +51,99 @@ const formatLongDate = (value: string) =>
     day: 'numeric',
     month: 'long',
   });
+
+type SelectedSwapTarget = {
+  recipeId: number;
+  ingredient: ClientDietIngredientRow;
+} | null;
+
+const applyRecipeDetailToRecipeCard = (
+  recipe: ClientDietRecipeCard,
+  recipeDetail: ClientDietRecipeDetail,
+): ClientDietRecipeCard => {
+  if (recipe.recipeId !== recipeDetail.recipeId) {
+    return recipe;
+  }
+
+  return {
+    ...recipe,
+    ingredientCount: recipeDetail.ingredientCount,
+    ingredients: recipeDetail.ingredients,
+  };
+};
+
+const applyRecipeDetailToMenu = (
+  menu: ClientDietMenu,
+  recipeDetail: ClientDietRecipeDetail,
+): ClientDietMenu => {
+  let hasChanges = false;
+
+  const meals = menu.meals.map((meal) => {
+    let mealChanged = false;
+    const recipes = meal.recipes.map((recipe) => {
+      const nextRecipe = applyRecipeDetailToRecipeCard(recipe, recipeDetail);
+      if (nextRecipe !== recipe) {
+        mealChanged = true;
+      }
+      return nextRecipe;
+    });
+
+    if (!mealChanged) {
+      return meal;
+    }
+
+    hasChanges = true;
+    return {
+      ...meal,
+      recipes,
+    };
+  });
+
+  return hasChanges
+    ? {
+        ...menu,
+        meals,
+      }
+    : menu;
+};
+
+const applyRecipeDetailToWeekDays = (
+  days: ClientDietWeekDay[],
+  recipeDetail: ClientDietRecipeDetail,
+): ClientDietWeekDay[] =>
+  days.map((day) => {
+    if (!day.assignedMenu) {
+      return day;
+    }
+
+    const nextAssignedMenu = applyRecipeDetailToMenu(day.assignedMenu, recipeDetail);
+    return nextAssignedMenu === day.assignedMenu
+      ? day
+      : {
+          ...day,
+          assignedMenu: nextAssignedMenu,
+        };
+  });
+
+const applyRecipeDetailToMenuPool = (
+  poolByDate: Record<string, ClientDietMenu[]>,
+  recipeDetail: ClientDietRecipeDetail,
+): Record<string, ClientDietMenu[]> => {
+  const nextEntries = Object.entries(poolByDate).map(([dateKey, menus]) => {
+    let hasChanges = false;
+    const nextMenus = menus.map((menu) => {
+      const nextMenu = applyRecipeDetailToMenu(menu, recipeDetail);
+      if (nextMenu !== menu) {
+        hasChanges = true;
+      }
+      return nextMenu;
+    });
+
+    return [dateKey, hasChanges ? nextMenus : menus] as const;
+  });
+
+  return Object.fromEntries(nextEntries);
+};
 
 export default function DietScreen() {
   const { width } = useWindowDimensions();
@@ -60,6 +165,14 @@ export default function DietScreen() {
   const [error, setError] = useState<string | null>(null);
   const [renderVersion, setRenderVersion] = useState(0);
   const [hasPlayedEntryAnimation, setHasPlayedEntryAnimation] = useState(false);
+  const [selectedSwapTarget, setSelectedSwapTarget] = useState<SelectedSwapTarget>(null);
+  const [isSwapModalVisible, setIsSwapModalVisible] = useState(false);
+  const [swapFoods, setSwapFoods] = useState<ClientFoodSwapCandidate[]>([]);
+  const [swapFoodsLoading, setSwapFoodsLoading] = useState(false);
+  const [swapFoodsError, setSwapFoodsError] = useState<string | null>(null);
+  const [isSavingSwap, setIsSavingSwap] = useState(false);
+
+  const selectedIngredient = selectedSwapTarget?.ingredient ?? null;
 
   const loadDiet = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -84,6 +197,10 @@ export default function DietScreen() {
         setPreviewMenuIdByDate({});
         setError(null);
         setIsMenuSelectorVisible(false);
+        setIsSwapModalVisible(false);
+        setSelectedSwapTarget(null);
+        setSwapFoods([]);
+        setSwapFoodsError(null);
         setRenderVersion((currentValue) => currentValue + 1);
         setSelectedDate((currentDate) => {
           if (
@@ -102,6 +219,8 @@ export default function DietScreen() {
         setMenuPoolErrorByDate({});
         setPreviewMenuIdByDate({});
         setError(loadError?.message || 'No se pudo cargar tu dieta.');
+        setIsSwapModalVisible(false);
+        setSelectedSwapTarget(null);
       } finally {
         if (mode === 'refresh') {
           setRefreshing(false);
@@ -271,6 +390,126 @@ export default function DietScreen() {
     setRenderVersion((currentValue) => currentValue + 1);
   }, [selectedDay]);
 
+  const loadSwapFoods = useCallback(async (ingredient: ClientDietIngredientRow | null) => {
+    if (!ingredient?.exchangeGroupId) {
+      setSwapFoods([]);
+      setSwapFoodsError('Este ingrediente no tiene equivalentes disponibles.');
+      return;
+    }
+
+    setSwapFoodsLoading(true);
+    setSwapFoodsError(null);
+
+    try {
+      const response = await getFoodsByExchangeGroup(ingredient.exchangeGroupId);
+      setSwapFoods(response);
+    } catch (loadError) {
+      const apiError = loadError as ApiError;
+      setSwapFoods([]);
+      setSwapFoodsError(apiError.message || 'No fue posible cargar los equivalentes.');
+    } finally {
+      setSwapFoodsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isSwapModalVisible || !selectedIngredient) {
+      return;
+    }
+
+    void loadSwapFoods(selectedIngredient);
+  }, [isSwapModalVisible, loadSwapFoods, selectedIngredient]);
+
+  const applyUpdatedRecipeDetail = useCallback((recipeDetail: ClientDietRecipeDetail) => {
+    setDietDays((currentDays) => applyRecipeDetailToWeekDays(currentDays, recipeDetail));
+    setMenuPoolByDate((currentPool) => applyRecipeDetailToMenuPool(currentPool, recipeDetail));
+    setError(null);
+  }, []);
+
+  const handleOpenRecipeIngredientSwap = useCallback(
+    (recipe: ClientDietRecipeCard, ingredient: ClientDietIngredientRow) => {
+      if (!ingredient.exchangeGroupId || !ingredient.recipeIngredientId) {
+        return;
+      }
+
+      setSelectedSwapTarget({
+        recipeId: recipe.recipeId,
+        ingredient,
+      });
+      setSwapFoods([]);
+      setSwapFoodsError(null);
+      setIsSwapModalVisible(true);
+    },
+    [],
+  );
+
+  const handleCloseSwapModal = useCallback(() => {
+    if (isSavingSwap) {
+      return;
+    }
+
+    setIsSwapModalVisible(false);
+    setSelectedSwapTarget(null);
+    setSwapFoodsError(null);
+  }, [isSavingSwap]);
+
+  const handleRetrySwapFoods = useCallback(() => {
+    if (!selectedIngredient) {
+      return;
+    }
+
+    void loadSwapFoods(selectedIngredient);
+  }, [loadSwapFoods, selectedIngredient]);
+
+  const handleSelectSwapFood = useCallback(async (food: ClientFoodSwapCandidate) => {
+    if (!selectedSwapTarget?.recipeId || !selectedIngredient?.recipeIngredientId) {
+      return;
+    }
+
+    setIsSavingSwap(true);
+    setSwapFoodsError(null);
+
+    try {
+      const response = await swapDietRecipeIngredient(
+        selectedSwapTarget.recipeId,
+        selectedIngredient.recipeIngredientId,
+        food.id,
+      );
+      applyUpdatedRecipeDetail(response);
+      setIsSwapModalVisible(false);
+      setSelectedSwapTarget(null);
+    } catch (saveError) {
+      const apiError = saveError as ApiError;
+      setSwapFoodsError(apiError.message || 'No fue posible guardar el cambio.');
+    } finally {
+      setIsSavingSwap(false);
+    }
+  }, [applyUpdatedRecipeDetail, selectedIngredient?.recipeIngredientId, selectedSwapTarget?.recipeId]);
+
+  const handleResetSwap = useCallback(async () => {
+    if (!selectedSwapTarget?.recipeId || !selectedIngredient?.recipeIngredientId) {
+      return;
+    }
+
+    setIsSavingSwap(true);
+    setSwapFoodsError(null);
+
+    try {
+      const response = await resetDietRecipeIngredientSwap(
+        selectedSwapTarget.recipeId,
+        selectedIngredient.recipeIngredientId,
+      );
+      applyUpdatedRecipeDetail(response);
+      setIsSwapModalVisible(false);
+      setSelectedSwapTarget(null);
+    } catch (resetError) {
+      const apiError = resetError as ApiError;
+      setSwapFoodsError(apiError.message || 'No fue posible restaurar el ingrediente original.');
+    } finally {
+      setIsSavingSwap(false);
+    }
+  }, [applyUpdatedRecipeDetail, selectedIngredient?.recipeIngredientId, selectedSwapTarget?.recipeId]);
+
   if (!user) {
     router.replace('/login');
     return null;
@@ -380,7 +619,10 @@ export default function DietScreen() {
                           key={`${selectedDay.assignedDate}-${visibleMenu.menuId}-${renderVersion}-${meal.id}`}
                           entering={FadeInDown.delay(300 + index * 60).duration(320)}
                         >
-                          <DietMealCard meal={meal} />
+                          <DietMealCard
+                            meal={meal}
+                            onRecipeIngredientPress={handleOpenRecipeIngredientSwap}
+                          />
                         </Animated.View>
                       ))
                     ) : (
@@ -438,6 +680,19 @@ export default function DietScreen() {
           onClose={handleCloseMenuSelector}
           onRetry={handleRetryMenuPool}
           onSelect={handleSelectPreviewMenu}
+        />
+
+        <RecipeIngredientSwapModal
+          visible={isSwapModalVisible}
+          ingredient={selectedIngredient}
+          foods={swapFoods}
+          isLoading={swapFoodsLoading}
+          isSaving={isSavingSwap}
+          error={swapFoodsError}
+          onClose={handleCloseSwapModal}
+          onRetry={handleRetrySwapFoods}
+          onSelectFood={handleSelectSwapFood}
+          onReset={handleResetSwap}
         />
       </SafeAreaView>
     </TabScreenWrapper>

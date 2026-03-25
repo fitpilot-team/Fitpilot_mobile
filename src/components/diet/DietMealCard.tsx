@@ -23,6 +23,7 @@ import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 
 interface DietMealCardProps {
   meal: ClientDietMeal;
+  onRecipeIngredientPress?: (recipe: ClientDietRecipeCard, ingredient: ClientDietIngredientRow) => void;
 }
 
 type DietMealCardStyles = ReturnType<typeof createStyles>;
@@ -128,11 +129,13 @@ const IngredientRow: React.FC<{
   accent?: IngredientAccent;
   styles: DietMealCardStyles;
   theme: AppTheme;
+  onPress?: () => void;
 }> = ({
   ingredient,
   accent = 'food',
   styles,
   theme,
+  onPress,
 }) => {
   const foodGroupVisual = getSmaeGroupVisual(ingredient.exchangeGroupName);
   const isDarkRecipe = theme.isDark && accent === 'recipe';
@@ -141,15 +144,14 @@ const IngredientRow: React.FC<{
     : theme.isDark
       ? theme.colors.border
       : foodGroupVisual.borderColor;
+  const isSwappableRecipeIngredient = (
+    accent === 'recipe' &&
+    Boolean(onPress) &&
+    Boolean(ingredient.exchangeGroupId && ingredient.recipeIngredientId)
+  );
 
-  return (
-    <View
-      style={[
-        styles.foodRow,
-        isDarkRecipe ? styles.recipeFoodRow : null,
-        accent === 'food' ? { borderColor } : null,
-      ]}
-    >
+  const content = (
+    <>
       <View style={[styles.foodIcon, { backgroundColor: foodGroupVisual.backgroundColor }]}>
         <SmaeGroupIcon
           groupName={ingredient.exchangeGroupName}
@@ -170,13 +172,73 @@ const IngredientRow: React.FC<{
                 {ingredient.exchangeGroupName}
               </Text>
             ) : null}
+            {ingredient.isClientSwap && ingredient.originalLabel ? (
+              <Text style={[styles.foodOriginalLabel, isDarkRecipe ? styles.recipeFoodOriginalLabel : null]}>
+                Original: {ingredient.originalLabel}
+              </Text>
+            ) : null}
           </View>
+
+          {isSwappableRecipeIngredient ? (
+            <View
+              style={[
+                styles.recipeSwapBadge,
+                ingredient.isClientSwap ? styles.recipeSwapBadgeActive : null,
+              ]}
+            >
+              <Ionicons
+                name="swap-horizontal-outline"
+                size={15}
+                color={ingredient.isClientSwap ? colors.white : (isDarkRecipe ? DARK_RECIPE_TOGGLE_ACCENT : theme.colors.primary)}
+              />
+            </View>
+          ) : null}
         </View>
 
         <PortionChips ingredient={ingredient} accent={accent} styles={styles} theme={theme} />
+
+        {isSwappableRecipeIngredient ? (
+          <View style={styles.recipeSwapHintRow}>
+            <Ionicons
+              name="sparkles-outline"
+              size={14}
+              color={isDarkRecipe ? DARK_RECIPE_TOGGLE_ACCENT : theme.colors.primary}
+            />
+            <Text style={[styles.recipeSwapHintText, isDarkRecipe ? styles.recipeSwapHintTextDark : null]}>
+              {ingredient.isClientSwap
+                ? 'Personalizado. Toca para cambiarlo de nuevo.'
+                : 'Toca para cambiar por un equivalente.'}
+            </Text>
+          </View>
+        ) : null}
       </View>
-    </View>
+    </>
   );
+
+  const containerStyle = [
+    styles.foodRow,
+    isDarkRecipe ? styles.recipeFoodRow : null,
+    accent === 'food' ? { borderColor } : null,
+    isSwappableRecipeIngredient ? styles.recipeFoodRowInteractive : null,
+  ];
+
+  if (isSwappableRecipeIngredient && onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`Cambiar ingrediente ${ingredient.label}`}
+        style={({ pressed }) => [
+          ...containerStyle,
+          pressed ? styles.recipeFoodRowPressed : null,
+        ]}
+      >
+        {content}
+      </Pressable>
+    );
+  }
+
+  return <View style={containerStyle}>{content}</View>;
 };
 
 const SectionHeader: React.FC<{
@@ -212,6 +274,7 @@ const RecipeCard: React.FC<{
   onPress: () => void;
   expanded: boolean;
   onToggle: () => void;
+  onIngredientPress?: (ingredient: ClientDietIngredientRow) => void;
   styles: DietMealCardStyles;
   theme: AppTheme;
 }> = ({
@@ -219,6 +282,7 @@ const RecipeCard: React.FC<{
   onPress,
   expanded,
   onToggle,
+  onIngredientPress,
   styles,
   theme,
 }) => {
@@ -296,6 +360,7 @@ const RecipeCard: React.FC<{
                 accent="recipe"
                 styles={styles}
                 theme={theme}
+                onPress={onIngredientPress ? () => onIngredientPress(ingredient) : undefined}
               />
             ))}
           </View>
@@ -305,7 +370,7 @@ const RecipeCard: React.FC<{
   );
 };
 
-export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
+export const DietMealCard: React.FC<DietMealCardProps> = ({ meal, onRecipeIngredientPress }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const caloriesLabel = formatCalories(meal.totalCalories);
@@ -366,6 +431,11 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({ meal }) => {
                   })}
                   expanded={Boolean(expandedRecipeIds[recipe.id])}
                   onToggle={() => toggleRecipe(recipe.id)}
+                  onIngredientPress={
+                    onRecipeIngredientPress
+                      ? (ingredient) => onRecipeIngredientPress(recipe, ingredient)
+                      : undefined
+                  }
                   styles={styles}
                   theme={theme}
                 />
@@ -585,6 +655,13 @@ function createStyles(theme: AppTheme) {
       backgroundColor: theme.isDark ? DARK_RECIPE_INGREDIENT_ROW_BACKGROUND : '#FAFBFD',
       borderColor: theme.isDark ? DARK_RECIPE_INGREDIENT_ROW_BORDER : '#D8E7F4',
     },
+    recipeFoodRowInteractive: {
+      borderColor: theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : theme.colors.primaryBorder,
+    },
+    recipeFoodRowPressed: {
+      opacity: 0.92,
+      transform: [{ scale: 0.995 }],
+    },
     foodIcon: {
       width: 42,
       height: 42,
@@ -619,6 +696,30 @@ function createStyles(theme: AppTheme) {
     },
     recipeFoodSubtitle: {
       color: DARK_RECIPE_SUBTITLE,
+    },
+    foodOriginalLabel: {
+      marginTop: spacing.xs,
+      color: theme.colors.textSecondary,
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+    },
+    recipeFoodOriginalLabel: {
+      color: DARK_RECIPE_INGREDIENT_CHIP_VALUE,
+    },
+    recipeSwapBadge: {
+      width: 28,
+      height: 28,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: isDarkRecipeColor(theme),
+      backgroundColor: theme.isDark ? 'rgba(79, 209, 197, 0.12)' : theme.colors.primarySoft,
+      marginLeft: spacing.sm,
+    },
+    recipeSwapBadgeActive: {
+      borderColor: 'transparent',
+      backgroundColor: theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : theme.colors.primary,
     },
     portionRow: {
       flexDirection: 'row',
@@ -666,7 +767,25 @@ function createStyles(theme: AppTheme) {
     recipePortionInfoValue: {
       color: DARK_RECIPE_INGREDIENT_CHIP_VALUE,
     },
+    recipeSwapHintRow: {
+      marginTop: spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    recipeSwapHintText: {
+      flex: 1,
+      color: theme.colors.textSecondary,
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+    },
+    recipeSwapHintTextDark: {
+      color: DARK_RECIPE_SUBTITLE,
+    },
   });
 }
+
+const isDarkRecipeColor = (theme: AppTheme) =>
+  theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : theme.colors.primaryBorder;
 
 export default DietMealCard;
