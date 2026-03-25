@@ -9,7 +9,6 @@ import type {
   Macrocycle,
   MicrocycleProgress,
   MissedWorkout,
-  NextWorkoutResponse,
   TrainingDay,
   WorkoutLog,
 } from '../types';
@@ -22,14 +21,11 @@ import {
 
 interface WorkoutState {
   activeMacrocycle: Macrocycle | null;
-  nextPlannedSession: TrainingDay | null;
+  dashboardWorkoutLogs: WorkoutLog[];
   microcycleProgress: MicrocycleProgress | null;
   currentWorkout: CurrentWorkoutState | null;
   missedWorkouts: MissedWorkout[];
-
-  workoutPosition: number | null;
-  workoutTotal: number | null;
-  allCompleted: boolean;
+  dashboardDataVersion: number;
 
   isLoading: boolean;
   isStartingWorkout: boolean;
@@ -43,8 +39,7 @@ interface WorkoutState {
   currentWeight: number;
   currentEffortValue: number | null;
 
-  loadDashboardData: () => Promise<void>;
-  loadNextWorkout: () => Promise<void>;
+  loadDashboardData: (clientId: string) => Promise<void>;
   loadMissedWorkouts: (daysBack?: number) => Promise<void>;
   startWorkout: (trainingDayId: string) => Promise<string | null>;
   loadWorkoutState: (workoutLogId: string) => Promise<void>;
@@ -143,14 +138,11 @@ const hydrateWorkoutDraft = (
 
 export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   activeMacrocycle: null,
-  nextPlannedSession: null,
+  dashboardWorkoutLogs: [],
   microcycleProgress: null,
   currentWorkout: null,
   missedWorkouts: [],
-
-  workoutPosition: null,
-  workoutTotal: null,
-  allCompleted: false,
+  dashboardDataVersion: 0,
 
   isLoading: false,
   isStartingWorkout: false,
@@ -164,7 +156,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   currentWeight: 0,
   currentEffortValue: null,
 
-  loadDashboardData: async () => {
+  loadDashboardData: async (clientId: string) => {
     set({ isLoading: true, error: null });
 
     try {
@@ -172,53 +164,40 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         trainingClient.get<MicrocycleProgress>('/workout-logs/progress/microcycle/current'),
         trainingClient.get<{ total: number; macrocycles: Macrocycle[] }>('/mesocycles?status=active&limit=1'),
       ]);
+      const activeMacrocycleSummary = macrocycleResponse.macrocycles[0] ?? null;
 
-      set({
+      if (!activeMacrocycleSummary) {
+        set((state) => ({
+          microcycleProgress,
+          activeMacrocycle: null,
+          dashboardWorkoutLogs: [],
+          dashboardDataVersion: state.dashboardDataVersion + 1,
+          isLoading: false,
+        }));
+        return;
+      }
+
+      const [activeMacrocycle, workoutLogsResponse] = await Promise.all([
+        trainingClient.get<Macrocycle>(`/mesocycles/${activeMacrocycleSummary.id}`),
+        trainingClient.get<{ total: number; workout_logs: WorkoutLog[] }>(
+          `/workout-logs/client/${clientId}?limit=500`,
+        ),
+      ]);
+
+      set((state) => ({
         microcycleProgress,
-        activeMacrocycle: macrocycleResponse.macrocycles[0] ?? null,
+        activeMacrocycle,
+        dashboardWorkoutLogs: workoutLogsResponse.workout_logs,
+        dashboardDataVersion: state.dashboardDataVersion + 1,
         isLoading: false,
-      });
+      }));
     } catch (error: any) {
       set({
         microcycleProgress: null,
         activeMacrocycle: null,
+        dashboardWorkoutLogs: [],
         isLoading: false,
         error: error.message || 'Error al cargar el dashboard',
-      });
-    }
-  },
-
-  loadNextWorkout: async () => {
-    set({ isLoading: true, error: null });
-
-    try {
-      const response = await trainingClient.get<NextWorkoutResponse>('/workout-logs/next');
-      if (response.training_day) {
-        const fullDay = await trainingClient.get<TrainingDay>(
-          `/training-days/${response.training_day.id}`,
-        );
-
-        set({
-          nextPlannedSession: fullDay,
-          workoutPosition: response.position,
-          workoutTotal: response.total,
-          allCompleted: false,
-          isLoading: false,
-        });
-        return;
-      }
-
-      set({
-        nextPlannedSession: null,
-        workoutPosition: response.position,
-        workoutTotal: response.total,
-        allCompleted: response.all_completed,
-        isLoading: false,
-      });
-    } catch (error: any) {
-      set({
-        isLoading: false,
-        error: error.message || 'Error al cargar la siguiente sesi\u00f3n',
       });
     }
   },
@@ -498,13 +477,11 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   reset: () =>
     set({
       activeMacrocycle: null,
-      nextPlannedSession: null,
+      dashboardWorkoutLogs: [],
       microcycleProgress: null,
       currentWorkout: null,
       missedWorkouts: [],
-      workoutPosition: null,
-      workoutTotal: null,
-      allCompleted: false,
+      dashboardDataVersion: 0,
       isLoading: false,
       isStartingWorkout: false,
       isSavingSet: false,

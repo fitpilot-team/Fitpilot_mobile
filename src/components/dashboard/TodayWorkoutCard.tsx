@@ -10,10 +10,10 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
+import { colors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import { WorkoutCardSkeleton } from '../common/Skeleton';
-import type { NextWorkoutReason, TrainingDay } from '../../types';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
+import type { ProgramTimelineCardState } from '../../utils/programTimeline';
 
 const workoutImage = require('../../../assets/mock-image-workout.jpg');
 
@@ -33,7 +33,7 @@ const getCardShapePath = (
   chamferH: number,
   chamferV: number,
   hSegment: number,
-  cr: number
+  cr: number,
 ) => {
   const x2 = w - chamferH;
   const x3 = w - hSegment;
@@ -82,7 +82,7 @@ const CardMask: React.FC<{ cardWidth: number; cardHeight: number }> = ({ cardWid
           chamferHorizontal,
           CHAMFER_VERTICAL,
           horizontalSegment,
-          CHAMFER_RADIUS
+          CHAMFER_RADIUS,
         )}
         fill="black"
       />
@@ -93,43 +93,35 @@ const CardMask: React.FC<{ cardWidth: number; cardHeight: number }> = ({ cardWid
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 interface TodayWorkoutCardProps {
-  trainingDay: TrainingDay | null;
-  position?: number | null;
-  total?: number | null;
-  allCompleted?: boolean;
-  nextWorkoutReason?: NextWorkoutReason | null;
+  cardState: ProgramTimelineCardState;
   onStartPress: () => void;
+  onOpenSessions?: () => void;
   isLoading?: boolean;
   contentWidth?: number;
 }
 
-const getEmptyStateCopy = (reason?: NextWorkoutReason | null) => {
-  switch (reason) {
-    case 'no_active_macrocycle':
-      return {
-        title: 'No tienes un programa activo',
-        subtitle: 'Tu entrenador aún no te asigna un programa vigente.',
-      };
-    case 'no_training_days':
-      return {
-        title: 'Tu programa no tiene sesiones visibles',
-        subtitle: 'Revisa con tu entrenador la programacion del microciclo activo.',
-      };
-    default:
-      return {
-        title: 'No pudimos encontrar tu próximo entrenamiento',
-        subtitle: 'Intenta refrescar o revisa con tu entrenador tu programación.',
-      };
+const getEmptyIconName = (
+  reason: 'no-program' | 'rest' | 'no-scheduled' | 'no-pending' | 'no-executed',
+) => {
+  if (reason === 'rest') {
+    return 'leaf-outline';
   }
+
+  if (reason === 'no-pending') {
+    return 'checkmark-done-circle-outline';
+  }
+
+  if (reason === 'no-executed') {
+    return 'time-outline';
+  }
+
+  return 'calendar-outline';
 };
 
 export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
-  trainingDay,
-  position,
-  total,
-  allCompleted,
-  nextWorkoutReason,
+  cardState,
   onStartPress,
+  onOpenSessions,
   isLoading,
   contentWidth,
 }) => {
@@ -160,40 +152,31 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
     );
   }
 
-  if (allCompleted) {
-    return (
-      <View style={styles.completedContainer}>
-        <View style={styles.completedIconContainer}>
-          <Ionicons name="trophy" size={40} color={colors.white} />
-        </View>
-        <Text style={styles.completedTitle}>Programa completado</Text>
-        <Text style={styles.completedSubtitle}>
-          Felicitaciones, completaste {total} entrenamientos
-        </Text>
-      </View>
-    );
-  }
-
-  if (!trainingDay) {
-    const emptyStateCopy = getEmptyStateCopy(nextWorkoutReason);
-
+  if (cardState.kind === 'empty') {
     return (
       <View style={styles.emptyContainer}>
-        <Ionicons name="calendar-outline" size={48} color={colors.gray[300]} />
-        <Text style={styles.emptyTitle}>{emptyStateCopy.title}</Text>
-        <Text style={styles.emptySubtitle}>{emptyStateCopy.subtitle}</Text>
+        <Ionicons name={getEmptyIconName(cardState.reason)} size={48} color={colors.gray[300]} />
+        {cardState.dateLabel ? (
+          <View style={styles.emptyDatePill}>
+            <Text style={styles.emptyDateText}>{cardState.dateLabel}</Text>
+          </View>
+        ) : null}
+        <Text style={styles.emptyTitle}>{cardState.title}</Text>
+        <Text style={styles.emptySubtitle}>{cardState.subtitle}</Text>
       </View>
     );
   }
 
-  const totalSets = trainingDay.exercises.reduce((sum, ex) => sum + ex.sets, 0);
+  const { trainingDay, session } = cardState;
+  const totalSets = trainingDay.exercises.reduce((sum, exercise) => sum + exercise.sets, 0);
   const estimatedMinutes = Math.round(totalSets * 3);
   const hours = Math.floor(estimatedMinutes / 60);
   const minutes = estimatedMinutes % 60;
   const durationText = hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
   const sessionCaption = trainingDay.session_label?.trim()
-    ? `Sesion ${trainingDay.session_index} · ${trainingDay.session_label.trim()}`
+    ? `Sesion ${trainingDay.session_index} - ${trainingDay.session_label.trim()}`
     : `Sesion ${trainingDay.session_index}`;
+  const isOverdueRecommendation = cardState.recommendation === 'overdue';
 
   return (
     <AnimatedPressable
@@ -212,45 +195,77 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
           resizeMode="cover"
         >
           <LinearGradient
-            colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.5)']}
+            colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.56)']}
             style={styles.overlay}
           />
 
           <View style={styles.glassBorder} pointerEvents="none" />
 
           <View style={styles.content}>
-            {position && total && (
+            <View style={styles.topBadges}>
               <View style={styles.positionBadge}>
                 <BlurView intensity={40} tint={theme.colors.blurTint} style={styles.positionBlur}>
                   <Text style={styles.positionText}>
-                    Sesion {position} de {total}
+                    Sesion {cardState.position} de {cardState.total}
                   </Text>
                 </BlurView>
               </View>
-            )}
+
+              <View style={styles.dayBadge}>
+                <BlurView intensity={50} tint={theme.colors.blurTint} style={styles.dayBadgeBlur}>
+                  <Text style={styles.dayBadgeText}>{cardState.dateLabel}</Text>
+                </BlurView>
+              </View>
+            </View>
 
             <View style={[styles.titleArea, { maxWidth: cardWidth - chamferHorizontal - spacing.lg }]}>
+              {isOverdueRecommendation ? (
+                <View style={styles.overduePill}>
+                  <Text style={styles.overduePillText}>Entrenamiento atrasado</Text>
+                </View>
+              ) : null}
               <View style={styles.sessionPill}>
                 <Text style={styles.sessionPillText}>{sessionCaption}</Text>
               </View>
               <Text style={styles.title}>{trainingDay.name}</Text>
-              {trainingDay.focus && (
-                <Text style={styles.focusText}>{trainingDay.focus}</Text>
-              )}
+              {trainingDay.focus ? <Text style={styles.focusText}>{trainingDay.focus}</Text> : null}
+              {isOverdueRecommendation ? (
+                <Text style={styles.recommendationText}>
+                  Termina esta sesion antes de continuar con la siguiente.
+                </Text>
+              ) : null}
+              <Text style={styles.complianceText}>
+                Cumplimiento actual: {Math.round(session.completion_percentage)}%
+              </Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.startButton}
-              onPress={onStartPress}
-              activeOpacity={0.9}
-            >
-              <BlurView intensity={80} tint={theme.colors.blurTint} style={styles.startButtonBlur}>
-                <Text style={styles.startButtonText}>empezar</Text>
-                <View style={styles.arrowCircle}>
-                  <Ionicons name="arrow-forward" size={18} color={theme.colors.primary} />
-                </View>
-              </BlurView>
-            </TouchableOpacity>
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                style={styles.startButton}
+                onPress={onStartPress}
+                activeOpacity={0.9}
+              >
+                <BlurView intensity={80} tint={theme.colors.blurTint} style={styles.startButtonBlur}>
+                  <Text style={styles.startButtonText}>{cardState.actionLabel}</Text>
+                  <View style={styles.arrowCircle}>
+                    <Ionicons name="arrow-forward" size={18} color={theme.colors.primary} />
+                  </View>
+                </BlurView>
+              </TouchableOpacity>
+
+              {cardState.hasMultipleSessions ? (
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={onOpenSessions}
+                  activeOpacity={0.86}
+                >
+                  <BlurView intensity={50} tint={theme.colors.blurTint} style={styles.secondaryButtonBlur}>
+                    <Ionicons name="layers-outline" size={16} color={colors.white} />
+                    <Text style={styles.secondaryButtonText}>ver sesiones</Text>
+                  </BlurView>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
         </ImageBackground>
       </MaskedView>
@@ -263,187 +278,244 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   );
 };
 
-const createStyles = (theme: AppTheme) => StyleSheet.create({
-  container: {
-    marginHorizontal: CARD_MARGIN,
-    marginVertical: spacing.md,
-    position: 'relative',
-    height: CARD_HEIGHT,
-  },
-  skeletonWrapper: {
-    marginHorizontal: CARD_MARGIN,
-    marginVertical: spacing.md,
-  },
-  durationContainer: {
-    position: 'absolute',
-    top: spacing.xs,
-    right: spacing.sm,
-    zIndex: 20,
-    alignItems: 'flex-end',
-  },
-  durationLabel: {
-    fontSize: fontSize.xs,
-    color: theme.colors.textMuted,
-    fontWeight: '500',
-  },
-  durationValue: {
-    fontSize: fontSize.sm,
-    color: theme.colors.textSecondary,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  cardContainer: {
-    overflow: 'hidden',
-    borderRadius: CORNER_RADIUS,
-    ...shadows.lg,
-  },
-  maskedImage: {
-    justifyContent: 'center',
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: CORNER_RADIUS,
-  },
-  glassBorder: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: CORNER_RADIUS,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  content: {
-    flex: 1,
-    padding: spacing.lg,
-    paddingTop: spacing.xl,
-    justifyContent: 'space-between',
-  },
-  positionBadge: {
-    position: 'absolute',
-    top: spacing.md,
-    left: spacing.md,
-    borderRadius: borderRadius.full,
-    overflow: 'hidden',
-  },
-  positionBlur: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  positionText: {
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-    color: theme.colors.textPrimary,
-  },
-  titleArea: {
-    marginTop: spacing.xl,
-  },
-  sessionPill: {
-    alignSelf: 'flex-start',
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: borderRadius.full,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.24)',
-  },
-  sessionPillText: {
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    color: colors.white,
-    letterSpacing: 0.3,
-  },
-  title: {
-    fontSize: fontSize['2xl'],
-    fontWeight: 'bold',
-    color: colors.white,
-    lineHeight: 32,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  focusText: {
-    fontSize: fontSize.sm,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: spacing.xs,
-  },
-  startButton: {
-    alignSelf: 'flex-start',
-    borderRadius: borderRadius.full,
-    overflow: 'hidden',
-  },
-  startButtonBlur: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: spacing.xl,
-    paddingRight: spacing.sm,
-    paddingVertical: spacing.sm,
-    backgroundColor: theme.isDark ? 'rgba(8,17,31,0.84)' : 'rgba(255,255,255,0.9)',
-  },
-  startButtonText: {
-    fontSize: fontSize.base,
-    fontWeight: '500',
-    color: theme.colors.textPrimary,
-    marginRight: spacing.md,
-  },
-  arrowCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyContainer: {
-    marginHorizontal: CARD_MARGIN,
-    marginVertical: spacing.md,
-    padding: spacing.xl,
-    backgroundColor: theme.colors.card,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: borderRadius.xl,
-    alignItems: 'center',
-    ...shadows.sm,
-  },
-  emptyTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '600',
-    color: theme.colors.textPrimary,
-    marginTop: spacing.md,
-  },
-  emptySubtitle: {
-    fontSize: fontSize.sm,
-    color: theme.colors.textMuted,
-    textAlign: 'center',
-    marginTop: spacing.xs,
-  },
-  completedContainer: {
-    marginHorizontal: CARD_MARGIN,
-    marginVertical: spacing.md,
-    padding: spacing.xl,
-    backgroundColor: brandColors.navy,
-    borderRadius: borderRadius.xl,
-    alignItems: 'center',
-    ...shadows.lg,
-  },
-  completedIconContainer: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: `${brandColors.sky}30`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  completedTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: '700',
-    color: colors.white,
-    marginTop: spacing.md,
-  },
-  completedSubtitle: {
-    fontSize: fontSize.sm,
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center',
-    marginTop: spacing.xs,
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    container: {
+      marginHorizontal: CARD_MARGIN,
+      marginVertical: spacing.md,
+      position: 'relative',
+      height: CARD_HEIGHT,
+    },
+    skeletonWrapper: {
+      marginHorizontal: CARD_MARGIN,
+      marginVertical: spacing.md,
+    },
+    durationContainer: {
+      position: 'absolute',
+      top: spacing.xs,
+      right: spacing.sm,
+      zIndex: 20,
+      alignItems: 'flex-end',
+    },
+    durationLabel: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      fontWeight: '500',
+    },
+    durationValue: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textSecondary,
+      fontWeight: '600',
+      marginTop: 2,
+    },
+    cardContainer: {
+      overflow: 'hidden',
+      borderRadius: CORNER_RADIUS,
+      ...shadows.lg,
+    },
+    maskedImage: {
+      justifyContent: 'center',
+    },
+    overlay: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: CORNER_RADIUS,
+    },
+    glassBorder: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: CORNER_RADIUS,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.2)',
+    },
+    content: {
+      flex: 1,
+      padding: spacing.lg,
+      paddingTop: spacing.xl,
+      justifyContent: 'space-between',
+    },
+    topBadges: {
+      gap: spacing.sm,
+    },
+    positionBadge: {
+      alignSelf: 'flex-start',
+      borderRadius: borderRadius.full,
+      overflow: 'hidden',
+    },
+    positionBlur: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+    },
+    positionText: {
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+    dayBadge: {
+      alignSelf: 'flex-start',
+      borderRadius: borderRadius.full,
+      overflow: 'hidden',
+    },
+    dayBadgeBlur: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 6,
+    },
+    dayBadgeText: {
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+      color: colors.white,
+    },
+    titleArea: {
+      marginTop: spacing.lg,
+    },
+    sessionPill: {
+      alignSelf: 'flex-start',
+      marginBottom: spacing.sm,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 6,
+      borderRadius: borderRadius.full,
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.24)',
+    },
+    sessionPillText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: colors.white,
+      letterSpacing: 0.3,
+    },
+    overduePill: {
+      alignSelf: 'flex-start',
+      marginBottom: spacing.sm,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 6,
+      borderRadius: borderRadius.full,
+      backgroundColor: 'rgba(245, 158, 11, 0.18)',
+      borderWidth: 1,
+      borderColor: 'rgba(245, 158, 11, 0.4)',
+    },
+    overduePillText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: colors.white,
+      letterSpacing: 0.3,
+    },
+    title: {
+      fontSize: fontSize['2xl'],
+      fontWeight: 'bold',
+      color: colors.white,
+      lineHeight: 32,
+      textShadowColor: 'rgba(0, 0, 0, 0.5)',
+      textShadowOffset: { width: 1, height: 1 },
+      textShadowRadius: 3,
+    },
+    focusText: {
+      fontSize: fontSize.sm,
+      color: 'rgba(255,255,255,0.8)',
+      marginTop: spacing.xs,
+    },
+    recommendationText: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: 'rgba(255,255,255,0.92)',
+    },
+    complianceText: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: 'rgba(255,255,255,0.9)',
+    },
+    actionsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      flexWrap: 'wrap',
+    },
+    startButton: {
+      alignSelf: 'flex-start',
+      borderRadius: borderRadius.full,
+      overflow: 'hidden',
+    },
+    startButtonBlur: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingLeft: spacing.xl,
+      paddingRight: spacing.sm,
+      paddingVertical: spacing.sm,
+      backgroundColor: theme.isDark ? 'rgba(8,17,31,0.84)' : 'rgba(255,255,255,0.9)',
+    },
+    startButtonText: {
+      fontSize: fontSize.base,
+      fontWeight: '500',
+      color: theme.colors.textPrimary,
+      marginRight: spacing.md,
+      textTransform: 'lowercase',
+    },
+    arrowCircle: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.colors.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    secondaryButton: {
+      alignSelf: 'flex-start',
+      borderRadius: borderRadius.full,
+      overflow: 'hidden',
+    },
+    secondaryButtonBlur: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      backgroundColor: 'rgba(255,255,255,0.16)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.18)',
+    },
+    secondaryButtonText: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: colors.white,
+      textTransform: 'lowercase',
+    },
+    emptyContainer: {
+      marginHorizontal: CARD_MARGIN,
+      marginVertical: spacing.md,
+      padding: spacing.xl,
+      backgroundColor: theme.colors.card,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: borderRadius.xl,
+      alignItems: 'center',
+      ...shadows.sm,
+    },
+    emptyDatePill: {
+      marginTop: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    emptyDateText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+    },
+    emptyTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+      marginTop: spacing.md,
+    },
+    emptySubtitle: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+      marginTop: spacing.xs,
+    },
+  });
 
 export default TodayWorkoutCard;

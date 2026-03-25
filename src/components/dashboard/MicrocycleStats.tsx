@@ -4,9 +4,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, brandColors, colors, fontSize, shadows, spacing } from '../../constants/colors';
 import { useThemedStyles, type AppTheme } from '../../theme';
 import type { MicrocycleMode, MicrocycleProgress } from '../../types';
+import type { ProgramTimelineActualAdherenceMetrics } from '../../utils/programTimeline';
 
 interface MicrocycleStatsProps {
   microcycleProgress: MicrocycleProgress | null;
+  actualAdherenceMetrics: ProgramTimelineActualAdherenceMetrics;
   mode: MicrocycleMode;
   onModeChange: (mode: MicrocycleMode) => void;
   isLoading?: boolean;
@@ -22,13 +24,13 @@ type StatCard = {
 
 export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
   microcycleProgress,
+  actualAdherenceMetrics,
   mode,
   onModeChange,
   isLoading = false,
 }) => {
   const styles = useThemedStyles(createStyles);
   const plannedMetrics = microcycleProgress?.planned_metrics;
-  const actualMetrics = microcycleProgress?.actual_metrics;
 
   const plannedStats: StatCard[] = [
     {
@@ -60,25 +62,25 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
 
   const actualStats: StatCard[] = [
     {
-      key: 'executed',
-      label: 'Ejecutadas',
-      value: `${actualMetrics?.executed_sessions ?? 0}`,
-      icon: 'flash-outline',
+      key: 'on-schedule',
+      label: 'En fecha',
+      value: `${actualAdherenceMetrics.onSchedule}`,
+      icon: 'checkmark-circle-outline',
       tint: colors.success,
     },
     {
-      key: 'active-days',
-      label: 'Días activos',
-      value: `${actualMetrics?.active_days ?? 0}`,
-      icon: 'calendar-outline',
+      key: 'rescheduled',
+      label: 'Reprogramadas',
+      value: `${actualAdherenceMetrics.rescheduled}`,
+      icon: 'swap-horizontal-outline',
       tint: brandColors.sky,
     },
     {
-      key: 'double-days',
-      label: 'Dobles',
-      value: `${actualMetrics?.double_session_days ?? 0}`,
-      icon: 'layers-outline',
-      tint: brandColors.navy,
+      key: 'overdue',
+      label: 'Atrasadas',
+      value: `${actualAdherenceMetrics.overdue}`,
+      icon: 'alert-circle-outline',
+      tint: colors.warning,
     },
   ];
 
@@ -92,7 +94,7 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
           style={[styles.toggleButton, mode === 'planned' && styles.toggleButtonActive]}
         >
           <Text style={[styles.toggleLabel, mode === 'planned' && styles.toggleLabelActive]}>
-            Planificación
+            Planificacion
           </Text>
         </Pressable>
         <Pressable
@@ -100,7 +102,7 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
           style={[styles.toggleButton, mode === 'actual' && styles.toggleButtonActive]}
         >
           <Text style={[styles.toggleLabel, mode === 'actual' && styles.toggleLabelActive]}>
-            Ejecución real
+            Ejecucion real
           </Text>
         </Pressable>
       </View>

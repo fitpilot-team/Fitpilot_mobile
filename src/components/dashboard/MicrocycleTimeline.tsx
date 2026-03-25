@@ -1,208 +1,65 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { PanResponder, StyleSheet, Text, View } from 'react-native';
+import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   SharedWeeklyCalendar,
   type SharedWeeklyCalendarDay,
-  type SharedWeeklyCalendarVariant,
-  sharedWeeklyCalendarHeroLayoutPreset,
 } from '../calendar/SharedWeeklyCalendar';
 import { borderRadius, fontSize, shadows, spacing } from '../../constants/colors';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
-import type { MicrocycleDayProgress, MicrocycleMode, MicrocycleProgress } from '../../types';
-import {
-  compareDateKeys,
-  formatLocalDate,
-  formatLocalShortWeekday,
-  getCalendarDayDiff,
-  getLocalDayNumber,
-  getTodayDateKey,
-  toLocalDateKey,
-} from '../../utils/date';
+import type { MicrocycleMode } from '../../types';
+import type { ProgramTimelineDay } from '../../utils/programTimeline';
+import { getProgramTimelineCalendarDayLabel } from '../../utils/programTimeline';
 
 interface MicrocycleTimelineProps {
-  microcycleProgress: MicrocycleProgress | null;
+  title: string;
+  subtitle?: string | null;
+  days: ProgramTimelineDay[];
   mode: MicrocycleMode;
-  onDayPress?: (day: MicrocycleDayProgress) => void;
+  canGoToPreviousWeek: boolean;
+  canGoToNextWeek: boolean;
+  onFocusDate: (dateKey: string) => void;
+  onShiftWeek: (direction: -1 | 1) => void;
   contentWidth?: number;
 }
 
-const WINDOW_SIZE = 7;
-const WINDOW_CENTER_INDEX = Math.floor(WINDOW_SIZE / 2);
 const SWIPE_THRESHOLD = 40;
 
-const resolveInitialSelectedDateKey = (days: MicrocycleDayProgress[]) => {
-  if (days.length === 0) {
-    return null;
-  }
-
-  const todayDateKey = getTodayDateKey();
-  const todayDay = days.find((day) => toLocalDateKey(day.date) === todayDateKey);
-  if (todayDay) {
-    return todayDateKey;
-  }
-
-  return days.reduce((closestDay, day) => {
-    const currentDistance = Math.abs(getCalendarDayDiff(todayDateKey, day.date));
-    const closestDistance = Math.abs(getCalendarDayDiff(todayDateKey, closestDay.date));
-
-    if (currentDistance < closestDistance) {
-      return day;
-    }
-
-    if (currentDistance === closestDistance && compareDateKeys(day.date, closestDay.date) < 0) {
-      return day;
-    }
-
-    return closestDay;
-  }).date;
-};
-
-const getDayStatusText = (day: MicrocycleDayProgress, mode: MicrocycleMode) => {
-  if (day.is_rest_day) {
-    return 'Desc';
-  }
-
-  if (mode === 'planned') {
-    if (day.planned_sessions === 0) {
-      return '-';
-    }
-
-    return `${day.completed_planned_sessions}/${day.planned_sessions}`;
-  }
-
-  if (day.actual_logs_count === 0) {
-    return '-';
-  }
-
-  return `${day.actual_logs_count} log${day.actual_logs_count > 1 ? 's' : ''}`;
-};
-
-const getDayVariant = (
-  day: MicrocycleDayProgress,
-  mode: MicrocycleMode,
-  todayDateKey: string,
-): SharedWeeklyCalendarVariant => {
-  if (day.is_rest_day) {
-    return 'rest';
-  }
-
-  const isPastDay = compareDateKeys(day.date, todayDateKey) < 0;
-
-  if (mode === 'planned') {
-    if (day.planned_sessions > 0 && day.completed_planned_sessions === day.planned_sessions) {
-      return 'complete';
-    }
-
-    if (day.has_partial_session) {
-      return 'partial';
-    }
-
-    if (isPastDay && day.planned_sessions > 0 && day.completed_planned_sessions === 0) {
-      return 'missed';
-    }
-
-    return 'default';
-  }
-
-  if (day.has_partial_session) {
-    return 'partial';
-  }
-
-  if (
-    day.actual_logs_count > 0 &&
-    day.sessions.length > 0 &&
-    day.sessions.every((session) => session.actual_status === 'completed')
-  ) {
-    return 'complete';
-  }
-
-  if (isPastDay && day.planned_sessions > 0 && day.actual_logs_count === 0) {
-    return 'missed';
-  }
-
-  return 'default';
-};
-
-const clampWindowStart = (selectedIndex: number, totalDays: number) => {
-  if (totalDays <= WINDOW_SIZE) {
-    return 0;
-  }
-
-  return Math.max(0, Math.min(selectedIndex - WINDOW_CENTER_INDEX, totalDays - WINDOW_SIZE));
-};
-
 export const MicrocycleTimeline: React.FC<MicrocycleTimelineProps> = ({
-  microcycleProgress,
+  title,
+  subtitle,
+  days,
   mode,
-  onDayPress,
+  canGoToPreviousWeek,
+  canGoToNextWeek,
+  onFocusDate,
+  onShiftWeek,
   contentWidth = 390,
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
-  const todayDateKey = getTodayDateKey();
-  const days = useMemo(() => microcycleProgress?.days ?? [], [microcycleProgress?.days]);
-  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (days.length === 0) {
-      setSelectedDateKey(null);
-      return;
-    }
+  const calendarDays = useMemo<SharedWeeklyCalendarDay[]>(
+    () =>
+      days.map((day) => {
+        const { dayLabel, dateNumber } = getProgramTimelineCalendarDayLabel(day.dateKey);
 
-    const currentSelectionIsValid = selectedDateKey
-      ? days.some((day) => toLocalDateKey(day.date) === selectedDateKey)
-      : false;
-
-    if (currentSelectionIsValid) {
-      return;
-    }
-
-    const nextSelectedDateKey = resolveInitialSelectedDateKey(days);
-    setSelectedDateKey(toLocalDateKey(nextSelectedDateKey) ?? nextSelectedDateKey);
-  }, [days, selectedDateKey]);
-
-  const selectedIndex = useMemo(() => {
-    if (!selectedDateKey) {
-      return 0;
-    }
-
-    const index = days.findIndex((day) => toLocalDateKey(day.date) === selectedDateKey);
-    return index >= 0 ? index : 0;
-  }, [days, selectedDateKey]);
-
-  const visibleDays = useMemo(() => {
-    if (days.length <= WINDOW_SIZE) {
-      return days;
-    }
-
-    const startIndex = clampWindowStart(selectedIndex, days.length);
-    return days.slice(startIndex, startIndex + WINDOW_SIZE);
-  }, [days, selectedIndex]);
-
-  const calendarDays = useMemo<SharedWeeklyCalendarDay[]>(() => {
-    return visibleDays.map((day) => {
-      const dateKey = toLocalDateKey(day.date) ?? day.date;
-
-      return {
-        id: `${dateKey}-${mode}`,
-        dateKey,
-        dayLabel: formatLocalShortWeekday(day.date),
-        dateNumber: getLocalDayNumber(day.date),
-        isSelected: dateKey === selectedDateKey,
-        isToday: dateKey === todayDateKey,
-        isDisabled: false,
-        statusText: getDayStatusText(day, mode),
-        variant: getDayVariant(day, mode, todayDateKey),
-        onPress: () => {
-          setSelectedDateKey(dateKey);
-          if (day.sessions.length > 0) {
-            void onDayPress?.(day);
-          }
-        },
-      };
-    });
-  }, [mode, onDayPress, selectedDateKey, todayDateKey, visibleDays]);
+        return {
+          id: `${day.dateKey}-${mode}`,
+          dateKey: day.dateKey,
+          dayLabel,
+          dateNumber,
+          isSelected: day.isSelected,
+          isToday: day.isToday,
+          isDisabled: false,
+          statusText: day.statusText,
+          variant: day.variant,
+          showHero: day.showHero,
+          onPress: () => onFocusDate(day.dateKey),
+        };
+      }),
+    [days, mode, onFocusDate],
+  );
 
   const panResponder = useMemo(
     () =>
@@ -210,57 +67,83 @@ export const MicrocycleTimeline: React.FC<MicrocycleTimelineProps> = ({
         onMoveShouldSetPanResponder: (_, gestureState) =>
           Math.abs(gestureState.dx) > 12 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
         onPanResponderRelease: (_, gestureState) => {
-          if (Math.abs(gestureState.dx) < SWIPE_THRESHOLD || days.length <= 1) {
+          if (Math.abs(gestureState.dx) < SWIPE_THRESHOLD || days.length === 0) {
             return;
           }
 
-          const direction = gestureState.dx < 0 ? 1 : -1;
-          const nextIndex = Math.max(0, Math.min(days.length - 1, selectedIndex + direction));
-          const nextDay = days[nextIndex];
-          const nextDateKey = toLocalDateKey(nextDay?.date) ?? nextDay?.date ?? null;
-          if (nextDateKey) {
-            setSelectedDateKey(nextDateKey);
+          if (gestureState.dx < 0 && canGoToNextWeek) {
+            onShiftWeek(1);
+            return;
+          }
+
+          if (gestureState.dx > 0 && canGoToPreviousWeek) {
+            onShiftWeek(-1);
           }
         },
       }),
-    [days, selectedIndex],
+    [canGoToNextWeek, canGoToPreviousWeek, days.length, onShiftWeek],
   );
 
-  if (!days.length) {
+  if (!calendarDays.length) {
     return (
       <View style={styles.emptyState}>
         <Ionicons name="calendar-outline" size={24} color={theme.colors.primary} />
         <View style={styles.emptyCopy}>
-          <Text style={styles.emptyTitle}>Sin microciclo activo</Text>
+          <Text style={styles.emptyTitle}>Sin programa activo</Text>
           <Text style={styles.emptySubtitle}>
-            Cuando exista una programación vigente, aparecerá aquí.
+            Cuando exista una programacion vigente, aparecera aqui.
           </Text>
         </View>
       </View>
     );
   }
 
-  const rangeLabel =
-    microcycleProgress?.start_date && microcycleProgress?.end_date
-      ? `${formatLocalDate(microcycleProgress.start_date, { month: 'short', day: 'numeric' })} - ${formatLocalDate(
-          microcycleProgress.end_date,
-          { month: 'short', day: 'numeric' },
-        )}`
-      : null;
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>
-            {microcycleProgress?.microcycle_name || 'Microciclo actual'}
-          </Text>
-          {rangeLabel ? <Text style={styles.subtitle}>{rangeLabel}</Text> : null}
+          <Text style={styles.title}>{title}</Text>
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
-        <View style={styles.modePill}>
-          <Text style={styles.modePillText}>
-            {mode === 'planned' ? 'Vista plan' : 'Vista real'}
-          </Text>
+
+        <View style={styles.headerActions}>
+          <View style={styles.modePill}>
+            <Text style={styles.modePillText}>
+              {mode === 'planned' ? 'Vista plan' : 'Vista real'}
+            </Text>
+          </View>
+
+          <View style={styles.weekControls}>
+            <Pressable
+              onPress={() => onShiftWeek(-1)}
+              disabled={!canGoToPreviousWeek}
+              style={[
+                styles.navButton,
+                !canGoToPreviousWeek && styles.navButtonDisabled,
+              ]}
+            >
+              <Ionicons
+                name="chevron-back"
+                size={16}
+                color={canGoToPreviousWeek ? theme.colors.primary : theme.colors.textMuted}
+              />
+            </Pressable>
+
+            <Pressable
+              onPress={() => onShiftWeek(1)}
+              disabled={!canGoToNextWeek}
+              style={[
+                styles.navButton,
+                !canGoToNextWeek && styles.navButtonDisabled,
+              ]}
+            >
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={canGoToNextWeek ? theme.colors.primary : theme.colors.textMuted}
+              />
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -269,9 +152,6 @@ export const MicrocycleTimeline: React.FC<MicrocycleTimelineProps> = ({
           days={calendarDays}
           heroSelectionMode="selected-only"
           contentWidth={contentWidth}
-          edgeInset={sharedWeeklyCalendarHeroLayoutPreset.edgeInset}
-          rowOffsetX={sharedWeeklyCalendarHeroLayoutPreset.rowOffsetX}
-          heroOffsetX={sharedWeeklyCalendarHeroLayoutPreset.heroOffsetX}
         />
       </View>
     </View>
@@ -311,6 +191,10 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.xs,
       color: theme.colors.textMuted,
     },
+    headerActions: {
+      alignItems: 'flex-end',
+      gap: spacing.sm,
+    },
     modePill: {
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.xs,
@@ -323,6 +207,23 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.xs,
       fontWeight: '700',
       color: theme.colors.primary,
+    },
+    weekControls: {
+      flexDirection: 'row',
+      gap: spacing.xs,
+    },
+    navButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    navButtonDisabled: {
+      opacity: 0.55,
     },
     emptyState: {
       marginHorizontal: spacing.lg,

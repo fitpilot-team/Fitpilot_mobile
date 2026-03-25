@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import {
   BottomTabBarVisibilityProvider,
@@ -99,11 +104,16 @@ const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
   const visibleContentInset = PHONE_TAB_BAR_HEIGHT + visiblePaddingBottom + 16;
 
   useEffect(() => {
-    indicatorX.value = withTiming(state.index * tabWidth, {
-      duration: 300,
+    indicatorX.value = withSpring(state.index * tabWidth, {
+      damping: 20,
+      stiffness: 150,
+      mass: 0.8,
     });
-    translateY.value = withTiming(isVisible ? 0 : hiddenOffset, { duration: 250 });
-    opacity.value = withTiming(isVisible ? 1 : 0, { duration: 200 });
+    translateY.value = withSpring(isVisible ? 0 : hiddenOffset, {
+      damping: 20,
+      stiffness: 120,
+    });
+    opacity.value = withTiming(isVisible ? 1 : 0, { duration: 250 });
     setContentInsetBottom(
       isVisible ? visibleContentInset : insets.bottom + HIDDEN_CONTENT_BOTTOM_INSET,
     );
@@ -181,15 +191,11 @@ const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
                   icon={options.tabBarIcon as TabBarIconRenderer | undefined}
                   styles={styles}
                 />
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.customTabText,
-                    isFocused && styles.customTabTextActive,
-                  ]}
-                >
-                  {label === 'index' ? 'Inicio' : label}
-                </Text>
+                <AnimatedLabel
+                  focused={isFocused}
+                  label={label === 'index' ? 'Inicio' : label}
+                  styles={styles}
+                />
               </Pressable>
             );
           })}
@@ -206,12 +212,15 @@ type AnimatedTabIconProps = {
 };
 
 const AnimatedTabIcon: React.FC<AnimatedTabIconProps> = ({ focused, icon, styles }) => {
-  const scale = useSharedValue(focused ? 1.1 : 1);
-  const opacity = useSharedValue(focused ? 1 : 0.6);
+  const scale = useSharedValue(focused ? 1.15 : 1);
+  const opacity = useSharedValue(focused ? 1 : 0.7);
 
   useEffect(() => {
-    scale.value = withTiming(focused ? 1.15 : 1, { duration: 200 });
-    opacity.value = withTiming(focused ? 1 : 0.7, { duration: 200 });
+    scale.value = withSpring(focused ? 1.15 : 1, {
+      damping: 12,
+      stiffness: 200,
+    });
+    opacity.value = withTiming(focused ? 1 : 0.7, { duration: 250 });
   }, [focused, opacity, scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -227,6 +236,43 @@ const AnimatedTabIcon: React.FC<AnimatedTabIconProps> = ({ focused, icon, styles
         size: 24,
       })}
     </Animated.View>
+  );
+};
+
+type AnimatedLabelProps = {
+  focused: boolean;
+  label: string;
+  styles: TabLayoutStyles;
+};
+
+const AnimatedLabel: React.FC<AnimatedLabelProps> = ({ focused, label, styles }) => {
+  const scale = useSharedValue(focused ? 1 : 0.92);
+  const opacity = useSharedValue(focused ? 1 : 0.7);
+
+  useEffect(() => {
+    scale.value = withSpring(focused ? 1 : 0.92, {
+      damping: 15,
+      stiffness: 150,
+    });
+    opacity.value = withTiming(focused ? 1 : 0.7, { duration: 250 });
+  }, [focused, opacity, scale]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Animated.Text
+      numberOfLines={1}
+      style={[
+        styles.customTabText,
+        focused && styles.customTabTextActive,
+        animatedStyle,
+      ]}
+    >
+      {label}
+    </Animated.Text>
   );
 };
 
@@ -268,7 +314,7 @@ export default function TabLayout() {
           )
         }
         screenOptions={{
-          animation: 'shift',
+          animation: 'none',
           sceneStyle: {
             backgroundColor: theme.colors.background,
           },

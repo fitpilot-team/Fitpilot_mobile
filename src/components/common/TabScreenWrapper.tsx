@@ -1,47 +1,53 @@
 import * as React from 'react';
 import { useEffect } from 'react';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useIsFocused } from '@react-navigation/native';
 
 interface TabScreenWrapperProps {
   children: React.ReactNode;
 }
 
+const FOCUS_ENTRY_START = 0.985;
+const FOCUS_ENTRY_OPACITY = 0.96;
+
 /**
- * Componente que envuelve el contenido de cada pestaña para proporcionar
- * animaciones de transición (zoom + fade) cuando la pestaña se enfoca.
+ * Envuelve cada tab con una animacion ligera de entrada al ganar foco,
+ * sin usar el foco como gate de visibilidad total.
  */
 export const TabScreenWrapper = ({ children }: TabScreenWrapperProps) => {
   const isFocused = useIsFocused();
-  const opacity = useSharedValue(0);
-  const scale = useSharedValue(0.98);
-  const translateY = useSharedValue(8);
+  const progress = useSharedValue(1);
 
   useEffect(() => {
-    if (isFocused) {
-      opacity.value = withTiming(1, { duration: 400 });
-      scale.value = withTiming(1, { duration: 450 });
-      translateY.value = withTiming(0, { duration: 400 });
-    } else {
-      // Reiniciar valores para la próxima vez que se enfoque
-      opacity.value = 0;
-      scale.value = 0.98;
-      translateY.value = 8;
+    cancelAnimation(progress);
+
+    if (!isFocused) {
+      progress.value = 1;
+      return;
     }
-  }, [isFocused, opacity, scale, translateY]);
+
+    progress.value = FOCUS_ENTRY_START;
+    progress.value = withSpring(1, {
+      damping: 15,
+      stiffness: 100,
+      mass: 1,
+    });
+  }, [isFocused, progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     flex: 1,
-    opacity: opacity.value,
+    opacity: interpolate(progress.value, [FOCUS_ENTRY_START, 1], [FOCUS_ENTRY_OPACITY, 1]),
     transform: [
-      { scale: scale.value },
-      { translateY: translateY.value }
+      { scale: interpolate(progress.value, [FOCUS_ENTRY_START, 1], [0.992, 1]) },
+      { translateY: interpolate(progress.value, [FOCUS_ENTRY_START, 1], [4, 0]) },
     ],
   }));
 
-  return (
-    <Animated.View style={animatedStyle}>
-      {children}
-    </Animated.View>
-  );
+  return <Animated.View style={animatedStyle}>{children}</Animated.View>;
 };

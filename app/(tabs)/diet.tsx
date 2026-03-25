@@ -59,6 +59,7 @@ export default function DietScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [renderVersion, setRenderVersion] = useState(0);
+  const [hasPlayedEntryAnimation, setHasPlayedEntryAnimation] = useState(false);
 
   const loadDiet = useCallback(
     async (mode: 'initial' | 'refresh' = 'initial') => {
@@ -163,6 +164,27 @@ export default function DietScreen() {
     loadDiet();
   }, [loadDiet]);
 
+  const showInitialLoadingState = isLoading && !refreshing;
+  const shouldAnimateEntry = !hasPlayedEntryAnimation && !showInitialLoadingState;
+  const getEntryAnimation = useCallback(
+    (delay: number) => (shouldAnimateEntry ? FadeInDown.delay(delay).duration(350) : undefined),
+    [shouldAnimateEntry],
+  );
+
+  useEffect(() => {
+    if (!shouldAnimateEntry) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setHasPlayedEntryAnimation(true);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [shouldAnimateEntry]);
+
   const selectedDay = useMemo(
     () => dietDays.find((day) => day.assignedDate === selectedDate) || null,
     [dietDays, selectedDate],
@@ -254,7 +276,7 @@ export default function DietScreen() {
     return null;
   }
 
-  if (isLoading && !refreshing) {
+  if (showInitialLoadingState) {
     return <LoadingSpinner fullScreen text="Cargando tu dieta..." />;
   }
 
@@ -276,7 +298,7 @@ export default function DietScreen() {
           scrollEventThrottle={tabBarScroll.scrollEventThrottle}
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View entering={FadeInDown.duration(350)} style={styles.header}>
+          <Animated.View entering={getEntryAnimation(0)} style={styles.header}>
             <Text style={styles.eyebrow}>Nutricion</Text>
             <Text style={styles.title}>Dieta</Text>
             <Text style={styles.subtitle}>
@@ -286,7 +308,7 @@ export default function DietScreen() {
 
           {selectedDay ? (
             <>
-              <Animated.View entering={FadeInDown.delay(80).duration(350)}>
+              <Animated.View entering={getEntryAnimation(80)}>
                 <DietWeekCalendar
                   days={dietDays}
                   selectedDate={selectedDate}
@@ -296,7 +318,7 @@ export default function DietScreen() {
               </Animated.View>
 
               {visibleMenu ? (
-                <Animated.View entering={FadeInDown.delay(140).duration(350)} style={styles.heroSection}>
+                <Animated.View entering={getEntryAnimation(140)} style={styles.heroSection}>
                   <DietHero
                     menu={visibleMenu}
                     assignedDate={selectedDay.assignedDate}
@@ -306,7 +328,7 @@ export default function DietScreen() {
                 </Animated.View>
               ) : null}
 
-              <Animated.View entering={FadeInDown.delay(180).duration(350)} style={styles.selectorSection}>
+              <Animated.View entering={getEntryAnimation(180)} style={styles.selectorSection}>
                 <TouchableOpacity
                   style={[
                     styles.selectorCard,
@@ -338,7 +360,7 @@ export default function DietScreen() {
                 </TouchableOpacity>
               </Animated.View>
 
-              <Animated.View entering={FadeInDown.delay(220).duration(350)} style={styles.mealsSection}>
+              <Animated.View entering={getEntryAnimation(220)} style={styles.mealsSection}>
                 <View style={styles.sectionHeader}>
                   <View>
                     <Text style={styles.sectionTitle}>Comidas del dia</Text>
@@ -381,7 +403,7 @@ export default function DietScreen() {
               </Animated.View>
             </>
           ) : (
-            <Animated.View entering={FadeInDown.delay(80).duration(350)} style={styles.emptyStateWrapper}>
+            <Animated.View entering={getEntryAnimation(80)} style={styles.emptyStateWrapper}>
               <Card style={styles.emptyCard}>
                 <View style={styles.emptyIcon}>
                   <Ionicons name={error ? 'alert-circle-outline' : 'restaurant-outline'} size={30} color={nutritionTheme.accentStrong} />

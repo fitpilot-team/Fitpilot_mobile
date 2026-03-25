@@ -1,17 +1,30 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { LinearGradient } from 'expo-linear-gradient';
+import DateFormShape from '../../../assets/date-form1.svg';
 import { brandColors, fontSize, spacing } from '../../constants/colors';
 import { useThemedStyles, type AppTheme } from '../../theme';
 
-const SVG_ORIGINAL_WIDTH = 100;
-const SVG_ORIGINAL_HEIGHT = 100;
-const SVG_RECT_X = 28.97;
-const SVG_RECT_Y = 15.48;
-const SVG_RECT_WIDTH = 29.93;
-const SVG_RECT_HEIGHT = 24.41;
-const SVG_CIRCLE_CX = 64.81;
-const SVG_CIRCLE_CY = 71.54;
+const HERO_GEOMETRY = Object.freeze({
+  canvasWidth: 100,
+  topBox: Object.freeze({
+    x: 26.63,
+    y: 15.48,
+    width: 31.3,
+    height: 24.41,
+  }),
+  circleAnchor: Object.freeze({
+    x: 57.53,
+    y: 71.54,
+  }),
+  footprint: Object.freeze({
+    minX: 26.63,
+    maxX: 73.37,
+  }),
+});
+const HERO_CIRCLE_RADIUS_RATIO = 0.125;
+const HERO_GRADIENT_COLORS = [brandColors.navy, brandColors.sky] as const;
 
 export type SharedWeeklyCalendarVariant =
   | 'default'
@@ -33,59 +46,59 @@ export interface SharedWeeklyCalendarDay {
   isDisabled?: boolean;
   statusText: string;
   variant: SharedWeeklyCalendarVariant;
+  showHero?: boolean;
   onPress?: () => void;
 }
-
-export const sharedWeeklyCalendarHeroLayoutPreset = Object.freeze({
-  edgeInset: 8,
-  rowOffsetX: -4,
-  heroOffsetX: -6,
-});
 
 interface SharedWeeklyCalendarProps {
   days: SharedWeeklyCalendarDay[];
   heroSelectionMode?: SharedWeeklyCalendarHeroSelectionMode;
   contentWidth?: number;
-  edgeInset?: number;
-  rowOffsetX?: number;
-  heroOffsetX?: number;
 }
 
 interface CalendarMetrics {
-  dayColumnWidth: number;
   dayGap: number;
   shapeSize: number;
   circleRadius: number;
+  defaultSlotWidth: number;
+  baseSlotWidth: number;
+  selectedSlotWidth: number;
   textContainerLeft: number;
   textContainerTop: number;
   textContainerWidth: number;
   textContainerHeight: number;
   circleCenterX: number;
   circleCenterY: number;
-  baseHorizontalPadding: number;
-  horizontalPadding: number;
+  footprintMinXScaled: number;
+  footprintMaxXScaled: number;
+  heroEdgeGutter: number;
 }
 
 const DayShapeBackground: React.FC<{ width: number; height: number }> = ({ width, height }) => {
-  const shapePath =
-    'M79.35,64.86L55.23,14.24l-.82-1.73H19.1l30.13,63.22,1.46,2.58c2.51,5.42,8.01,9.18,14.38,9.18,8.75,0,15.84-7.07,15.84-15.8,0-1.88-.33-3.69-.94-5.37l-.61-1.45Z';
-
   return (
-    <Svg
-      width={width}
-      height={height}
-      viewBox={`0 0 ${SVG_ORIGINAL_WIDTH} ${SVG_ORIGINAL_HEIGHT}`}
-      preserveAspectRatio="xMidYMid meet"
-      style={StyleSheet.absoluteFillObject}
+    <MaskedView
+      style={{ width, height }}
+      maskElement={
+        <View
+          style={[
+            staticStyles.heroMask,
+            {
+              width,
+              height,
+            },
+          ]}
+        >
+          <DateFormShape width={width} height={height} color="#ffffff" />
+        </View>
+      }
     >
-      <Defs>
-        <LinearGradient id="shapeGradient" x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor={brandColors.navy} />
-          <Stop offset="1" stopColor={brandColors.sky} />
-        </LinearGradient>
-      </Defs>
-      <Path d={shapePath} fill="url(#shapeGradient)" />
-    </Svg>
+      <LinearGradient
+        colors={HERO_GRADIENT_COLORS}
+        start={{ x: 0.2, y: 0 }}
+        end={{ x: 0.8, y: 1 }}
+        style={{ width, height }}
+      />
+    </MaskedView>
   );
 };
 
@@ -95,6 +108,10 @@ const getShowSpecialShape = (
   day: SharedWeeklyCalendarDay,
   heroSelectionMode: SharedWeeklyCalendarHeroSelectionMode,
 ) => {
+  if (day.showHero === false) {
+    return false;
+  }
+
   if (heroSelectionMode === 'selected-only') {
     return day.isSelected;
   }
@@ -126,6 +143,10 @@ const getDayLabelStyle = (
   day: SharedWeeklyCalendarDay,
   styles: ReturnType<typeof createStyles>,
 ) => {
+  if (day.isSelected && day.showHero === false) {
+    return [styles.dayLabel, styles.dayLabelSelected];
+  }
+
   if (day.variant === 'rest') {
     return [styles.dayLabel, styles.dayLabelRest];
   }
@@ -137,6 +158,10 @@ const getDateCircleStyle = (
   day: SharedWeeklyCalendarDay,
   styles: ReturnType<typeof createStyles>,
 ) => {
+  if (day.isSelected && day.showHero === false) {
+    return [styles.dateCircle, styles.dateCircleSelectedGhost];
+  }
+
   switch (day.variant) {
     case 'rest':
       return [styles.dateCircle, styles.dateCircleRest];
@@ -157,6 +182,10 @@ const getDateNumberStyle = (
   day: SharedWeeklyCalendarDay,
   styles: ReturnType<typeof createStyles>,
 ) => {
+  if (day.isSelected && day.showHero === false) {
+    return [styles.dateNumber, styles.dateNumberSelectedGhost];
+  }
+
   switch (day.variant) {
     case 'rest':
       return [styles.dateNumber, styles.dateNumberRest];
@@ -177,75 +206,144 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
   days,
   heroSelectionMode = 'selected-or-today',
   contentWidth = 390,
-  edgeInset = 0,
-  rowOffsetX = 0,
-  heroOffsetX = 0,
 }) => {
   const styles = useThemedStyles(createStyles);
+  const heroDayIndex = useMemo(
+    () => days.findIndex((day) => getShowSpecialShape(day, heroSelectionMode)),
+    [days, heroSelectionMode],
+  );
+  const hasHero = heroDayIndex !== -1;
 
   const metrics = useMemo<CalendarMetrics>(() => {
     const usableWidth = Math.max(320, contentWidth - spacing.lg * 2);
     const isCompact = usableWidth < 390;
     const isTablet = usableWidth >= 720;
     const dayGap = isTablet ? 9 : isCompact ? 5 : 7;
-    const minDayWidth = isCompact ? 41 : 42;
-    const maxDayWidth = isTablet ? 74 : isCompact ? 44 : 56;
-    const dayColumnWidth = Math.max(minDayWidth, Math.min(maxDayWidth, (usableWidth - dayGap * 6) / 7));
-    const shapeSize = Math.max(dayColumnWidth + 54, Math.min(isTablet ? 144 : 136, dayColumnWidth + 92));
-    const circleRadius = Math.max(16, Math.min(20, shapeSize * 0.125));
-    const scale = shapeSize / SVG_ORIGINAL_WIDTH;
-    const baseHorizontalPadding = Math.max(0, (shapeSize - dayColumnWidth) / 2);
+    const minBaseSlotWidth = isTablet ? 52 : isCompact ? 34 : 36;
+    const maxBaseSlotWidth = isTablet ? 74 : isCompact ? 44 : 56;
+    const defaultSlotWidth = clamp(
+      (usableWidth - dayGap * 6) / 7,
+      minBaseSlotWidth,
+      maxBaseSlotWidth,
+    );
+    const idealShapeSize = Math.max(
+      defaultSlotWidth + 54,
+      Math.min(isTablet ? 144 : 136, defaultSlotWidth + 92),
+    );
+    const heroSafePadding = isTablet ? 16 : isCompact ? 8 : 10;
+    const heroFootprintWidthRatio =
+      (HERO_GEOMETRY.footprint.maxX - HERO_GEOMETRY.footprint.minX) / HERO_GEOMETRY.canvasWidth;
+    const maxSelectedSlotWidth = Math.max(
+      defaultSlotWidth,
+      usableWidth - dayGap * 6 - minBaseSlotWidth * 6,
+    );
+    const maxShapeSizeForLayout =
+      (maxSelectedSlotWidth - heroSafePadding) / heroFootprintWidthRatio;
+    const shapeSize = hasHero
+      ? Math.min(idealShapeSize, maxShapeSizeForLayout)
+      : idealShapeSize;
+    const selectedSlotWidth = hasHero
+      ? heroFootprintWidthRatio * shapeSize + heroSafePadding
+      : defaultSlotWidth;
+    const baseSlotWidth = hasHero
+      ? (usableWidth - dayGap * 6 - selectedSlotWidth) / 6
+      : defaultSlotWidth;
+    const circleRadius = Math.max(16, Math.min(20, shapeSize * HERO_CIRCLE_RADIUS_RATIO));
+    const scale = shapeSize / HERO_GEOMETRY.canvasWidth;
+    const circleCenterX = HERO_GEOMETRY.circleAnchor.x * scale;
+    const footprintMinXScaled = HERO_GEOMETRY.footprint.minX * scale;
+    const footprintMaxXScaled = HERO_GEOMETRY.footprint.maxX * scale;
 
     return {
-      dayColumnWidth,
       dayGap,
       shapeSize,
       circleRadius,
-      textContainerLeft: SVG_RECT_X * scale,
-      textContainerTop: SVG_RECT_Y * scale,
-      textContainerWidth: SVG_RECT_WIDTH * scale,
-      textContainerHeight: SVG_RECT_HEIGHT * scale,
-      circleCenterX: SVG_CIRCLE_CX * scale,
-      circleCenterY: SVG_CIRCLE_CY * scale,
-      baseHorizontalPadding,
-      horizontalPadding: baseHorizontalPadding + edgeInset,
+      defaultSlotWidth,
+      baseSlotWidth,
+      selectedSlotWidth,
+      textContainerLeft: HERO_GEOMETRY.topBox.x * scale,
+      textContainerTop: HERO_GEOMETRY.topBox.y * scale,
+      textContainerWidth: HERO_GEOMETRY.topBox.width * scale,
+      textContainerHeight: HERO_GEOMETRY.topBox.height * scale,
+      circleCenterX,
+      circleCenterY: HERO_GEOMETRY.circleAnchor.y * scale,
+      footprintMinXScaled,
+      footprintMaxXScaled,
+      heroEdgeGutter: isTablet ? 8 : isCompact ? 2 : 4,
     };
-  }, [contentWidth, edgeInset]);
+  }, [contentWidth, hasHero]);
 
-  const heroLeft = useMemo(() => {
-    const minLeft = -(metrics.baseHorizontalPadding + edgeInset);
-    const maxLeft = -(metrics.baseHorizontalPadding - edgeInset);
-    return clamp(-metrics.baseHorizontalPadding + heroOffsetX, minLeft, maxLeft);
-  }, [edgeInset, heroOffsetX, metrics.baseHorizontalPadding]);
+  const slotLayouts = useMemo(() => {
+    let startX = 0;
+
+    return days.map((_, index) => {
+      const showSpecialShape = index === heroDayIndex;
+      const width = showSpecialShape
+        ? metrics.selectedSlotWidth
+        : hasHero
+          ? metrics.baseSlotWidth
+          : metrics.defaultSlotWidth;
+      const layout = {
+        width,
+        startX,
+        showSpecialShape,
+      };
+
+      startX += width + metrics.dayGap;
+      return layout;
+    });
+  }, [
+    days,
+    hasHero,
+    heroDayIndex,
+    metrics.baseSlotWidth,
+    metrics.dayGap,
+    metrics.defaultSlotWidth,
+    metrics.selectedSlotWidth,
+  ]);
+
+  const rowWidth = useMemo(() => {
+    const lastSlot = slotLayouts[slotLayouts.length - 1];
+    if (!lastSlot) {
+      return 0;
+    }
+
+    return lastSlot.startX + lastSlot.width;
+  }, [slotLayouts]);
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingHorizontal: metrics.horizontalPadding,
-        },
-      ]}
-    >
+    <View style={styles.container}>
       <View
         style={[
           styles.daysRow,
           {
             gap: metrics.dayGap,
-            transform: [{ translateX: rowOffsetX }],
           },
         ]}
       >
-        {days.map((day) => {
-          const showSpecialShape = getShowSpecialShape(day, heroSelectionMode);
+        {days.map((day, index) => {
+          const slotLayout = slotLayouts[index];
+          const showSpecialShape = slotLayout?.showSpecialShape ?? false;
           const statusText = day.statusText || ' ';
+          const slotWidth = slotLayout?.width ?? metrics.defaultSlotWidth;
+          const preferredHeroLeft = slotWidth / 2 - metrics.circleCenterX;
+          const minHeroLeft = slotLayout
+            ? metrics.heroEdgeGutter - slotLayout.startX - metrics.footprintMinXScaled
+            : preferredHeroLeft;
+          const maxHeroLeft = slotLayout
+            ? rowWidth -
+              slotLayout.startX -
+              metrics.footprintMaxXScaled -
+              metrics.heroEdgeGutter
+            : preferredHeroLeft;
+          const clampedHeroLeft = clamp(preferredHeroLeft, minHeroLeft, maxHeroLeft);
 
           return (
             <TouchableOpacity
               key={day.id}
               style={[
                 styles.dayColumn,
-                { width: metrics.dayColumnWidth, height: metrics.shapeSize },
+                { width: slotWidth, height: metrics.shapeSize },
               ]}
               onPress={day.onPress}
               disabled={day.isDisabled}
@@ -253,54 +351,59 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
             >
               {showSpecialShape ? (
                 <View
-                  style={[
-                    styles.shapeContainer,
-                    {
-                      left: heroLeft,
-                      width: metrics.shapeSize,
-                      height: metrics.shapeSize,
-                    },
-                  ]}
+                  pointerEvents="none"
+                  style={[styles.heroSlot, { width: slotWidth, height: metrics.shapeSize }]}
                 >
-                  <DayShapeBackground width={metrics.shapeSize} height={metrics.shapeSize} />
-
                   <View
                     style={[
-                      styles.textContainerHighlighted,
+                      styles.shapeContainer,
                       {
-                        left: metrics.textContainerLeft,
-                        top: metrics.textContainerTop,
-                        width: metrics.textContainerWidth,
-                        height: metrics.textContainerHeight,
+                        left: clampedHeroLeft,
+                        width: metrics.shapeSize,
+                        height: metrics.shapeSize,
                       },
                     ]}
                   >
-                    <Text style={styles.statusHighlighted}>{statusText}</Text>
-                    <Text style={styles.dayLabelHighlighted}>{day.dayLabel}</Text>
-                  </View>
+                    <DayShapeBackground width={metrics.shapeSize} height={metrics.shapeSize} />
 
-                  <View
-                    style={[
-                      styles.circleContainerHighlighted,
-                      {
-                        left: metrics.circleCenterX - metrics.circleRadius,
-                        top: metrics.circleCenterY - metrics.circleRadius,
-                        width: metrics.circleRadius * 2,
-                        height: metrics.circleRadius * 2,
-                      },
-                    ]}
-                  >
                     <View
                       style={[
-                        styles.dateCircleHighlighted,
+                        styles.textContainerHighlighted,
                         {
-                          width: metrics.circleRadius * 2,
-                          height: metrics.circleRadius * 2,
-                          borderRadius: metrics.circleRadius,
+                          left: metrics.textContainerLeft,
+                          top: metrics.textContainerTop,
+                          width: metrics.textContainerWidth,
+                          height: metrics.textContainerHeight,
                         },
                       ]}
                     >
-                      <Text style={styles.dateNumberHighlighted}>{day.dateNumber}</Text>
+                      <Text style={styles.statusHighlighted}>{statusText}</Text>
+                      <Text style={styles.dayLabelHighlighted}>{day.dayLabel}</Text>
+                    </View>
+
+                    <View
+                      style={[
+                        styles.circleContainerHighlighted,
+                        {
+                          left: metrics.circleCenterX - metrics.circleRadius,
+                          top: metrics.circleCenterY - metrics.circleRadius,
+                          width: metrics.circleRadius * 2,
+                          height: metrics.circleRadius * 2,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.dateCircleHighlighted,
+                          {
+                            width: metrics.circleRadius * 2,
+                            height: metrics.circleRadius * 2,
+                            borderRadius: metrics.circleRadius,
+                          },
+                        ]}
+                      >
+                        <Text style={styles.dateNumberHighlighted}>{day.dateNumber}</Text>
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -357,6 +460,10 @@ const createStyles = (theme: AppTheme) =>
     },
     dayColumn: {
       alignItems: 'center',
+      position: 'relative',
+      overflow: 'visible',
+    },
+    heroSlot: {
       position: 'relative',
       overflow: 'visible',
     },
@@ -435,6 +542,10 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textMuted,
       lineHeight: 16,
     },
+    dayLabelSelected: {
+      color: theme.colors.primary,
+      fontWeight: '700',
+    },
     dayLabelRest: {
       color: theme.colors.success,
     },
@@ -451,6 +562,10 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.surfaceAlt,
       borderWidth: 1,
       borderColor: theme.colors.border,
+    },
+    dateCircleSelectedGhost: {
+      backgroundColor: theme.colors.primarySoft,
+      borderColor: theme.colors.primaryBorder,
     },
     dateCircleRest: {
       backgroundColor: theme.isDark ? 'rgba(52, 211, 153, 0.18)' : 'rgba(16, 185, 129, 0.14)',
@@ -478,6 +593,10 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textPrimary,
       lineHeight: 22,
     },
+    dateNumberSelectedGhost: {
+      color: theme.colors.primary,
+      fontWeight: '700',
+    },
     dateNumberRest: {
       color: theme.colors.success,
     },
@@ -496,3 +615,11 @@ const createStyles = (theme: AppTheme) =>
   });
 
 export default SharedWeeklyCalendar;
+
+const staticStyles = StyleSheet.create({
+  heroMask: {
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

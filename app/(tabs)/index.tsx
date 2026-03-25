@@ -22,13 +22,18 @@ import { getMuscleVolume } from '../../src/services/api';
 import type { TipContext } from '../../src/utils/contextualTips';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type {
-  MicrocycleDayProgress,
   MicrocycleMode,
   MicrocycleSessionProgress,
   MuscleVolumeResponse,
 } from '../../src/types';
 import { formatLocalDate } from '../../src/utils/date';
 import { getDashboardContentWidth, isTabletLayout } from '../../src/utils/layout';
+import {
+  buildProgramTimelineModel,
+  buildProgramTimelineView,
+  getProgramTimelineWeekLabel,
+  shiftProgramTimelineFocusByWeek,
+} from '../../src/utils/programTimeline';
 
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
@@ -41,16 +46,13 @@ export default function HomeScreen() {
   const { user } = useAuthStore();
   const {
     activeMacrocycle,
-    nextPlannedSession,
+    dashboardWorkoutLogs,
     microcycleProgress,
-    workoutPosition,
-    workoutTotal,
-    allCompleted,
+    dashboardDataVersion,
     isLoading,
     isStartingWorkout,
     error,
     loadDashboardData,
-    loadNextWorkout,
     startWorkout,
     clearError,
   } = useWorkoutStore();
@@ -60,24 +62,69 @@ export default function HomeScreen() {
   const [isLoadingVolume, setIsLoadingVolume] = useState(false);
   const [countSecondaryMuscles, setCountSecondaryMuscles] = useState(true);
   const [microcycleMode, setMicrocycleMode] = useState<MicrocycleMode>('planned');
-  const [selectedDay, setSelectedDay] = useState<MicrocycleDayProgress | null>(null);
+  const [focusedDateKey, setFocusedDateKey] = useState<string | null>(null);
   const [isSessionPickerVisible, setIsSessionPickerVisible] = useState(false);
+  const [hasPlayedEntryAnimation, setHasPlayedEntryAnimation] = useState(false);
+
+  const programTimelineModel = useMemo(
+    () => buildProgramTimelineModel(activeMacrocycle, dashboardWorkoutLogs),
+    [activeMacrocycle, dashboardWorkoutLogs],
+  );
+  const programTimelineView = useMemo(
+    () => buildProgramTimelineView(programTimelineModel, focusedDateKey, microcycleMode),
+    [focusedDateKey, microcycleMode, programTimelineModel],
+  );
+  const currentWeekLabel = useMemo(
+    () => getProgramTimelineWeekLabel(programTimelineView.currentWeekStartDateKey),
+    [programTimelineView.currentWeekStartDateKey],
+  );
+  const showInitialLoadingState = isLoading && !refreshing && dashboardDataVersion === 0;
+  const shouldAnimateEntry = !hasPlayedEntryAnimation && !showInitialLoadingState;
+  const getEntryAnimation = useCallback(
+    (delay: number) => (shouldAnimateEntry ? FadeInDown.delay(delay).duration(400) : undefined),
+    [shouldAnimateEntry],
+  );
 
   useEffect(() => {
     const loadInitialDashboard = async () => {
-      await loadDashboardData();
-      await loadNextWorkout();
+      if (!user?.id) {
+        return;
+      }
+
+      await loadDashboardData(user.id);
     };
 
     void loadInitialDashboard();
-  }, [loadDashboardData, loadNextWorkout]);
+  }, [loadDashboardData, user?.id]);
+
+  useEffect(() => {
+    if (!shouldAnimateEntry) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setHasPlayedEntryAnimation(true);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [shouldAnimateEntry]);
+
+  useEffect(() => {
+    setFocusedDateKey(programTimelineModel.initialFocusedDateKey);
+    setIsSessionPickerVisible(false);
+  }, [dashboardDataVersion, programTimelineModel.initialFocusedDateKey]);
 
   useEffect(() => {
     const loadMuscleVolume = async () => {
-      if (nextPlannedSession?.id && !nextPlannedSession.rest_day) {
+      if (programTimelineView.highlightedTrainingDay?.id && !programTimelineView.highlightedTrainingDay.rest_day) {
         setIsLoadingVolume(true);
         try {
-          const data = await getMuscleVolume(nextPlannedSession.id, countSecondaryMuscles);
+          const data = await getMuscleVolume(
+            programTimelineView.highlightedTrainingDay.id,
+            countSecondaryMuscles,
+          );
           setMuscleVolume(data);
         } catch (err) {
           console.error('Error loading muscle volume:', err);
@@ -91,7 +138,11 @@ export default function HomeScreen() {
     };
 
     void loadMuscleVolume();
-  }, [countSecondaryMuscles, nextPlannedSession?.id, nextPlannedSession?.rest_day]);
+  }, [
+    countSecondaryMuscles,
+    programTimelineView.highlightedTrainingDay?.id,
+    programTimelineView.highlightedTrainingDay?.rest_day,
+  ]);
 
   useEffect(() => {
     if (error) {
@@ -100,27 +151,14 @@ export default function HomeScreen() {
   }, [clearError, error]);
 
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadDashboardData();
-    await loadNextWorkout();
-
-    if (nextPlannedSession?.id && !nextPlannedSession.rest_day) {
-      try {
-        const data = await getMuscleVolume(nextPlannedSession.id, countSecondaryMuscles);
-        setMuscleVolume(data);
-      } catch (err) {
-        console.error('Error refreshing muscle volume:', err);
-      }
+    if (!user?.id) {
+      return;
     }
 
+    setRefreshing(true);
+    await loadDashboardData(user.id);
     setRefreshing(false);
-  }, [
-    countSecondaryMuscles,
-    loadDashboardData,
-    loadNextWorkout,
-    nextPlannedSession?.id,
-    nextPlannedSession?.rest_day,
-  ]);
+  }, [loadDashboardData, user?.id]);
 
   const openWorkoutSession = useCallback(
     async (session: MicrocycleSessionProgress) => {
@@ -143,72 +181,79 @@ export default function HomeScreen() {
     [startWorkout],
   );
 
-  const handleDayPress = useCallback(
-    async (day: MicrocycleDayProgress) => {
-      if (!day.sessions.length) {
-        return;
-      }
+  const handleFocusDate = useCallback((dateKey: string) => {
+    setFocusedDateKey(dateKey);
+    setIsSessionPickerVisible(false);
+  }, []);
 
-      if (day.sessions.length === 1) {
-        await openWorkoutSession(day.sessions[0]);
-        return;
-      }
+  const handleShiftWeek = useCallback(
+    (direction: -1 | 1) => {
+      const nextDateKey = shiftProgramTimelineFocusByWeek(
+        programTimelineModel,
+        programTimelineView.effectiveFocusedDateKey,
+        direction,
+      );
 
-      setSelectedDay(day);
-      setIsSessionPickerVisible(true);
+      if (nextDateKey) {
+        setFocusedDateKey(nextDateKey);
+        setIsSessionPickerVisible(false);
+      }
     },
-    [openWorkoutSession],
+    [programTimelineModel, programTimelineView.effectiveFocusedDateKey],
   );
 
-  const handleStartNextSession = useCallback(async () => {
-    if (!nextPlannedSession) {
+  const handleStartHighlightedSession = useCallback(async () => {
+    if (programTimelineView.cardState.kind !== 'session') {
       return;
     }
 
-    const workoutLogId = await startWorkout(nextPlannedSession.id);
-    if (workoutLogId) {
-      router.push({
-        pathname: '/workout/[id]',
-        params: { id: workoutLogId },
-      });
+    await openWorkoutSession(programTimelineView.cardState.session);
+  }, [openWorkoutSession, programTimelineView.cardState]);
+
+  const handleOpenSessions = useCallback(() => {
+    if ((programTimelineView.focusedDay?.sessions.length ?? 0) > 1) {
+      setIsSessionPickerVisible(true);
     }
-  }, [nextPlannedSession, startWorkout]);
+  }, [programTimelineView.focusedDay?.sessions.length]);
 
   const sessionPickerTitle = useMemo(() => {
-    if (!selectedDay) {
-      return 'Sesiones del día';
+    if (!programTimelineView.focusedDay) {
+      return 'Sesiones del dia';
     }
 
-    return formatLocalDate(selectedDay.date, {
+    return formatLocalDate(programTimelineView.focusedDay.dateKey, {
       weekday: 'long',
       month: 'short',
       day: 'numeric',
     });
-  }, [selectedDay]);
+  }, [programTimelineView.focusedDay]);
 
-  const tipContext = useMemo<TipContext>(() => ({
-    nextSession: nextPlannedSession,
-    microcycleProgress,
-    muscleVolume,
-    allCompleted,
-    workoutPosition,
-    workoutTotal,
-    currentHour: new Date().getHours(),
-  }), [
-    nextPlannedSession,
-    microcycleProgress,
-    muscleVolume,
-    allCompleted,
-    workoutPosition,
-    workoutTotal,
-  ]);
+  const tipContext = useMemo<TipContext>(
+    () => ({
+      nextSession: programTimelineView.highlightedTrainingDay,
+      microcycleProgress,
+      muscleVolume,
+      allCompleted: programTimelineView.allCompleted,
+      workoutPosition: programTimelineView.workoutPosition,
+      workoutTotal: programTimelineView.workoutTotal,
+      currentHour: new Date().getHours(),
+    }),
+    [
+      programTimelineView.highlightedTrainingDay,
+      microcycleProgress,
+      muscleVolume,
+      programTimelineView.allCompleted,
+      programTimelineView.workoutPosition,
+      programTimelineView.workoutTotal,
+    ],
+  );
 
   if (!user) {
     router.replace('/login');
     return null;
   }
 
-  if (isLoading && !refreshing && !microcycleProgress && !nextPlannedSession) {
+  if (showInitialLoadingState) {
     return <LoadingSpinner fullScreen text="Cargando tu programa..." />;
   }
 
@@ -234,7 +279,7 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={[styles.contentColumn, { maxWidth: contentWidth }]}>
-            <Animated.View entering={FadeInDown.duration(400)}>
+            <Animated.View entering={getEntryAnimation(0)}>
               <UserHeader
                 user={user}
                 macrocycle={activeMacrocycle}
@@ -242,37 +287,41 @@ export default function HomeScreen() {
               />
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+            <Animated.View entering={getEntryAnimation(100)}>
               <MicrocycleTimeline
-                microcycleProgress={microcycleProgress}
+                title={microcycleProgress?.microcycle_name || activeMacrocycle?.name || 'Programa activo'}
+                subtitle={currentWeekLabel}
+                days={programTimelineView.days}
                 mode={microcycleMode}
-                onDayPress={handleDayPress}
+                canGoToPreviousWeek={programTimelineView.canGoToPreviousWeek}
+                canGoToNextWeek={programTimelineView.canGoToNextWeek}
+                onFocusDate={handleFocusDate}
+                onShiftWeek={handleShiftWeek}
                 contentWidth={contentWidth}
               />
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(180).duration(400)}>
+            <Animated.View entering={getEntryAnimation(180)}>
               <MicrocycleStats
                 microcycleProgress={microcycleProgress}
+                actualAdherenceMetrics={programTimelineModel.actualAdherenceMetrics}
                 mode={microcycleMode}
                 onModeChange={setMicrocycleMode}
                 isLoading={isLoading && !refreshing}
               />
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(260).duration(400)}>
+            <Animated.View entering={getEntryAnimation(260)}>
               <TodayWorkoutCard
-                trainingDay={nextPlannedSession}
-                position={workoutPosition}
-                total={workoutTotal}
-                allCompleted={allCompleted}
-                onStartPress={handleStartNextSession}
-                isLoading={isStartingWorkout || (isLoading && !nextPlannedSession && !allCompleted)}
+                cardState={programTimelineView.cardState}
+                onStartPress={handleStartHighlightedSession}
+                onOpenSessions={handleOpenSessions}
+                isLoading={isStartingWorkout || (isLoading && !refreshing)}
                 contentWidth={contentWidth}
               />
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(340).duration(400)}>
+            <Animated.View entering={getEntryAnimation(340)}>
               <ActivityChart
                 muscleVolume={muscleVolume}
                 isLoading={isLoadingVolume || (isLoading && !refreshing)}
@@ -282,11 +331,11 @@ export default function HomeScreen() {
               />
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(420).duration(400)}>
+            <Animated.View entering={getEntryAnimation(420)}>
               <ScienceTips context={tipContext} contentWidth={contentWidth} />
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(500).duration(400)}>
+            <Animated.View entering={getEntryAnimation(500)}>
               <MetricsSummary contentWidth={contentWidth} />
             </Animated.View>
           </View>
@@ -296,18 +345,16 @@ export default function HomeScreen() {
           visible={isSessionPickerVisible}
           title={sessionPickerTitle}
           subtitle={
-            selectedDay
-              ? `${selectedDay.sessions.length} sesión${selectedDay.sessions.length > 1 ? 'es' : ''} disponible${selectedDay.sessions.length > 1 ? 's' : ''}`
+            programTimelineView.focusedDay
+              ? `${programTimelineView.focusedDay.sessions.length} sesion${programTimelineView.focusedDay.sessions.length > 1 ? 'es' : ''} disponible${programTimelineView.focusedDay.sessions.length > 1 ? 's' : ''}`
               : null
           }
-          sessions={selectedDay?.sessions ?? []}
+          sessions={programTimelineView.focusedDay?.sessions ?? []}
           onClose={() => {
             setIsSessionPickerVisible(false);
-            setSelectedDay(null);
           }}
           onSelectSession={async (session) => {
             setIsSessionPickerVisible(false);
-            setSelectedDay(null);
             await openWorkoutSession(session);
           }}
         />
