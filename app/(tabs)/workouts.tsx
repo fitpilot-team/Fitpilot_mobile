@@ -1,10 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
+  FlatList,
   RefreshControl,
-  ScrollView,
+  SectionList,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   useWindowDimensions,
@@ -17,10 +20,13 @@ import { AnalyticsRangeSelector } from '../../src/components/workout-analytics/A
 import { ExerciseSparkline } from '../../src/components/workout-analytics/ExerciseSparkline';
 import { RepRangeEditorModal } from '../../src/components/workout-analytics/RepRangeEditorModal';
 import { RepRangeVolumeChart } from '../../src/components/workout-analytics/RepRangeVolumeChart';
-import { DEFAULT_WORKOUT_ANALYTICS_RANGE } from '../../src/constants/workoutAnalytics';
+import { WorkoutAnalyticsHero } from '../../src/components/workout-analytics/WorkoutAnalyticsHero';
+import { WorkoutAnalyticsPillSelector } from '../../src/components/workout-analytics/WorkoutAnalyticsPillSelector';
+import { DEFAULT_WORKOUT_ANALYTICS_RANGE, WORKOUT_ANALYTICS_RANGE_OPTIONS } from '../../src/constants/workoutAnalytics';
 import { borderRadius, fontSize, shadows, spacing } from '../../src/constants/colors';
 import {
   getWorkoutAnalyticsDashboard,
+  getWorkoutAnalyticsHistory,
   updateWorkoutAnalyticsPreferences,
 } from '../../src/services/workoutAnalytics';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
@@ -31,15 +37,41 @@ import type {
   RecentWorkoutHistoryItem,
   RepRangeBucket,
   WorkoutAnalyticsDashboard,
+  WorkoutAnalyticsHistoryPage,
+  WorkoutAnalyticsHistoryStatusFilter,
   WorkoutAnalyticsRange,
 } from '../../src/types';
 import { formatLocalDate } from '../../src/utils/date';
 import { formatDuration } from '../../src/utils/formatters';
-import {
-  formatDeltaKg,
-  formatVolumeKg,
-  formatWeightKg,
-} from '../../src/utils/workoutAnalytics';
+import { getDashboardContentWidth, isTabletLayout } from '../../src/utils/layout';
+import { formatDeltaKg, formatVolumeKg, formatWeightKg } from '../../src/utils/workoutAnalytics';
+
+type WorkoutAnalyticsTab = 'overview' | 'exercises' | 'history';
+type ExerciseSortOption = 'recent' | 'progress' | 'frequency';
+type OverviewModule = 'chart' | 'exercises' | 'history';
+type HistorySection = {
+  title: string;
+  data: RecentWorkoutHistoryItem[];
+};
+
+const HISTORY_PAGE_SIZE = 20;
+const OVERVIEW_MODULES: OverviewModule[] = ['chart', 'exercises', 'history'];
+const TAB_OPTIONS = [
+  { value: 'overview', label: 'Resumen' },
+  { value: 'exercises', label: 'Ejercicios' },
+  { value: 'history', label: 'Historial' },
+] as const;
+const EXERCISE_SORT_OPTIONS = [
+  { value: 'recent', label: 'Recientes' },
+  { value: 'progress', label: 'Mayor progreso' },
+  { value: 'frequency', label: 'Mas frecuentes' },
+] as const;
+const HISTORY_STATUS_OPTIONS = [
+  { value: 'all', label: 'Todos' },
+  { value: 'in_progress', label: 'En progreso' },
+  { value: 'completed', label: 'Completados' },
+  { value: 'abandoned', label: 'Abandonados' },
+] as const;
 
 const getHistoryStatusMeta = (
   status: RecentWorkoutHistoryItem['status'],
@@ -61,29 +93,204 @@ const getDeltaColor = (delta: number | null | undefined, theme: AppTheme) => {
   if (delta == null || delta === 0) {
     return theme.colors.textMuted;
   }
+
   return delta > 0 ? theme.colors.success : theme.colors.warning;
 };
 
-const SummaryCard = ({
+const normalizeSearchValue = (value: string) =>
+  value
+    .trim()
+    .toLocaleLowerCase('es-MX')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+const getRangeLabel = (range: WorkoutAnalyticsRange) =>
+  WORKOUT_ANALYTICS_RANGE_OPTIONS.find((option) => option.value === range)?.label ?? range;
+
+const compareExercisesBySort = (
+  left: ExerciseTrendSummary,
+  right: ExerciseTrendSummary,
+  sort: ExerciseSortOption,
+) => {
+  if (sort === 'progress') {
+    const deltaDiff =
+      (right.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY) -
+      (left.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY);
+    if (deltaDiff !== 0) {
+      return deltaDiff;
+    }
+  }
+
+  if (sort === 'frequency') {
+    const sessionsDiff = right.sessions_count - left.sessions_count;
+    if (sessionsDiff !== 0) {
+      return sessionsDiff;
+    }
+  }
+
+  const leftDate = left.last_performed_on ?? '';
+  const rightDate = right.last_performed_on ?? '';
+  const dateDiff = rightDate.localeCompare(leftDate);
+  if (dateDiff !== 0) {
+    return dateDiff;
+  }
+
+  if (sort !== 'frequency') {
+    const sessionsDiff = right.sessions_count - left.sessions_count;
+    if (sessionsDiff !== 0) {
+      return sessionsDiff;
+    }
+  }
+
+  if (sort !== 'progress') {
+    const deltaDiff =
+      (right.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY) -
+      (left.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY);
+    if (deltaDiff !== 0) {
+      return deltaDiff;
+    }
+  }
+
+  return left.exercise_name.localeCompare(right.exercise_name, 'es-MX');
+};
+
+const buildHistorySections = (items: RecentWorkoutHistoryItem[]): HistorySection[] => {
+  const sections = new Map<string, HistorySection>();
+
+  items.forEach((item) => {
+    const key = item.performed_on_date.slice(0, 7);
+    const currentSection = sections.get(key);
+
+    if (currentSection) {
+      currentSection.data.push(item);
+      return;
+    }
+
+    sections.set(key, {
+      title: formatLocalDate(item.performed_on_date, { month: 'long', year: 'numeric' }, 'es-MX'),
+      data: [item],
+    });
+  });
+
+  return Array.from(sections.values());
+};
+
+const mergeHistoryPages = (
+  previousPage: WorkoutAnalyticsHistoryPage | null,
+  nextPage: WorkoutAnalyticsHistoryPage,
+) => {
+  if (!previousPage) {
+    return nextPage;
+  }
+
+  const seenIds = new Set(previousPage.items.map((item) => item.workout_log_id));
+  const mergedItems = [...previousPage.items];
+
+  nextPage.items.forEach((item) => {
+    if (seenIds.has(item.workout_log_id)) {
+      return;
+    }
+
+    seenIds.add(item.workout_log_id);
+    mergedItems.push(item);
+  });
+
+  return {
+    total: nextPage.total,
+    items: mergedItems,
+  };
+};
+
+const SearchField = ({
   value,
-  label,
-  icon,
+  placeholder,
+  onChangeText,
+  onClear,
 }: {
   value: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  placeholder: string;
+  onChangeText: (nextValue: string) => void;
+  onClear: () => void;
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
 
   return (
-    <View style={styles.summaryCard}>
-      <View style={styles.summaryIcon}>
-        <Ionicons name={icon} size={18} color={theme.colors.primary} />
-      </View>
-      <Text style={styles.summaryValue}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
+    <View style={styles.searchField}>
+      <Ionicons name="search-outline" size={18} color={theme.colors.iconMuted} />
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={theme.colors.textMuted}
+        style={styles.searchInput}
+      />
+      {value ? (
+        <TouchableOpacity activeOpacity={0.85} onPress={onClear} style={styles.clearButton}>
+          <Ionicons name="close" size={16} color={theme.colors.iconMuted} />
+        </TouchableOpacity>
+      ) : null}
     </View>
+  );
+};
+
+const SectionHeading = ({
+  title,
+  subtitle,
+  actionLabel,
+  onActionPress,
+}: {
+  title: string;
+  subtitle: string;
+  actionLabel?: string;
+  onActionPress?: () => void;
+}) => {
+  const styles = useThemedStyles(createStyles);
+
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeaderCopy}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+      </View>
+
+      {actionLabel && onActionPress ? (
+        <TouchableOpacity style={styles.sectionAction} activeOpacity={0.86} onPress={onActionPress}>
+          <Text style={styles.sectionActionText}>{actionLabel}</Text>
+          <Ionicons name="arrow-forward" size={14} color="#ffffff" />
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+};
+
+const EmptyStateCard = ({
+  icon,
+  title,
+  description,
+  actionLabel,
+  onActionPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onActionPress?: () => void;
+}) => {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
+  return (
+    <Card style={styles.emptyCard}>
+      <View style={styles.emptyIconWrap}>
+        <Ionicons name={icon} size={26} color={theme.colors.primary} />
+      </View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyText}>{description}</Text>
+      {actionLabel && onActionPress ? (
+        <Button title={actionLabel} onPress={onActionPress} variant="secondary" />
+      ) : null}
+    </Card>
   );
 };
 
@@ -99,8 +306,8 @@ const ExerciseCard = ({
   const deltaColor = getDeltaColor(exercise.best_weight_delta_kg, theme);
 
   return (
-    <TouchableOpacity style={styles.exerciseCard} activeOpacity={0.86} onPress={onPress}>
-      <View style={styles.exerciseCardTop}>
+    <TouchableOpacity style={styles.exerciseCard} activeOpacity={0.88} onPress={onPress}>
+      <View style={styles.exerciseTopRow}>
         <View style={styles.exerciseCopy}>
           <Text style={styles.exerciseName} numberOfLines={2}>
             {exercise.exercise_name}
@@ -114,20 +321,25 @@ const ExerciseCard = ({
               : 'Sin fecha reciente'}
           </Text>
         </View>
-        <ExerciseSparkline values={exercise.sparkline_points} width={132} />
+
+        <View style={styles.exerciseSparklineWrap}>
+          <ExerciseSparkline values={exercise.sparkline_points} width={120} />
+        </View>
       </View>
 
-      <View style={styles.exerciseStatsRow}>
-        <View style={styles.exerciseStatPill}>
-          <Text style={styles.exerciseStatLabel}>Mejor carga</Text>
-          <Text style={styles.exerciseStatValue}>
-            {formatWeightKg(exercise.latest_best_weight_kg ?? null)}
-          </Text>
+      <View style={styles.exerciseFooter}>
+        <View style={styles.exerciseMetricPill}>
+          <Text style={styles.exerciseMetricLabel}>Mejor carga</Text>
+          <Text style={styles.exerciseMetricValue}>{formatWeightKg(exercise.latest_best_weight_kg ?? null)}</Text>
         </View>
+
+        <View style={styles.exerciseMetricPill}>
+          <Text style={styles.exerciseMetricLabel}>Sesiones</Text>
+          <Text style={styles.exerciseMetricValue}>{exercise.sessions_count}</Text>
+        </View>
+
         <View style={[styles.deltaPill, { backgroundColor: `${deltaColor}14` }]}>
-          <Text style={[styles.deltaText, { color: deltaColor }]}>
-            {formatDeltaKg(exercise.best_weight_delta_kg)}
-          </Text>
+          <Text style={[styles.deltaText, { color: deltaColor }]}>{formatDeltaKg(exercise.best_weight_delta_kg)}</Text>
         </View>
       </View>
     </TouchableOpacity>
@@ -146,12 +358,13 @@ const HistoryCard = ({
   const statusMeta = getHistoryStatusMeta(workout.status, theme);
 
   return (
-    <TouchableOpacity style={styles.historyCard} activeOpacity={0.86} onPress={onPress}>
+    <TouchableOpacity style={styles.historyCard} activeOpacity={0.88} onPress={onPress}>
       <View style={styles.historyTopRow}>
         <View style={styles.historyTitleRow}>
           <View style={[styles.historyIcon, { backgroundColor: `${statusMeta.color}14` }]}>
             <Ionicons name={statusMeta.icon as keyof typeof Ionicons.glyphMap} size={18} color={statusMeta.color} />
           </View>
+
           <View style={styles.historyCopy}>
             <Text style={styles.historyName}>{workout.training_day_name}</Text>
             <Text style={styles.historyDate}>
@@ -163,6 +376,7 @@ const HistoryCard = ({
             </Text>
           </View>
         </View>
+
         <Text style={[styles.historyStatus, { color: statusMeta.color }]}>{statusMeta.label}</Text>
       </View>
 
@@ -175,10 +389,12 @@ const HistoryCard = ({
               : 'Sin duracion'}
           </Text>
         </View>
+
         <View style={styles.historyStat}>
           <Ionicons name="fitness-outline" size={14} color={theme.colors.iconMuted} />
           <Text style={styles.historyStatText}>{workout.exercises_count} ejercicios</Text>
         </View>
+
         <View style={styles.historyStat}>
           <Ionicons name="trending-up-outline" size={14} color={theme.colors.iconMuted} />
           <Text style={styles.historyStatText}>{formatVolumeKg(workout.volume_kg)}</Text>
@@ -189,26 +405,39 @@ const HistoryCard = ({
 };
 
 export default function WorkoutsScreen() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const contentWidth = getDashboardContentWidth(width);
+  const chartWidth = Math.max(contentWidth - spacing.lg * 2, 280);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset();
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
   const [dashboard, setDashboard] = useState<WorkoutAnalyticsDashboard | null>(null);
+  const [activeTab, setActiveTab] = useState<WorkoutAnalyticsTab>('overview');
+  const [exerciseSort, setExerciseSort] = useState<ExerciseSortOption>('recent');
+  const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
+  const [historyStatus, setHistoryStatus] = useState<WorkoutAnalyticsHistoryStatusFilter>('all');
+  const [historyPage, setHistoryPage] = useState<WorkoutAnalyticsHistoryPage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isHistoryRefreshing, setIsHistoryRefreshing] = useState(false);
+  const [isHistoryLoadingMore, setIsHistoryLoadingMore] = useState(false);
   const [isSavingRanges, setIsSavingRanges] = useState(false);
   const [isRangeEditorVisible, setIsRangeEditorVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const deferredExerciseSearch = useDeferredValue(exerciseSearchQuery);
 
   const hasAnyHistory = (dashboard?.summary.total_sessions ?? 0) > 0;
   const hasRangeData = (dashboard?.summary.sessions_in_range ?? 0) > 0;
-  const contentWidth = Math.max(width - spacing.lg * 2, 280);
+  const isTablet = isTabletLayout(width, height);
 
   const loadDashboard = useCallback(
     async (options?: { refresh?: boolean }) => {
       const isRefresh = options?.refresh ?? false;
+
       if (isRefresh) {
         setIsRefreshing(true);
       } else {
@@ -230,13 +459,68 @@ export default function WorkoutsScreen() {
     [range],
   );
 
+  const loadHistoryPage = useCallback(
+    async ({
+      reset = false,
+      refresh = false,
+      skip = 0,
+    }: {
+      reset?: boolean;
+      refresh?: boolean;
+      skip?: number;
+    } = {}) => {
+      if (refresh) {
+        setIsHistoryRefreshing(true);
+      } else if (reset) {
+        setIsHistoryLoading(true);
+      } else {
+        setIsHistoryLoadingMore(true);
+      }
+
+      try {
+        const nextPage = await getWorkoutAnalyticsHistory({
+          range,
+          status: historyStatus,
+          skip,
+          limit: HISTORY_PAGE_SIZE,
+        });
+        setHistoryPage((currentPage) => (reset ? nextPage : mergeHistoryPages(currentPage, nextPage)));
+        setHistoryError(null);
+      } catch (loadError) {
+        const apiError = loadError as ApiError;
+        setHistoryError(apiError.message || 'No fue posible cargar el historial completo.');
+      } finally {
+        setIsHistoryLoading(false);
+        setIsHistoryRefreshing(false);
+        setIsHistoryLoadingMore(false);
+      }
+    },
+    [historyStatus, range],
+  );
+
   useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
 
+  useEffect(() => {
+    if (activeTab !== 'history') {
+      return;
+    }
+
+    void loadHistoryPage({ reset: true });
+  }, [activeTab, loadHistoryPage]);
+
   const handleRefresh = useCallback(async () => {
+    if (activeTab === 'history') {
+      await Promise.all([
+        loadDashboard({ refresh: true }),
+        loadHistoryPage({ reset: true, refresh: true }),
+      ]);
+      return;
+    }
+
     await loadDashboard({ refresh: true });
-  }, [loadDashboard]);
+  }, [activeTab, loadDashboard, loadHistoryPage]);
 
   const handleSaveRepRanges = useCallback(async (nextRepRanges: RepRangeBucket[]) => {
     setIsSavingRanges(true);
@@ -253,178 +537,536 @@ export default function WorkoutsScreen() {
     }
   }, [loadDashboard]);
 
-  const summaryCards = useMemo(() => {
-    if (!dashboard) {
-      return [];
-    }
+  const heroMetrics = useMemo(() => {
+    const summary = dashboard?.summary;
 
     return [
-      { label: 'Total', value: `${dashboard.summary.total_sessions}`, icon: 'barbell-outline' as const },
-      { label: 'En rango', value: `${dashboard.summary.sessions_in_range}`, icon: 'calendar-outline' as const },
-      { label: 'Dias activos', value: `${dashboard.summary.active_days}`, icon: 'flash-outline' as const },
+      { label: 'Sesiones', value: `${summary?.total_sessions ?? 0}`, icon: 'barbell-outline' as const },
+      { label: 'En rango', value: `${summary?.sessions_in_range ?? 0}`, icon: 'calendar-outline' as const },
+      { label: 'Dias activos', value: `${summary?.active_days ?? 0}`, icon: 'flash-outline' as const },
       {
         label: 'Duracion media',
         value:
-          dashboard.summary.avg_duration_minutes > 0
-            ? formatDuration(Math.max(1, Math.round(dashboard.summary.avg_duration_minutes)))
+          summary && summary.avg_duration_minutes > 0
+            ? formatDuration(Math.max(1, Math.round(summary.avg_duration_minutes)))
             : '--',
         icon: 'time-outline' as const,
       },
     ];
-  }, [dashboard]);
+  }, [dashboard?.summary]);
+
+  const quickAction = useMemo(() => {
+    const inProgressWorkout = dashboard?.recent_history.find((workout) => workout.status === 'in_progress');
+    if (inProgressWorkout) {
+      return {
+        label: 'Continuar entrenamiento',
+        hint: inProgressWorkout.training_day_name,
+        icon: 'play' as const,
+        onPress: () => router.push(`/workout/${inProgressWorkout.workout_log_id}`),
+      };
+    }
+
+    const latestWorkout = dashboard?.recent_history[0];
+    if (latestWorkout) {
+      return {
+        label: 'Ver ultimo registro',
+        hint: `${latestWorkout.training_day_name} · ${formatLocalDate(latestWorkout.performed_on_date, {
+          day: 'numeric',
+          month: 'short',
+        })}`,
+        icon: 'arrow-forward' as const,
+        onPress: () => router.push(`/workout/${latestWorkout.workout_log_id}`),
+      };
+    }
+
+    return {
+      label: 'Abrir programa',
+      hint: 'Revisa tu semana activa desde Inicio',
+      icon: 'home-outline' as const,
+      onPress: () => router.push('/(tabs)'),
+    };
+  }, [dashboard?.recent_history]);
+
+  const featuredExercises = useMemo(() => {
+    const exercises = dashboard?.exercise_summaries ?? [];
+    if (!exercises.length) {
+      return [];
+    }
+
+    const topProgress = [...exercises]
+      .sort((left, right) => compareExercisesBySort(left, right, 'progress'))
+      .slice(0, 3);
+
+    if (topProgress.some((exercise) => (exercise.best_weight_delta_kg ?? 0) > 0)) {
+      return topProgress;
+    }
+
+    return [...exercises]
+      .sort((left, right) => compareExercisesBySort(left, right, 'recent'))
+      .slice(0, 3);
+  }, [dashboard?.exercise_summaries]);
+
+  const recentHistoryPreview = useMemo(
+    () => (dashboard?.recent_history ?? []).slice(0, 3),
+    [dashboard?.recent_history],
+  );
+
+  const filteredExercises = useMemo(() => {
+    const exercises = dashboard?.exercise_summaries ?? [];
+    const searchValue = normalizeSearchValue(deferredExerciseSearch);
+
+    return exercises
+      .filter((exercise) => {
+        if (!searchValue) {
+          return true;
+        }
+
+        return normalizeSearchValue(exercise.exercise_name).includes(searchValue);
+      })
+      .sort((left, right) => compareExercisesBySort(left, right, exerciseSort));
+  }, [dashboard?.exercise_summaries, deferredExerciseSearch, exerciseSort]);
+
+  const historySections = useMemo(
+    () => buildHistorySections(historyPage?.items ?? []),
+    [historyPage?.items],
+  );
+
+  const hasMoreHistory = (historyPage?.items.length ?? 0) < (historyPage?.total ?? 0);
+  const showFullHistorySpinner = activeTab === 'history' && isHistoryLoading && !historyPage?.items.length;
+
+  const handleHistoryLoadMore = useCallback(() => {
+    if (
+      isHistoryLoading ||
+      isHistoryRefreshing ||
+      isHistoryLoadingMore ||
+      !historyPage ||
+      !hasMoreHistory
+    ) {
+      return;
+    }
+
+    void loadHistoryPage({ skip: historyPage.items.length });
+  }, [
+    hasMoreHistory,
+    historyPage,
+    isHistoryLoading,
+    isHistoryLoadingMore,
+    isHistoryRefreshing,
+    loadHistoryPage,
+  ]);
+
+  const handleTabChange = useCallback((nextValue: string) => {
+    startTransition(() => {
+      setActiveTab(nextValue as WorkoutAnalyticsTab);
+    });
+  }, []);
+
+  const handleExerciseSortChange = useCallback((nextValue: string) => {
+    setExerciseSort(nextValue as ExerciseSortOption);
+  }, []);
+
+  const handleHistoryStatusChange = useCallback((nextValue: string) => {
+    setHistoryStatus(nextValue as WorkoutAnalyticsHistoryStatusFilter);
+  }, []);
 
   if (isLoading && !dashboard) {
     return <LoadingSpinner fullScreen text="Cargando tus entrenamientos..." />;
   }
 
+  if (!dashboard) {
+    return (
+      <TabScreenWrapper>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={styles.fullStateShell}>
+            <EmptyStateCard
+              icon="cloud-offline-outline"
+              title="No fue posible cargar los datos"
+              description={error || 'Intenta de nuevo para recuperar tu resumen de entrenamientos.'}
+              actionLabel="Reintentar"
+              onActionPress={() => void loadDashboard()}
+            />
+          </View>
+        </SafeAreaView>
+      </TabScreenWrapper>
+    );
+  }
+
+  const pageHeader = (
+    <View style={styles.pageHeaderShell}>
+      <View
+        style={[
+          styles.pageHeader,
+          { maxWidth: contentWidth },
+          isTablet ? styles.pageHeaderTablet : null,
+        ]}
+      >
+        <WorkoutAnalyticsHero
+          title="Todo tu progreso, mejor ordenado"
+          subtitle="Resumen ejecutivo arriba, listas completas solo cuando las necesitas."
+          rangeLabel={getRangeLabel(range)}
+          actionLabel={quickAction.label}
+          actionHint={quickAction.hint}
+          actionIcon={quickAction.icon}
+          metrics={heroMetrics}
+          onActionPress={quickAction.onPress}
+        />
+
+        <Card style={styles.controlsCard}>
+          <AnalyticsRangeSelector value={range} onChange={setRange} />
+          <WorkoutAnalyticsPillSelector
+            items={TAB_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+            value={activeTab}
+            onChange={handleTabChange}
+          />
+
+          {activeTab === 'exercises' ? (
+            <View style={styles.controlStack}>
+              <SearchField
+                value={exerciseSearchQuery}
+                placeholder="Buscar ejercicio"
+                onChangeText={setExerciseSearchQuery}
+                onClear={() => setExerciseSearchQuery('')}
+              />
+              <WorkoutAnalyticsPillSelector
+                items={EXERCISE_SORT_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
+                value={exerciseSort}
+                onChange={handleExerciseSortChange}
+              />
+            </View>
+          ) : null}
+
+          {activeTab === 'history' ? (
+            <View style={styles.controlStack}>
+              <WorkoutAnalyticsPillSelector
+                items={HISTORY_STATUS_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
+                value={historyStatus}
+                onChange={handleHistoryStatusChange}
+              />
+            </View>
+          ) : null}
+        </Card>
+
+        {error ? (
+          <View style={styles.inlineBanner}>
+            <Ionicons name="alert-circle-outline" size={16} color={theme.colors.warning} />
+            <Text style={styles.inlineBannerText}>{error}</Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
   return (
     <TabScreenWrapper>
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Entrenamientos</Text>
-          <Text style={styles.subtitle}>Historial real y progreso de carga por ejercicio</Text>
-        </View>
-
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
-          onScroll={tabBarScroll.onScroll}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor={theme.colors.primary}
-            />
-          }
-          scrollEventThrottle={tabBarScroll.scrollEventThrottle}
-        >
-          <AnalyticsRangeSelector value={range} onChange={setRange} />
-
-          {error ? (
-            <Card style={styles.errorCard}>
-              <Text style={styles.errorTitle}>No fue posible cargar tus datos</Text>
-              <Text style={styles.errorText}>{error}</Text>
-              <Button title="Reintentar" onPress={() => void loadDashboard()} />
-            </Card>
-          ) : null}
-
-          {summaryCards.length ? (
-            <View style={styles.summaryGrid}>
-              {summaryCards.map((card) => (
-                <SummaryCard key={card.label} value={card.value} label={card.label} icon={card.icon} />
-              ))}
-            </View>
-          ) : null}
-
-          <Card style={styles.chartCard}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Kg movidos por rango</Text>
-                <Text style={styles.sectionSubtitle}>
-                  {dashboard?.summary.total_volume_kg
-                    ? `${formatVolumeKg(dashboard.summary.total_volume_kg)} acumulados en la ventana`
-                    : 'Sin carga registrada en esta ventana'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.editButton}
-                activeOpacity={0.85}
-                onPress={() => setIsRangeEditorVisible(true)}
-              >
-                <Ionicons name="options-outline" size={16} color={theme.colors.primary} />
-                <Text style={styles.editButtonText}>Editar</Text>
-              </TouchableOpacity>
-            </View>
-
-            <RepRangeVolumeChart
-              points={dashboard?.rep_range_chart ?? []}
-              repRanges={dashboard?.preferences.rep_ranges ?? []}
-              contentWidth={contentWidth}
-            />
-          </Card>
-
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Ejercicios</Text>
-                <Text style={styles.sectionSubtitle}>
-                  {hasRangeData
-                    ? 'Toca un ejercicio para abrir su detalle temporal.'
-                    : 'No hay progresos visibles en la ventana actual.'}
-                </Text>
-              </View>
-            </View>
-
-            {!hasAnyHistory ? (
-              <Card style={styles.emptyCard}>
-                <Ionicons name="analytics-outline" size={42} color={theme.colors.iconMuted} />
-                <Text style={styles.emptyTitle}>Todavia no tienes historial</Text>
-                <Text style={styles.emptyText}>
-                  Cuando completes tus primeras sesiones veras aqui tus graficas y ejercicios.
-                </Text>
-                <Button title="Ir a inicio" onPress={() => router.push('/(tabs)')} />
-              </Card>
-            ) : null}
-
-            {hasAnyHistory && !hasRangeData ? (
-              <Card style={styles.emptyCard}>
-                <Ionicons name="filter-outline" size={40} color={theme.colors.iconMuted} />
-                <Text style={styles.emptyTitle}>Sin datos en este rango</Text>
-                <Text style={styles.emptyText}>
-                  Cambia la ventana temporal para recuperar el progreso de tus ejercicios.
-                </Text>
-                <Button title="Ver todo" onPress={() => setRange('all')} />
-              </Card>
-            ) : null}
-
-            {hasRangeData
-              ? dashboard?.exercise_summaries.map((exercise) => (
-                  <ExerciseCard
-                    key={exercise.exercise_id}
-                    exercise={exercise}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/workouts/exercises/[exerciseId]',
-                        params: { exerciseId: exercise.exercise_id, range },
-                      })
-                    }
-                  />
-                ))
-              : null}
-          </View>
-
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Historial</Text>
-                <Text style={styles.sectionSubtitle}>Abre cualquier sesion para revisar o editar el log.</Text>
-              </View>
-            </View>
-
-            {dashboard?.recent_history.length ? (
-              dashboard.recent_history.map((workout) => (
-                <HistoryCard
-                  key={workout.workout_log_id}
-                  workout={workout}
-                  onPress={() => router.push(`/workout/${workout.workout_log_id}`)}
-                />
-              ))
-            ) : (
-              <Card style={styles.emptyCard}>
-                <Ionicons name="barbell-outline" size={40} color={theme.colors.iconMuted} />
-                <Text style={styles.emptyTitle}>Sin sesiones recientes</Text>
-                <Text style={styles.emptyText}>
-                  Tu historial aparecera aqui en cuanto registres entrenamientos.
-                </Text>
-              </Card>
+        {activeTab === 'overview' ? (
+          <FlatList
+            data={OVERVIEW_MODULES}
+            keyExtractor={(item) => item}
+            style={styles.list}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: contentInsetBottom + spacing.lg },
+            ]}
+            ListHeaderComponent={pageHeader}
+            showsVerticalScrollIndicator={false}
+            onScroll={tabBarScroll.onScroll}
+            scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+            refreshControl={(
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={theme.colors.primary}
+              />
             )}
-          </View>
-        </ScrollView>
+            renderItem={({ item }) => {
+              const shellStyle = [styles.sectionShell, { maxWidth: contentWidth }];
+
+                  if (item === 'chart') {
+                    return (
+                      <View style={shellStyle}>
+                        <Card style={styles.featureCard} padding="lg">
+                        <View style={styles.featureCardHeader}>
+                          <View style={styles.sectionHeaderCopy}>
+                            <Text style={styles.sectionTitle}>Kg movidos por rango</Text>
+                            <Text style={styles.sectionSubtitle}>
+                              {dashboard.summary.total_volume_kg
+                                ? `${formatVolumeKg(dashboard.summary.total_volume_kg)} acumulados en la ventana`
+                                : 'Sin carga registrada en esta ventana'}
+                            </Text>
+                          </View>
+
+                          <TouchableOpacity
+                            style={styles.editButton}
+                            activeOpacity={0.86}
+                            onPress={() => setIsRangeEditorVisible(true)}
+                          >
+                            <Ionicons name="options-outline" size={16} color={theme.colors.primary} />
+                            <Text style={styles.editButtonText}>Editar</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <RepRangeVolumeChart
+                          points={dashboard.rep_range_chart}
+                          repRanges={dashboard.preferences.rep_ranges}
+                          contentWidth={chartWidth}
+                        />
+                        </Card>
+                      </View>
+                    );
+                  }
+
+                  if (item === 'exercises') {
+                    return (
+                      <View style={[styles.sectionBlock, shellStyle]}>
+                        <SectionHeading
+                          title="Ejercicios clave"
+                          subtitle={
+                            hasRangeData
+                              ? 'Los movimientos con mas señal en la ventana actual.'
+                              : 'No hay progresos visibles en la ventana actual.'
+                          }
+                          actionLabel={hasRangeData ? 'Ver todos' : undefined}
+                          onActionPress={hasRangeData ? () => handleTabChange('exercises') : undefined}
+                        />
+
+                        {hasAnyHistory && hasRangeData ? (
+                          <View style={styles.cardsStack}>
+                            {featuredExercises.map((exercise) => (
+                              <ExerciseCard
+                                key={exercise.exercise_id}
+                                exercise={exercise}
+                                onPress={() =>
+                                  router.push({
+                                    pathname: '/workouts/exercises/[exerciseId]',
+                                    params: { exerciseId: exercise.exercise_id, range },
+                                  })
+                                }
+                              />
+                            ))}
+                          </View>
+                        ) : (
+                          <EmptyStateCard
+                            icon={hasAnyHistory ? 'filter-outline' : 'analytics-outline'}
+                            title={hasAnyHistory ? 'Sin datos en este rango' : 'Todavia no tienes historial'}
+                            description={
+                              hasAnyHistory
+                                ? 'Cambia la ventana temporal para recuperar el progreso de tus ejercicios.'
+                                : 'Cuando completes tus primeras sesiones veras aqui tus ejercicios destacados.'
+                            }
+                            actionLabel={hasAnyHistory ? 'Ver todo' : 'Ir a inicio'}
+                            onActionPress={hasAnyHistory ? () => setRange('all') : () => router.push('/(tabs)')}
+                          />
+                        )}
+                      </View>
+                    );
+                  }
+
+                  return (
+                    <View style={[styles.sectionBlock, shellStyle]}>
+                      <SectionHeading
+                        title="Sesiones recientes"
+                        subtitle="Abre cualquier log para revisar o editar lo registrado."
+                        actionLabel={recentHistoryPreview.length ? 'Abrir historial' : undefined}
+                        onActionPress={recentHistoryPreview.length ? () => handleTabChange('history') : undefined}
+                      />
+
+                      {recentHistoryPreview.length ? (
+                        <View style={styles.cardsStack}>
+                          {recentHistoryPreview.map((workout) => (
+                            <HistoryCard
+                              key={workout.workout_log_id}
+                              workout={workout}
+                              onPress={() => router.push(`/workout/${workout.workout_log_id}`)}
+                            />
+                          ))}
+                        </View>
+                      ) : (
+                        <EmptyStateCard
+                          icon="barbell-outline"
+                          title="Sin sesiones recientes"
+                          description="Tu historial aparecera aqui en cuanto registres entrenamientos."
+                        />
+                      )}
+                    </View>
+                  );
+                }}
+          />
+        ) : null}
+
+        {activeTab === 'exercises' ? (
+          <FlatList
+            data={filteredExercises}
+            keyExtractor={(item) => item.exercise_id}
+            style={styles.list}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: contentInsetBottom + spacing.lg },
+            ]}
+            ListHeaderComponent={(
+              <>
+                {pageHeader}
+                <View style={[styles.listMetaRow, styles.sectionShell, { maxWidth: contentWidth }]}>
+                    <Text style={styles.listMetaTitle}>Lista completa</Text>
+                    <Text style={styles.listMetaText}>
+                      {filteredExercises.length} de {dashboard.exercise_summaries.length} ejercicios visibles
+                    </Text>
+                  </View>
+              </>
+            )}
+            showsVerticalScrollIndicator={false}
+            onScroll={tabBarScroll.onScroll}
+            scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+            refreshControl={(
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={theme.colors.primary}
+              />
+            )}
+            renderItem={({ item }) => (
+              <View style={[styles.sectionShell, { maxWidth: contentWidth }]}>
+                <ExerciseCard
+                  exercise={item}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/workouts/exercises/[exerciseId]',
+                      params: { exerciseId: item.exercise_id, range },
+                    })
+                  }
+                />
+              </View>
+            )}
+            ListEmptyComponent={(
+              <View style={[styles.emptyListWrap, styles.sectionShell, { maxWidth: contentWidth }]}>
+                    {!hasAnyHistory ? (
+                      <EmptyStateCard
+                        icon="analytics-outline"
+                        title="Todavia no tienes historial"
+                        description="Completa tus primeras sesiones para desbloquear esta vista."
+                      />
+                    ) : !hasRangeData ? (
+                      <EmptyStateCard
+                        icon="filter-outline"
+                        title="Sin datos en este rango"
+                        description="Prueba con una ventana mas amplia para recuperar progreso."
+                        actionLabel="Ver todo"
+                        onActionPress={() => setRange('all')}
+                      />
+                    ) : (
+                      <EmptyStateCard
+                        icon="search-outline"
+                        title="Sin coincidencias"
+                        description="Ajusta tu busqueda o cambia el criterio de orden."
+                        actionLabel="Limpiar"
+                        onActionPress={() => setExerciseSearchQuery('')}
+                      />
+                    )}
+              </View>
+            )}
+          />
+        ) : null}
+
+        {activeTab === 'history' ? (
+          <SectionList
+            sections={historySections}
+            keyExtractor={(item) => item.workout_log_id}
+            style={styles.list}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: contentInsetBottom + spacing.lg },
+            ]}
+            ListHeaderComponent={(
+              <>
+                {pageHeader}
+                <View style={[styles.listMetaRow, styles.sectionShell, { maxWidth: contentWidth }]}>
+                  <Text style={styles.listMetaTitle}>Historial completo</Text>
+                  <Text style={styles.listMetaText}>
+                    {historyPage?.total ?? 0} sesiones en la consulta actual
+                  </Text>
+                </View>
+              </>
+            )}
+            showsVerticalScrollIndicator={false}
+            onScroll={tabBarScroll.onScroll}
+            scrollEventThrottle={tabBarScroll.scrollEventThrottle}
+            stickySectionHeadersEnabled={false}
+            refreshControl={(
+              <RefreshControl
+                refreshing={isRefreshing || isHistoryRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={theme.colors.primary}
+              />
+            )}
+            onEndReached={handleHistoryLoadMore}
+            onEndReachedThreshold={0.35}
+            renderSectionHeader={({ section }) => (
+              <View style={[styles.monthHeader, styles.sectionShell, { maxWidth: contentWidth }]}>
+                    <Text style={styles.monthHeaderText}>{section.title}</Text>
+                  </View>
+            )}
+            renderItem={({ item }) => (
+              <View style={[styles.sectionShell, { maxWidth: contentWidth }]}>
+                <HistoryCard
+                  workout={item}
+                  onPress={() => router.push(`/workout/${item.workout_log_id}`)}
+                />
+              </View>
+            )}
+            ListEmptyComponent={(
+              <View style={[styles.emptyListWrap, styles.sectionShell, { maxWidth: contentWidth }]}>
+                    {showFullHistorySpinner ? (
+                      <View style={styles.loadingHistoryWrap}>
+                        <ActivityIndicator size="small" color={theme.colors.primary} />
+                        <Text style={styles.loadingHistoryText}>Cargando historial...</Text>
+                      </View>
+                    ) : historyError ? (
+                      <EmptyStateCard
+                        icon="cloud-offline-outline"
+                        title="No fue posible cargar el historial"
+                        description={historyError}
+                        actionLabel="Reintentar"
+                        onActionPress={() => void loadHistoryPage({ reset: true })}
+                      />
+                    ) : (
+                      <EmptyStateCard
+                        icon="calendar-clear-outline"
+                        title="Sin sesiones para este filtro"
+                        description="Prueba otro estado o amplía la ventana temporal."
+                        actionLabel="Ver todos"
+                        onActionPress={() => setHistoryStatus('all')}
+                      />
+                    )}
+              </View>
+            )}
+            ListFooterComponent={(
+              <View style={[styles.historyFooter, styles.sectionShell, { maxWidth: contentWidth }]}>
+                    {isHistoryLoadingMore ? (
+                      <ActivityIndicator size="small" color={theme.colors.primary} />
+                    ) : null}
+                    {historyError && (historyPage?.items.length ?? 0) > 0 ? (
+                      <TouchableOpacity
+                        style={styles.retryFooterButton}
+                        activeOpacity={0.86}
+                        onPress={() => void loadHistoryPage({ skip: historyPage?.items.length ?? 0 })}
+                      >
+                        <Text style={styles.retryFooterText}>Reintentar carga</Text>
+                      </TouchableOpacity>
+                    ) : null}
+              </View>
+            )}
+          />
+        ) : null}
 
         <RepRangeEditorModal
           visible={isRangeEditorVisible}
-          repRanges={dashboard?.preferences.rep_ranges ?? []}
+          repRanges={dashboard.preferences.rep_ranges}
           isSaving={isSavingRanges}
           onClose={() => setIsRangeEditorVisible(false)}
           onSave={handleSaveRepRanges}
@@ -440,81 +1082,83 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
       backgroundColor: theme.colors.background,
     },
-    header: {
+    pageHeaderShell: {
+      width: '100%',
+      alignItems: 'center',
+    },
+    pageHeader: {
+      width: '100%',
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
-      paddingBottom: spacing.sm,
-      backgroundColor: theme.colors.background,
+      paddingBottom: spacing.lg,
+      gap: spacing.md,
     },
-    title: {
-      fontSize: fontSize['2xl'],
-      fontWeight: '700',
-      color: theme.colors.textPrimary,
+    pageHeaderTablet: {
+      paddingTop: spacing.lg,
     },
-    subtitle: {
-      marginTop: spacing.xs,
-      fontSize: fontSize.sm,
-      color: theme.colors.textMuted,
-    },
-    scrollView: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-    },
-    scrollContent: {
-      paddingHorizontal: spacing.lg,
-      paddingBottom: spacing.xxl,
-      gap: spacing.lg,
-    },
-    errorCard: {
-      gap: spacing.sm,
-    },
-    errorTitle: {
-      fontSize: fontSize.base,
-      fontWeight: '700',
-      color: theme.colors.textPrimary,
-    },
-    errorText: {
-      fontSize: fontSize.sm,
-      color: theme.colors.textMuted,
-    },
-    summaryGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: spacing.sm,
-    },
-    summaryCard: {
-      width: '48%',
-      borderRadius: borderRadius.lg,
+    controlsCard: {
+      gap: spacing.md,
+      borderRadius: borderRadius.xl,
       backgroundColor: theme.colors.surface,
-      borderWidth: 1,
       borderColor: theme.colors.border,
-      padding: spacing.md,
       ...shadows.sm,
     },
-    summaryIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: theme.colors.primarySoft,
-      alignItems: 'center',
-      justifyContent: 'center',
+    controlStack: {
+      gap: spacing.md,
     },
-    summaryValue: {
-      marginTop: spacing.md,
-      fontSize: fontSize.xl,
-      fontWeight: '700',
+    searchField: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: spacing.md,
+    },
+    searchInput: {
+      flex: 1,
+      paddingVertical: spacing.md,
+      fontSize: fontSize.base,
       color: theme.colors.textPrimary,
     },
-    summaryLabel: {
-      marginTop: spacing.xs,
-      fontSize: fontSize.xs,
-      color: theme.colors.textMuted,
-      textTransform: 'uppercase',
+    clearButton: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
     },
-    chartCard: {
-      padding: spacing.lg,
+    inlineBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.isDark ? 'rgba(251, 191, 36, 0.12)' : '#fef3c7',
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(251, 191, 36, 0.24)' : '#fde68a',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
     },
-    sectionContainer: {
+    inlineBannerText: {
+      flex: 1,
+      fontSize: fontSize.sm,
+      color: theme.colors.textSecondary,
+    },
+    list: {
+      flex: 1,
+    },
+    listContent: {
+      gap: spacing.lg,
+      paddingTop: spacing.xs,
+    },
+    sectionShell: {
+      width: '100%',
+      alignSelf: 'center',
+      paddingHorizontal: spacing.lg,
+    },
+    sectionBlock: {
       gap: spacing.md,
     },
     sectionHeader: {
@@ -523,15 +1167,45 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       gap: spacing.md,
     },
+    sectionHeaderCopy: {
+      flex: 1,
+    },
     sectionTitle: {
       fontSize: fontSize.lg,
-      fontWeight: '700',
+      fontWeight: '800',
       color: theme.colors.textPrimary,
     },
     sectionSubtitle: {
       marginTop: spacing.xs,
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
+      lineHeight: 20,
+    },
+    sectionAction: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    sectionActionText: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: '#ffffff',
+    },
+    cardsStack: {
+      gap: spacing.md,
+    },
+    featureCard: {
+      gap: spacing.md,
+    },
+    featureCardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: spacing.md,
     },
     editButton: {
       flexDirection: 'row',
@@ -548,55 +1222,58 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.primary,
     },
     exerciseCard: {
-      borderRadius: borderRadius.lg,
+      borderRadius: borderRadius.xl,
       backgroundColor: theme.colors.surface,
       borderWidth: 1,
       borderColor: theme.colors.border,
       padding: spacing.md,
+      gap: spacing.md,
       ...shadows.sm,
     },
-    exerciseCardTop: {
+    exerciseTopRow: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'flex-start',
+      justifyContent: 'space-between',
       gap: spacing.md,
     },
     exerciseCopy: {
       flex: 1,
       minWidth: 0,
+      gap: spacing.xs,
     },
     exerciseName: {
       fontSize: fontSize.base,
-      fontWeight: '700',
+      fontWeight: '800',
       color: theme.colors.textPrimary,
-      lineHeight: 28,
     },
     exerciseMeta: {
-      marginTop: spacing.xs,
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
     },
-    exerciseStatsRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: spacing.md,
-      marginTop: spacing.md,
+    exerciseSparklineWrap: {
+      flexShrink: 0,
     },
-    exerciseStatPill: {
+    exerciseFooter: {
       flexDirection: 'row',
-      alignItems: 'center',
+      flexWrap: 'wrap',
       gap: spacing.sm,
+      alignItems: 'center',
+    },
+    exerciseMetricPill: {
       borderRadius: borderRadius.full,
       backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
+      gap: 2,
     },
-    exerciseStatLabel: {
+    exerciseMetricLabel: {
       fontSize: fontSize.xs,
       color: theme.colors.textMuted,
+      textTransform: 'uppercase',
     },
-    exerciseStatValue: {
+    exerciseMetricValue: {
       fontSize: fontSize.sm,
       fontWeight: '700',
       color: theme.colors.textPrimary,
@@ -611,17 +1288,18 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
     },
     historyCard: {
-      borderRadius: borderRadius.lg,
+      borderRadius: borderRadius.xl,
       backgroundColor: theme.colors.surface,
       borderWidth: 1,
       borderColor: theme.colors.border,
       padding: spacing.md,
+      gap: spacing.md,
       ...shadows.sm,
     },
     historyTopRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      gap: spacing.sm,
+      gap: spacing.md,
     },
     historyTitleRow: {
       flexDirection: 'row',
@@ -630,18 +1308,19 @@ const createStyles = (theme: AppTheme) =>
       flex: 1,
     },
     historyIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: borderRadius.md,
+      width: 42,
+      height: 42,
+      borderRadius: borderRadius.lg,
       alignItems: 'center',
       justifyContent: 'center',
     },
     historyCopy: {
       flex: 1,
+      minWidth: 0,
     },
     historyName: {
       fontSize: fontSize.base,
-      fontWeight: '700',
+      fontWeight: '800',
       color: theme.colors.textPrimary,
     },
     historyDate: {
@@ -659,7 +1338,6 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: spacing.md,
-      marginTop: spacing.md,
       paddingTop: spacing.sm,
       borderTopWidth: 1,
       borderTopColor: theme.colors.border,
@@ -677,16 +1355,85 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       gap: spacing.sm,
       paddingVertical: spacing.xl,
+      paddingHorizontal: spacing.lg,
+    },
+    emptyIconWrap: {
+      width: 54,
+      height: 54,
+      borderRadius: 27,
+      backgroundColor: theme.colors.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     emptyTitle: {
       fontSize: fontSize.base,
-      fontWeight: '700',
+      fontWeight: '800',
       color: theme.colors.textPrimary,
       textAlign: 'center',
     },
     emptyText: {
       fontSize: fontSize.sm,
+      lineHeight: 20,
       color: theme.colors.textMuted,
       textAlign: 'center',
+    },
+    listMetaRow: {
+      paddingTop: spacing.xs,
+      gap: 2,
+    },
+    listMetaTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    listMetaText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    emptyListWrap: {
+      paddingTop: spacing.sm,
+    },
+    loadingHistoryWrap: {
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingVertical: spacing.xl,
+    },
+    loadingHistoryText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    monthHeader: {
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.xs,
+    },
+    monthHeaderText: {
+      fontSize: fontSize.sm,
+      fontWeight: '800',
+      color: theme.colors.textSecondary,
+      textTransform: 'capitalize',
+    },
+    historyFooter: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: spacing.md,
+      gap: spacing.sm,
+    },
+    retryFooterButton: {
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    retryFooterText: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.primary,
+    },
+    fullStateShell: {
+      flex: 1,
+      justifyContent: 'center',
+      paddingHorizontal: spacing.lg,
     },
   });
