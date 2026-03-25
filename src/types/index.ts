@@ -315,6 +315,7 @@ export interface MicrocycleProgress {
 
 export type WorkoutAnalyticsRange = '4w' | '8w' | '12w' | '24w' | 'all';
 export type WorkoutAnalyticsColorToken = 'navy' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet';
+export type WorkoutAnalyticsHistoryStatusFilter = 'all' | WorkoutStatus;
 
 export interface RepRangeBucket {
   id: string;
@@ -367,6 +368,11 @@ export interface WorkoutAnalyticsDashboard {
   exercise_summaries: ExerciseTrendSummary[];
   recent_history: RecentWorkoutHistoryItem[];
   preferences: WorkoutAnalyticsPreferences;
+}
+
+export interface WorkoutAnalyticsHistoryPage {
+  total: number;
+  items: RecentWorkoutHistoryItem[];
 }
 
 export interface ExerciseTrendPoint {
