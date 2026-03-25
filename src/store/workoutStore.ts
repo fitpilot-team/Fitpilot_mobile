@@ -50,7 +50,7 @@ interface WorkoutState {
     repsCompleted: number;
     weightKg?: number;
     effortValue?: number;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   deleteLoggedSet: (setLogId: string) => Promise<void>;
   completeWorkout: () => Promise<void>;
   abandonWorkout: (reason?: AbandonReason, notes?: string) => Promise<void>;
@@ -72,6 +72,9 @@ type ExerciseDefaults = {
   effortValue: number | null;
   restSeconds: number;
 };
+
+const CLOSED_WORKOUT_EDIT_ERROR = 'Workout must be reopened before editing sets';
+const CLOSED_WORKOUT_CLIENT_MESSAGE = 'El entrenamiento está cerrado. Reábrelo para editar.';
 
 const getExerciseEffortDefault = (dayExercise?: DayExercise): number | null => {
   if (!shouldShowStrengthEffort(dayExercise) || dayExercise?.effort_value == null) {
@@ -135,6 +138,20 @@ const hydrateWorkoutDraft = (
     currentEffortValue: defaults.effortValue,
   };
 };
+
+const fetchHydratedWorkoutState = async (
+  workoutLogId: string,
+  options?: { exerciseIndex?: number; targetSetNumber?: number },
+) => {
+  const state = await trainingClient.get<CurrentWorkoutState>(`/workout-logs/${workoutLogId}/state`);
+  const draft = hydrateWorkoutDraft(state, options?.exerciseIndex, options?.targetSetNumber);
+  return { state, draft };
+};
+
+const isClosedWorkoutEditError = (error: { status?: number; message?: string } | null | undefined) =>
+  error?.status === 409 &&
+  typeof error.message === 'string' &&
+  error.message.toLowerCase().includes(CLOSED_WORKOUT_EDIT_ERROR.toLowerCase());
 
 export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   activeMacrocycle: null,
@@ -229,10 +246,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       const workoutLog = await trainingClient.post<WorkoutLog>('/workout-logs', {
         training_day_id: trainingDayId,
       });
-      const state = await trainingClient.get<CurrentWorkoutState>(
-        `/workout-logs/${workoutLog.id}/state`,
-      );
-      const draft = hydrateWorkoutDraft(state);
+      const { state, draft } = await fetchHydratedWorkoutState(workoutLog.id);
 
       set({
         currentWorkout: state,
@@ -254,10 +268,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const state = await trainingClient.get<CurrentWorkoutState>(
-        `/workout-logs/${workoutLogId}/state`,
-      );
-      const draft = hydrateWorkoutDraft(state);
+      const { state, draft } = await fetchHydratedWorkoutState(workoutLogId);
 
       set({
         currentWorkout: state,
@@ -282,10 +293,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     try {
       await trainingClient.post<WorkoutLog>(`/workout-logs/${targetWorkoutLogId}/reopen`);
-      const state = await trainingClient.get<CurrentWorkoutState>(
-        `/workout-logs/${targetWorkoutLogId}/state`,
-      );
-      const draft = hydrateWorkoutDraft(state);
+      const { state, draft } = await fetchHydratedWorkoutState(targetWorkoutLogId);
 
       set({
         currentWorkout: state,
@@ -303,7 +311,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   logSet: async (data) => {
     const { currentWorkout } = get();
     if (!currentWorkout) {
-      return;
+      return false;
     }
 
     set({ isSavingSet: true, error: null });
@@ -320,29 +328,48 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         },
       );
 
-      const state = await trainingClient.get<CurrentWorkoutState>(
-        `/workout-logs/${currentWorkout.workout_log.id}/state`,
+      const { state, draft } = await fetchHydratedWorkoutState(
+        currentWorkout.workout_log.id,
+        { exerciseIndex: get().currentExerciseIndex },
       );
-      const currentExercise = state.exercises_progress[get().currentExerciseIndex];
-      const dayExercise = getDayExerciseByProgress(state.training_day, currentExercise);
-      const defaults = getExerciseDefaults(dayExercise, currentExercise);
 
       set({
         currentWorkout: state,
         isSavingSet: false,
-        currentSetNumber: Math.min(
-          (currentExercise?.completed_sets || 0) + 1,
-          dayExercise?.sets || 1,
-        ),
-        currentReps: defaults.reps,
-        currentWeight: defaults.weight,
-        currentEffortValue: defaults.effortValue,
+        ...draft,
       });
+
+      return true;
     } catch (error: any) {
+      if (isClosedWorkoutEditError(error)) {
+        try {
+          const { state, draft } = await fetchHydratedWorkoutState(
+            currentWorkout.workout_log.id,
+            { exerciseIndex: get().currentExerciseIndex },
+          );
+
+          set({
+            currentWorkout: state,
+            isSavingSet: false,
+            error: CLOSED_WORKOUT_CLIENT_MESSAGE,
+            ...draft,
+          });
+        } catch {
+          set({
+            isSavingSet: false,
+            error: CLOSED_WORKOUT_CLIENT_MESSAGE,
+          });
+        }
+
+        return false;
+      }
+
       set({
         isSavingSet: false,
         error: error.message || 'No fue posible guardar la serie',
       });
+
+      return false;
     }
   },
 
@@ -359,13 +386,12 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         `/workout-logs/${currentWorkout.workout_log.id}/sets/${setLogId}`,
       );
 
-      const state = await trainingClient.get<CurrentWorkoutState>(
-        `/workout-logs/${currentWorkout.workout_log.id}/state`,
-      );
-      const draft = hydrateWorkoutDraft(
-        state,
-        get().currentExerciseIndex,
-        Math.max(1, get().currentSetNumber - 1),
+      const { state, draft } = await fetchHydratedWorkoutState(
+        currentWorkout.workout_log.id,
+        {
+          exerciseIndex: get().currentExerciseIndex,
+          targetSetNumber: Math.max(1, get().currentSetNumber - 1),
+        },
       );
 
       set({
@@ -374,6 +400,32 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         ...draft,
       });
     } catch (error: any) {
+      if (isClosedWorkoutEditError(error)) {
+        try {
+          const { state, draft } = await fetchHydratedWorkoutState(
+            currentWorkout.workout_log.id,
+            {
+              exerciseIndex: get().currentExerciseIndex,
+              targetSetNumber: Math.max(1, get().currentSetNumber - 1),
+            },
+          );
+
+          set({
+            currentWorkout: state,
+            isSavingSet: false,
+            error: CLOSED_WORKOUT_CLIENT_MESSAGE,
+            ...draft,
+          });
+        } catch {
+          set({
+            isSavingSet: false,
+            error: CLOSED_WORKOUT_CLIENT_MESSAGE,
+          });
+        }
+
+        return;
+      }
+
       set({
         isSavingSet: false,
         error: error.message || 'No fue posible eliminar la serie',

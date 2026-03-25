@@ -82,7 +82,7 @@ export default function WorkoutSessionScreen() {
   } = useWorkoutStore();
 
   const workoutTrainingDay = currentWorkout?.training_day ?? null;
-  const isWorkoutReadOnly = currentWorkout?.workout_log.status === 'completed';
+  const isWorkoutReadOnly = currentWorkout?.workout_log.status !== 'in_progress';
 
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restSeconds, setRestSeconds] = useState(90);
@@ -145,6 +145,17 @@ export default function WorkoutSessionScreen() {
       Alert.alert('Error', error, [{ text: 'OK', onPress: clearError }]);
     }
   }, [clearError, error]);
+
+  useEffect(() => {
+    if (!isWorkoutReadOnly) {
+      return;
+    }
+
+    setSetsInProgress({});
+    setShowRestTimer(false);
+    setToastVisible(false);
+    setToastConfig(null);
+  }, [isWorkoutReadOnly]);
 
   useEffect(() => {
     if (!currentWorkout || !workoutTrainingDay) {
@@ -262,10 +273,18 @@ export default function WorkoutSessionScreen() {
   );
 
   const handleActivateExercise = useCallback((exerciseIndex: number) => {
+    if (isWorkoutReadOnly) {
+      return;
+    }
+
     applyExerciseDraft(exerciseIndex);
-  }, [applyExerciseDraft]);
+  }, [applyExerciseDraft, isWorkoutReadOnly]);
 
   const handleSelectSet = useCallback((exerciseIndex: number, setNumber: number) => {
+    if (isWorkoutReadOnly) {
+      return;
+    }
+
     const context = getExerciseContext(exerciseIndex);
     if (!context) {
       return;
@@ -283,7 +302,7 @@ export default function WorkoutSessionScreen() {
       setNumber,
     );
     setSetsInProgress((previous) => ({ ...previous, [exerciseIndex]: false }));
-  }, [applyExerciseDraft, getExerciseContext, getExerciseDefaults]);
+  }, [applyExerciseDraft, getExerciseContext, getExerciseDefaults, isWorkoutReadOnly]);
 
   const handleDeleteSet = useCallback((exerciseIndex: number, setNumber: number) => {
     if (!currentWorkout || isWorkoutReadOnly) {
@@ -322,6 +341,10 @@ export default function WorkoutSessionScreen() {
   ]);
 
   const handleRepsChange = useCallback((delta: number, exerciseIndex: number) => {
+    if (isWorkoutReadOnly) {
+      return;
+    }
+
     const context = getExerciseContext(exerciseIndex);
     if (!context) {
       return;
@@ -337,9 +360,14 @@ export default function WorkoutSessionScreen() {
     currentSetNumber,
     getExerciseContext,
     getExerciseDefaults,
+    isWorkoutReadOnly,
   ]);
 
   const handleWeightChange = useCallback((delta: number, exerciseIndex: number) => {
+    if (isWorkoutReadOnly) {
+      return;
+    }
+
     const context = getExerciseContext(exerciseIndex);
     if (!context) {
       return;
@@ -355,25 +383,38 @@ export default function WorkoutSessionScreen() {
     currentWeight,
     getExerciseContext,
     getExerciseDefaults,
+    isWorkoutReadOnly,
   ]);
 
   const handleRepsCommit = useCallback((nextReps: number, exerciseIndex: number) => {
+    if (isWorkoutReadOnly) {
+      return;
+    }
+
     applyExerciseDraft(
       exerciseIndex,
       { reps: Math.max(1, Math.round(nextReps)) },
       currentSetNumber,
     );
-  }, [applyExerciseDraft, currentSetNumber]);
+  }, [applyExerciseDraft, currentSetNumber, isWorkoutReadOnly]);
 
   const handleWeightCommit = useCallback((nextWeight: number, exerciseIndex: number) => {
+    if (isWorkoutReadOnly) {
+      return;
+    }
+
     applyExerciseDraft(
       exerciseIndex,
       { weight: Math.max(0, nextWeight) },
       currentSetNumber,
     );
-  }, [applyExerciseDraft, currentSetNumber]);
+  }, [applyExerciseDraft, currentSetNumber, isWorkoutReadOnly]);
 
   const handleEffortChange = useCallback((delta: number, exerciseIndex: number) => {
+    if (isWorkoutReadOnly) {
+      return;
+    }
+
     const context = getExerciseContext(exerciseIndex);
     if (
       !context ||
@@ -400,6 +441,7 @@ export default function WorkoutSessionScreen() {
     currentSetNumber,
     getExerciseContext,
     getExerciseDefaults,
+    isWorkoutReadOnly,
   ]);
 
   const handleNextSet = useCallback(async (exerciseIndex: number, setNumber: number, totalSets: number) => {
@@ -440,7 +482,7 @@ export default function WorkoutSessionScreen() {
       return;
     }
 
-    await logSet({
+    const didSaveSet = await logSet({
       dayExerciseId: exerciseProgress.day_exercise_id,
       setNumber,
       repsCompleted: isCardioExercise(dayExercise) ? 1 : currentReps,
@@ -452,6 +494,10 @@ export default function WorkoutSessionScreen() {
     });
 
     setSetsInProgress((previous) => ({ ...previous, [exerciseIndex]: false }));
+
+    if (!didSaveSet) {
+      return;
+    }
 
     if (setNumber >= totalSets) {
       showToast({
@@ -747,15 +793,15 @@ export default function WorkoutSessionScreen() {
               setInProgress={setsInProgress[originalIndex] || false}
               isSavingSet={isSavingSet}
               readOnly={isWorkoutReadOnly}
-              onActivateExercise={() => handleActivateExercise(originalIndex)}
+              onActivateExercise={isWorkoutReadOnly ? undefined : () => handleActivateExercise(originalIndex)}
               onRepsChange={(delta) => handleRepsChange(delta, originalIndex)}
               onRepsCommit={(value) => handleRepsCommit(value, originalIndex)}
               onWeightChange={(delta) => handleWeightChange(delta, originalIndex)}
               onWeightCommit={(value) => handleWeightCommit(value, originalIndex)}
               onEffortChange={(delta) => handleEffortChange(delta, originalIndex)}
               onNextSet={() => void handleNextSet(originalIndex, displaySetNumber, exercise.sets)}
-              onSelectSet={(setNumber) => handleSelectSet(originalIndex, setNumber)}
-              onDeleteSet={(setNumber) => handleDeleteSet(originalIndex, setNumber)}
+              onSelectSet={isWorkoutReadOnly ? undefined : (setNumber) => handleSelectSet(originalIndex, setNumber)}
+              onDeleteSet={isWorkoutReadOnly ? undefined : (setNumber) => handleDeleteSet(originalIndex, setNumber)}
             />
           );
         }}

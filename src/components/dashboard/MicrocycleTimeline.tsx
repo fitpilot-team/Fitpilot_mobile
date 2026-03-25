@@ -147,10 +147,11 @@ export const MicrocycleTimeline: React.FC<MicrocycleTimelineProps> = ({
         </View>
       </View>
 
-      <View {...panResponder.panHandlers}>
+      <View style={styles.calendarWrap} {...panResponder.panHandlers}>
         <SharedWeeklyCalendar
           days={calendarDays}
           heroSelectionMode="selected-only"
+          density="tight-top"
           contentWidth={contentWidth}
         />
       </View>
@@ -163,7 +164,7 @@ const createStyles = (theme: AppTheme) =>
     container: {
       marginHorizontal: spacing.lg,
       marginTop: spacing.md,
-      paddingTop: spacing.md,
+      paddingTop: spacing.sm,
       paddingBottom: spacing.xs,
       borderRadius: borderRadius.xl,
       backgroundColor: theme.colors.card,
@@ -193,7 +194,10 @@ const createStyles = (theme: AppTheme) =>
     },
     headerActions: {
       alignItems: 'flex-end',
-      gap: spacing.sm,
+      gap: spacing.xs,
+    },
+    calendarWrap: {
+      marginTop: -16,
     },
     modePill: {
       paddingHorizontal: spacing.sm,

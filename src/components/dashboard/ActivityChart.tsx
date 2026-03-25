@@ -109,7 +109,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
       </View>
 
       <View style={styles.toggleRow}>
-        <Text style={styles.toggleLabel}>Contar secundarios (0.5x)</Text>
+        <Text style={styles.toggleLabel}>Contar volumen de sinergistas(0.5x)</Text>
         <Switch
           value={countSecondaryMuscles}
           onValueChange={onToggleSecondary}

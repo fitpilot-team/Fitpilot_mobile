@@ -35,6 +35,7 @@ export type SharedWeeklyCalendarVariant =
   | 'diet';
 
 export type SharedWeeklyCalendarHeroSelectionMode = 'selected-or-today' | 'selected-only';
+export type SharedWeeklyCalendarDensity = 'default' | 'tight-top';
 
 export interface SharedWeeklyCalendarDay {
   id: string;
@@ -53,6 +54,7 @@ export interface SharedWeeklyCalendarDay {
 interface SharedWeeklyCalendarProps {
   days: SharedWeeklyCalendarDay[];
   heroSelectionMode?: SharedWeeklyCalendarHeroSelectionMode;
+  density?: SharedWeeklyCalendarDensity;
   contentWidth?: number;
 }
 
@@ -205,6 +207,7 @@ const getDateNumberStyle = (
 export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
   days,
   heroSelectionMode = 'selected-or-today',
+  density = 'default',
   contentWidth = 390,
 }) => {
   const styles = useThemedStyles(createStyles);
@@ -312,7 +315,12 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
   }, [slotLayouts]);
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        density === 'tight-top' ? styles.containerTightTop : null,
+      ]}
+    >
       <View
         style={[
           styles.daysRow,
@@ -449,7 +457,13 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
-      paddingVertical: 12,
+      paddingTop: 12,
+      paddingBottom: 12,
+      overflow: 'visible',
+    },
+    containerTightTop: {
+      paddingTop: 2,
+      paddingBottom: 10,
       overflow: 'visible',
     },
     daysRow: {

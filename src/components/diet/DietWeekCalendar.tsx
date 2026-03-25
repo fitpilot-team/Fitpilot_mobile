@@ -65,11 +65,14 @@ export const DietWeekCalendar: React.FC<DietWeekCalendarProps> = ({
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
 
-      <SharedWeeklyCalendar
-        days={calendarDays}
-        heroSelectionMode="selected-only"
-        contentWidth={contentWidth}
-      />
+      <View style={styles.calendarWrap}>
+        <SharedWeeklyCalendar
+          days={calendarDays}
+          heroSelectionMode="selected-only"
+          density="tight-top"
+          contentWidth={contentWidth}
+        />
+      </View>
     </View>
   );
 };
@@ -81,7 +84,7 @@ const createStyles = (theme: AppTheme) =>
     container: {
       marginHorizontal: spacing.lg,
       marginTop: spacing.md,
-      paddingTop: spacing.md,
+      paddingTop: spacing.sm,
       paddingBottom: spacing.xs,
       borderRadius: borderRadius.xl,
       backgroundColor: theme.colors.card,
@@ -91,6 +94,9 @@ const createStyles = (theme: AppTheme) =>
     },
     header: {
       paddingHorizontal: spacing.md,
+    },
+    calendarWrap: {
+      marginTop: -14,
     },
     eyebrow: {
       color: nutritionTheme.accentStrong,

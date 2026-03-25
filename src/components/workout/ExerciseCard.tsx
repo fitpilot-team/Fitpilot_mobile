@@ -39,68 +39,101 @@ import { VideoPlayerModal, YouTubePlayerModal } from '../video';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
-const CARD_HEIGHT = 312;
+const COMPACT_CARD_HEIGHT = 312;
+const INTERACTIVE_STRENGTH_CARD_HEIGHT = 360;
 const YOUTUBE_RED = '#FF0000';
-
-const IMAGE_WIDTH = CARD_WIDTH * 0.55;
-const IMAGE_HEIGHT = CARD_HEIGHT;
+const IMAGE_WIDTH_RATIO = 0.55;
 const DIAGONAL_WIDTH = 80;
 const IMAGE_CORNER_RADIUS = borderRadius.xl;
-const INFO_WIDTH = CARD_WIDTH - IMAGE_WIDTH + DIAGONAL_WIDTH;
+
+type CardVariant = 'compact' | 'strengthInteractive';
+
+type CardLayout = {
+  cardHeight: number;
+  imageWidth: number;
+  infoWidth: number;
+  metricsWidth: number;
+  actionDockWidth: number;
+};
+
+const getAvailableInfoWidth = (
+  infoWidth: number,
+  diagonalWidth: number,
+  verticalFraction: number,
+) => Math.max(infoWidth - diagonalWidth * verticalFraction, 0);
+
+const createCardLayout = (variant: CardVariant): CardLayout => {
+  const cardHeight =
+    variant === 'strengthInteractive' ? INTERACTIVE_STRENGTH_CARD_HEIGHT : COMPACT_CARD_HEIGHT;
+  const imageWidth = CARD_WIDTH * IMAGE_WIDTH_RATIO;
+  const infoWidth = CARD_WIDTH - imageWidth + DIAGONAL_WIDTH;
+  const innerPadding = spacing.md + spacing.sm;
+
+  return {
+    cardHeight,
+    imageWidth,
+    infoWidth,
+    metricsWidth: getAvailableInfoWidth(infoWidth, DIAGONAL_WIDTH, 0.72) - innerPadding,
+    actionDockWidth: getAvailableInfoWidth(infoWidth, DIAGONAL_WIDTH, 0.88) - innerPadding,
+  };
+};
 
 const getImageShapePath = (
   width: number,
   height: number,
   diagonalWidth: number,
-  cornerRadius: number
+  cornerRadius: number,
 ) => {
-  const r = cornerRadius;
-  const dw = diagonalWidth;
+  const radius = cornerRadius;
 
   return `
-    M ${dw},0
-    L ${width - r},0
-    Q ${width},0 ${width},${r}
-    L ${width},${height - r}
-    Q ${width},${height} ${width - r},${height}
+    M ${diagonalWidth},0
+    L ${width - radius},0
+    Q ${width},0 ${width},${radius}
+    L ${width},${height - radius}
+    Q ${width},${height} ${width - radius},${height}
     L 0,${height}
     Z
   `;
 };
 
-const ImageMask = () => (
-  <Svg width={IMAGE_WIDTH} height={IMAGE_HEIGHT}>
+const getInfoShapePath = (
+  width: number,
+  height: number,
+  diagonalWidth: number,
+  cornerRadius: number,
+) => {
+  const radius = cornerRadius;
+
+  return `
+    M 0,${radius}
+    Q 0,0 ${radius},0
+    L ${width},0
+    L ${width - diagonalWidth},${height}
+    L ${radius},${height}
+    Q 0,${height} 0,${height - radius}
+    Z
+  `;
+};
+
+const ImageMask = ({ layout }: { layout: CardLayout }) => (
+  <Svg width={layout.imageWidth} height={layout.cardHeight}>
     <Path
-      d={getImageShapePath(IMAGE_WIDTH, IMAGE_HEIGHT, DIAGONAL_WIDTH, IMAGE_CORNER_RADIUS)}
+      d={getImageShapePath(
+        layout.imageWidth,
+        layout.cardHeight,
+        DIAGONAL_WIDTH,
+        IMAGE_CORNER_RADIUS,
+      )}
       fill="black"
     />
   </Svg>
 );
 
-const getInfoShapePath = (
-  width: number,
-  height: number,
-  diagonalWidth: number,
-  cornerRadius: number
-) => {
-  const r = cornerRadius;
-  const dw = diagonalWidth;
-
-  return `
-    M 0,${r}
-    Q 0,0 ${r},0
-    L ${width},0
-    L ${width - dw},${height}
-    L ${r},${height}
-    Q 0,${height} 0,${height - r}
-    Z
-  `;
-};
-
-const InfoMask = () => (
-  <Svg width={INFO_WIDTH} height={CARD_HEIGHT}>
+const InfoMask = ({ layout }: { layout: CardLayout }) => (
+  <Svg width={layout.infoWidth} height={layout.cardHeight}>
     <Path
-      d={getInfoShapePath(INFO_WIDTH, CARD_HEIGHT, DIAGONAL_WIDTH, IMAGE_CORNER_RADIUS)}
+      d={getInfoShapePath(layout.infoWidth, layout.cardHeight, DIAGONAL_WIDTH, IMAGE_CORNER_RADIUS)}
       fill="black"
     />
   </Svg>
@@ -172,6 +205,65 @@ function parseDecimalDraft(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+interface MetricStepperRowProps {
+  children: React.ReactNode;
+  styles: ReturnType<typeof createStyles>;
+  accentColor: string;
+  onDecrement?: () => void;
+  onIncrement?: () => void;
+  decrementDisabled?: boolean;
+  incrementDisabled?: boolean;
+}
+
+const MetricStepperRow: React.FC<MetricStepperRowProps> = ({
+  children,
+  styles,
+  accentColor,
+  onDecrement,
+  onIncrement,
+  decrementDisabled = false,
+  incrementDisabled = false,
+}) => (
+  <View style={styles.metricRow}>
+    <TouchableOpacity
+      onPress={onDecrement}
+      style={styles.metricButton}
+      activeOpacity={0.8}
+      disabled={decrementDisabled || !onDecrement}
+      hitSlop={10}
+    >
+      <Ionicons name="chevron-down" size={22} color={accentColor} />
+    </TouchableOpacity>
+
+    <View style={styles.metricValueSlot}>{children}</View>
+
+    <TouchableOpacity
+      onPress={onIncrement}
+      style={styles.metricButton}
+      activeOpacity={0.8}
+      disabled={incrementDisabled || !onIncrement}
+      hitSlop={10}
+    >
+      <Ionicons name="chevron-up" size={22} color={accentColor} />
+    </TouchableOpacity>
+  </View>
+);
+
+const StaticMetricRow = ({
+  styles,
+  value,
+  label,
+}: {
+  styles: ReturnType<typeof createStyles>;
+  value: string;
+  label: string;
+}) => (
+  <View style={styles.staticMetricRow}>
+    <Text style={styles.staticMetricValue}>{value}</Text>
+    <Text style={styles.valueLabel}>{label}</Text>
+  </View>
+);
+
 export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   dayExercise,
   progress,
@@ -216,24 +308,27 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   const hasVideo = !!videoUrl;
   const hasThumbnail = !!thumbnailUrl;
   const isCompleted = progress.is_completed;
-  const showControls = !isCompleted || isEditing;
-  const controlsDisabled = !showControls || isSavingSet;
-  const canEditCompletedExercise = isCompleted && !readOnly;
   const isCardio = isCardioExercise(dayExercise);
+  const showControls = !readOnly && (!isCompleted || isEditing);
+  const controlsDisabled = readOnly || !showControls || isSavingSet;
+  const canEditCompletedExercise = isCompleted && !readOnly;
   const showStrengthEffort = shouldShowStrengthEffort(dayExercise);
   const isEffortEditable = showStrengthEffort && isEditableEffortType(dayExercise.effort_type);
   const currentEffortLabel = formatEffortValue(
     dayExercise.effort_type,
     currentEffortValue ?? dayExercise.effort_value,
   );
-  const targetEffortLabel = formatEffortValue(dayExercise.effort_type, dayExercise.effort_value);
   const controlAccentColor = controlsDisabled ? theme.colors.iconMuted : theme.colors.primary;
-  const showCurrentSetChip = !isCompleted && (isActive || setInProgress);
+  const showCurrentSetChip = !readOnly && !isCompleted && (isActive || setInProgress);
   const unitLabel = isCardio ? 'bloque' : 'serie';
   const currentUnitLabel = isCardio ? 'Bloque' : 'Serie';
   const cardioSummaryLabel = getCardioSummaryLabel(dayExercise);
   const cardioProtocolLabel = exercise?.cardio_subclass?.toUpperCase() || 'CARDIO';
   const cardioZoneLabel = formatZoneLabel(dayExercise.intensity_zone ?? exercise?.intensity_zone);
+  const cardVariant: CardVariant =
+    !isCardio && showControls ? 'strengthInteractive' : 'compact';
+  const cardLayout = useMemo(() => createCardLayout(cardVariant), [cardVariant]);
+
   const cardioMetrics = useMemo(() => {
     const metrics: { key: string; label: string; value: string }[] = [];
 
@@ -272,24 +367,22 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
     return metrics.slice(0, 4);
   }, [
+    cardioZoneLabel,
     dayExercise.distance_meters,
     dayExercise.duration_seconds,
     dayExercise.interval_rest_seconds,
     dayExercise.intervals,
     dayExercise.target_calories,
     dayExercise.work_seconds,
-    cardioZoneLabel,
   ]);
 
-  const setData = progress.sets_data;
-
   const setLogsByNumber = useMemo(() => {
-    const logs = new Map<number, (typeof setData)[number]>();
-    setData.forEach((setLog) => {
+    const logs = new Map<number, ExerciseProgress['sets_data'][number]>();
+    progress.sets_data.forEach((setLog) => {
       logs.set(setLog.set_number, setLog);
     });
     return logs;
-  }, [setData]);
+  }, [progress.sets_data]);
 
   useEffect(() => {
     if (editingField !== 'reps') {
@@ -329,13 +422,26 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
     return () => clearTimeout(focusTimer);
   }, [editingField, isActive]);
 
-  const handleVideoPress = () => {
+  useEffect(() => {
+    if (!readOnly) {
+      return;
+    }
+
+    setIsEditing(false);
+    setEditingField(null);
+    skipBlurFieldRef.current = null;
+  }, [readOnly]);
+
+  const handleVideoPress = useCallback(() => {
     if (hasVideo) {
       setShowVideoModal(true);
-    } else if (onVideoPress) {
+      return;
+    }
+
+    if (onVideoPress) {
       onVideoPress();
     }
-  };
+  }, [hasVideo, onVideoPress]);
 
   const handleStartEditing = useCallback((field: Exclude<EditingField, null>) => {
     if (controlsDisabled) {
@@ -453,13 +559,53 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
     onWeightChange(delta);
   }, [currentWeight, editingField, markSkipBlur, onWeightChange, onWeightCommit, weightDraft]);
 
+  const strengthMetrics = useMemo(() => {
+    const metrics = [
+      {
+        key: 'reps',
+        value: `${currentReps}`,
+        label: `Rep ${dayExercise.reps_min} a ${dayExercise.reps_max}`,
+      },
+      {
+        key: 'weight',
+        value: `${formatEditableNumber(currentWeight)} kg`,
+        label: 'Peso (kg)',
+      },
+    ];
+
+    if (showStrengthEffort) {
+      metrics.push({
+        key: 'effort',
+        value: currentEffortLabel,
+        label: 'Intensidad',
+      });
+    }
+
+    return metrics;
+  }, [
+    currentEffortLabel,
+    currentReps,
+    currentWeight,
+    dayExercise.reps_max,
+    dayExercise.reps_min,
+    showStrengthEffort,
+  ]);
+
+  const nextButtonLabel = useMemo(() => {
+    if (!setInProgress) {
+      return `Iniciar ${unitLabel} ${currentSetNumber}`;
+    }
+
+    return `Finalizar ${unitLabel} ${currentSetNumber}`;
+  }, [currentSetNumber, setInProgress, unitLabel]);
+
   return (
     <View style={styles.container}>
-      <View style={styles.cardBase}>
-        <View style={styles.mediaArea}>
+      <View style={[styles.cardBase, { height: cardLayout.cardHeight }]}>
+        <View style={[styles.mediaArea, { width: cardLayout.imageWidth }]}>
           <MaskedView
-            style={styles.imageMaskContainer}
-            maskElement={<ImageMask />}
+            style={[styles.imageMaskContainer, { width: cardLayout.imageWidth, height: cardLayout.cardHeight }]}
+            maskElement={<ImageMask layout={cardLayout} />}
           >
             {hasThumbnail ? (
               <Image
@@ -495,24 +641,31 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
           </TouchableOpacity>
         )}
 
-        <View style={styles.infoAreaContainer}>
+        <View style={[styles.infoAreaContainer, { width: cardLayout.infoWidth }]}>
           <MaskedView
-            style={styles.infoMaskContainer}
-            maskElement={<InfoMask />}
+            style={[styles.infoMaskContainer, { width: cardLayout.infoWidth, height: cardLayout.cardHeight }]}
+            maskElement={<InfoMask layout={cardLayout} />}
           >
-            <View style={styles.infoBackground} />
+            <View
+              style={[
+                styles.infoBackground,
+                { width: cardLayout.infoWidth, height: cardLayout.cardHeight },
+              ]}
+            />
           </MaskedView>
         </View>
 
-        <View style={styles.infoArea}>
+        <View style={[styles.infoArea, { width: cardLayout.infoWidth }]}>
           <View style={styles.infoContent}>
-            <View style={styles.orderBadge}>
-              <Text style={styles.orderBadgeText}>{exerciseNumber}/{totalExercises}</Text>
-            </View>
+            <View style={styles.infoHeader}>
+              <View style={styles.orderBadge}>
+                <Text style={styles.orderBadgeText}>{exerciseNumber}/{totalExercises}</Text>
+              </View>
 
-            <Text style={styles.exerciseName} numberOfLines={2}>
-              {exerciseName}
-            </Text>
+              <Text style={styles.exerciseName} numberOfLines={2}>
+                {exerciseName}
+              </Text>
+            </View>
 
             {isCardio ? (
               <View style={styles.cardioSection}>
@@ -540,221 +693,193 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                 </View>
               </View>
             ) : (
-              <>
-                <View style={styles.controlRow}>
-                  <TouchableOpacity
-                    onPress={() => handleRepsStep(-1)}
-                    style={styles.controlButton}
-                    disabled={controlsDisabled}
-                  >
-                    <Ionicons
-                      name="chevron-down"
-                      size={22}
-                      color={controlAccentColor}
-                    />
-                  </TouchableOpacity>
-                  {editingField === 'reps' && isActive ? (
-                    <View style={[styles.valueContainer, styles.valueContainerEditing]}>
-                      <TextInput
-                        ref={repsInputRef}
-                        value={repsDraft}
-                        onChangeText={(value) => setRepsDraft(sanitizeIntegerDraft(value))}
-                        style={styles.valueInput}
-                        keyboardType="number-pad"
-                        returnKeyType="done"
-                        blurOnSubmit
-                        onBlur={handleRepsBlur}
-                        onSubmitEditing={handleRepsSubmit}
-                        selectTextOnFocus
-                      />
-                      <Text style={styles.valueLabel}>
-                        Rep {dayExercise.reps_min} a {dayExercise.reps_max}
-                      </Text>
+              <View style={styles.strengthSection}>
+                {showControls ? (
+                  <View style={[styles.strengthInteractiveColumn, { width: cardLayout.metricsWidth }]}>
+                    <View style={styles.metricsStack}>
+                      <MetricStepperRow
+                        styles={styles}
+                        accentColor={controlAccentColor}
+                        onDecrement={() => handleRepsStep(-1)}
+                        onIncrement={() => handleRepsStep(1)}
+                        decrementDisabled={controlsDisabled}
+                        incrementDisabled={controlsDisabled}
+                      >
+                        {editingField === 'reps' && isActive ? (
+                          <View style={[styles.valueContainer, styles.valueContainerEditing]}>
+                            <TextInput
+                              ref={repsInputRef}
+                              value={repsDraft}
+                              onChangeText={(value) => setRepsDraft(sanitizeIntegerDraft(value))}
+                              style={styles.valueInput}
+                              keyboardType="number-pad"
+                              returnKeyType="done"
+                              blurOnSubmit
+                              onBlur={handleRepsBlur}
+                              onSubmitEditing={handleRepsSubmit}
+                              selectTextOnFocus
+                            />
+                            <Text style={styles.valueLabel}>
+                              Rep {dayExercise.reps_min} a {dayExercise.reps_max}
+                            </Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={[styles.valueContainer, styles.editableValueContainer]}
+                            activeOpacity={0.8}
+                            onPress={() => handleStartEditing('reps')}
+                            disabled={controlsDisabled}
+                          >
+                            <Text style={[styles.valueNumber, !showControls && styles.valueDimmed]}>
+                              {currentReps}
+                            </Text>
+                            <Text style={styles.valueLabel}>
+                              Rep {dayExercise.reps_min} a {dayExercise.reps_max}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </MetricStepperRow>
+
+                      <View style={styles.divider} />
+
+                      <MetricStepperRow
+                        styles={styles}
+                        accentColor={controlAccentColor}
+                        onDecrement={() => handleWeightStep(-2.5)}
+                        onIncrement={() => handleWeightStep(2.5)}
+                        decrementDisabled={controlsDisabled}
+                        incrementDisabled={controlsDisabled}
+                      >
+                        {editingField === 'weight' && isActive ? (
+                          <View style={[styles.valueContainer, styles.valueContainerEditing]}>
+                            <TextInput
+                              ref={weightInputRef}
+                              value={weightDraft}
+                              onChangeText={(value) => setWeightDraft(sanitizeDecimalDraft(value))}
+                              style={styles.valueInput}
+                              keyboardType={Platform.OS === 'ios' ? 'decimal-pad' : 'numeric'}
+                              returnKeyType="done"
+                              blurOnSubmit
+                              onBlur={handleWeightBlur}
+                              onSubmitEditing={handleWeightSubmit}
+                              selectTextOnFocus
+                            />
+                            <Text style={styles.valueLabel}>Peso (kg)</Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={[styles.valueContainer, styles.editableValueContainer]}
+                            activeOpacity={0.8}
+                            onPress={() => handleStartEditing('weight')}
+                            disabled={controlsDisabled}
+                          >
+                            <Text style={[styles.valueNumber, !showControls && styles.valueDimmed]}>
+                              {formatEditableNumber(currentWeight)} kg
+                            </Text>
+                            <Text style={styles.valueLabel}>Peso (kg)</Text>
+                          </TouchableOpacity>
+                        )}
+                      </MetricStepperRow>
+
+                      {showStrengthEffort ? (
+                        <>
+                          <View style={styles.divider} />
+
+                          {isEffortEditable ? (
+                            <MetricStepperRow
+                              styles={styles}
+                              accentColor={controlAccentColor}
+                              onDecrement={() => onEffortChange?.(-0.5)}
+                              onIncrement={() => onEffortChange?.(0.5)}
+                              decrementDisabled={controlsDisabled || !onEffortChange}
+                              incrementDisabled={controlsDisabled || !onEffortChange}
+                            >
+                              <View style={styles.valueContainer}>
+                                <Text style={[styles.effortValueText, !showControls && styles.valueDimmed]}>
+                                  {currentEffortLabel}
+                                </Text>
+                                <Text style={styles.valueLabel}>Intensidad</Text>
+                              </View>
+                            </MetricStepperRow>
+                          ) : (
+                            <View style={[styles.metricRow, styles.readOnlyControlRow]}>
+                              <View style={styles.readOnlyValueContainer}>
+                                <Text style={styles.effortValueText}>{currentEffortLabel}</Text>
+                                <Text style={styles.valueLabel}>Intensidad</Text>
+                              </View>
+                            </View>
+                          )}
+                        </>
+                      ) : null}
                     </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.valueContainer, styles.editableValueContainer]}
-                      activeOpacity={0.8}
-                      onPress={() => handleStartEditing('reps')}
-                      disabled={controlsDisabled}
-                    >
-                      <Text style={[styles.valueNumber, !showControls && styles.valueDimmed]}>
-                        {currentReps}
-                      </Text>
-                      <Text style={styles.valueLabel}>
-                        Rep {dayExercise.reps_min} a {dayExercise.reps_max}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    onPress={() => handleRepsStep(1)}
-                    style={styles.controlButton}
-                    disabled={controlsDisabled}
-                  >
-                    <Ionicons
-                      name="chevron-up"
-                      size={22}
-                      color={controlAccentColor}
-                    />
-                  </TouchableOpacity>
-                </View>
 
-                <View style={styles.divider} />
-
-                <View style={styles.controlRow}>
-                  <TouchableOpacity
-                    onPress={() => handleWeightStep(-2.5)}
-                    style={styles.controlButton}
-                    disabled={controlsDisabled}
-                  >
-                    <Ionicons
-                      name="chevron-down"
-                      size={22}
-                      color={controlAccentColor}
-                    />
-                  </TouchableOpacity>
-                  {editingField === 'weight' && isActive ? (
-                    <View style={[styles.valueContainer, styles.valueContainerEditing]}>
-                      <TextInput
-                        ref={weightInputRef}
-                        value={weightDraft}
-                        onChangeText={(value) => setWeightDraft(sanitizeDecimalDraft(value))}
-                        style={styles.valueInput}
-                        keyboardType={Platform.OS === 'ios' ? 'decimal-pad' : 'numeric'}
-                        returnKeyType="done"
-                        blurOnSubmit
-                        onBlur={handleWeightBlur}
-                        onSubmitEditing={handleWeightSubmit}
-                        selectTextOnFocus
-                      />
-                      <Text style={styles.valueLabel}>Peso (kg)</Text>
+                    <View style={[styles.actionDock, { width: cardLayout.actionDockWidth }]}>
+                      <TouchableOpacity
+                        onPress={onNextSet}
+                        activeOpacity={0.8}
+                        disabled={controlsDisabled}
+                        style={styles.actionDockTouchable}
+                      >
+                        <LinearGradient
+                          colors={[brandColors.navy, brandColors.sky]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={[styles.nextButton, controlsDisabled && styles.nextButtonDisabled]}
+                        >
+                          <Text style={styles.nextButtonText} numberOfLines={1} ellipsizeMode="tail">
+                            {nextButtonLabel}
+                          </Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
                     </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.valueContainer, styles.editableValueContainer]}
-                      activeOpacity={0.8}
-                      onPress={() => handleStartEditing('weight')}
-                      disabled={controlsDisabled}
-                    >
-                      <Text style={[styles.valueNumber, !showControls && styles.valueDimmed]}>
-                        {formatEditableNumber(currentWeight)} kg
-                      </Text>
-                      <Text style={styles.valueLabel}>Peso (kg)</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    onPress={() => handleWeightStep(2.5)}
-                    style={styles.controlButton}
-                    disabled={controlsDisabled}
-                  >
-                    <Ionicons
-                      name="chevron-up"
-                      size={22}
-                      color={controlAccentColor}
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.divider} />
-
-                {isEffortEditable ? (
-                  <View style={styles.controlRow}>
-                    <TouchableOpacity
-                      onPress={() => onEffortChange?.(-0.5)}
-                      style={styles.controlButton}
-                      disabled={controlsDisabled || !onEffortChange}
-                    >
-                      <Ionicons
-                        name="chevron-down"
-                        size={22}
-                        color={controlAccentColor}
-                      />
-                    </TouchableOpacity>
-                    <View style={styles.valueContainer}>
-                      <Text style={[styles.effortValueText, !showControls && styles.valueDimmed]}>
-                        {currentEffortLabel}
-                      </Text>
-                      <Text style={styles.valueLabel}>Intensidad de la serie</Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => onEffortChange?.(0.5)}
-                      style={styles.controlButton}
-                      disabled={controlsDisabled || !onEffortChange}
-                    >
-                      <Ionicons
-                        name="chevron-up"
-                        size={22}
-                        color={controlAccentColor}
-                      />
-                    </TouchableOpacity>
                   </View>
                 ) : (
-                  <View style={[styles.controlRow, styles.readOnlyControlRow]}>
-                    <View style={styles.readOnlyValueContainer}>
-                      <Text style={styles.effortValueText}>{targetEffortLabel}</Text>
-                      <Text style={styles.valueLabel}>Intensidad objetivo</Text>
-                    </View>
+                  <View style={[styles.staticMetricsStack, { width: cardLayout.metricsWidth }]}>
+                    {strengthMetrics.map((metric, index) => (
+                      <React.Fragment key={metric.key}>
+                        <StaticMetricRow
+                          styles={styles}
+                          value={metric.value}
+                          label={metric.label}
+                        />
+                        {index < strengthMetrics.length - 1 ? <View style={styles.divider} /> : null}
+                      </React.Fragment>
+                    ))}
                   </View>
                 )}
-              </>
-            )}
-
-            {showControls && (
-              <TouchableOpacity onPress={onNextSet} activeOpacity={0.8} disabled={controlsDisabled}>
-                <LinearGradient
-                  colors={[brandColors.navy, brandColors.sky]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.nextButton, controlsDisabled && styles.nextButtonDisabled]}
-                >
-                  <Text style={styles.nextButtonText}>
-                    {(() => {
-                      const isFirstSet = currentSetNumber === 1 && progress.completed_sets === 0;
-                      const isLastSet = currentSetNumber >= dayExercise.sets;
-
-                      if (!setInProgress) {
-                        return isFirstSet
-                          ? 'Iniciar ejercicio'
-                          : `Iniciar ${unitLabel} ${currentSetNumber}`;
-                      }
-
-                      return isLastSet
-                        ? 'Finalizar ejercicio'
-                        : `Finalizar ${unitLabel} ${currentSetNumber}`;
-                    })()}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+              </View>
             )}
           </View>
 
-          {canEditCompletedExercise && !isEditing && (
+          {canEditCompletedExercise && !isEditing ? (
             <TouchableOpacity
-              style={styles.completedOverlayTouchable}
+              style={[styles.completedOverlayTouchable, { width: cardLayout.infoWidth }]}
               activeOpacity={0.9}
               onPress={() => setIsEditing(true)}
             >
-              <BlurView intensity={25} tint={theme.colors.blurTint} style={styles.blurView}>
-                <View style={styles.completedOverlayContent}>
-                  <View style={styles.checkCircle}>
-                    <Ionicons name="checkmark" size={32} color={theme.colors.primary} />
+              <MaskedView
+                style={[styles.infoMaskContainer, { width: cardLayout.infoWidth, height: cardLayout.cardHeight }]}
+                maskElement={<InfoMask layout={cardLayout} />}
+              >
+                <BlurView intensity={25} tint={theme.colors.blurTint} style={styles.blurView}>
+                  <View style={styles.completedOverlayContent}>
+                    <View style={styles.checkCircle}>
+                      <Ionicons name="checkmark" size={32} color={theme.colors.primary} />
+                    </View>
+                    <Text style={styles.completedText}>Completado</Text>
+                    <Text style={styles.tapToEditText}>Toca para editar</Text>
                   </View>
-                  <Text style={styles.completedText}>Completado</Text>
-                  <Text style={styles.tapToEditText}>Toca para editar</Text>
-                </View>
-              </BlurView>
+                </BlurView>
+              </MaskedView>
             </TouchableOpacity>
-          )}
+          ) : null}
 
-          {canEditCompletedExercise && isEditing && (
-            <TouchableOpacity
-              style={styles.editingBadge}
-              onPress={() => setIsEditing(false)}
-            >
+          {canEditCompletedExercise && isEditing ? (
+            <TouchableOpacity style={styles.editingBadge} onPress={() => setIsEditing(false)}>
               <Ionicons name="close-circle" size={20} color={colors.white} />
               <Text style={styles.editingBadgeText}>Cerrar</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       </View>
 
@@ -774,7 +899,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                   )
                 : isCurrentSet
                   ? currentEffortLabel
-                  : targetEffortLabel;
+                  : formatEffortValue(dayExercise.effort_type, dayExercise.effort_value);
 
             return (
               <TouchableOpacity
@@ -786,7 +911,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                   isCurrentSet && setInProgress && styles.setChipInProgress,
                 ]}
                 activeOpacity={0.85}
-                disabled={!onSelectSet}
+                disabled={readOnly || !onSelectSet}
                 onPress={() => onSelectSet?.(setNumber)}
                 onLongPress={() => {
                   if (isSetCompleted && !readOnly) {
@@ -828,23 +953,23 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
         </Text>
       </View>
 
-      {hasVideo && videoUrl && (
+      {hasVideo && videoUrl ? (
         <VideoPlayerModal
           visible={showVideoModal}
           videoUri={videoUrl}
           exerciseName={exerciseName}
           onClose={() => setShowVideoModal(false)}
         />
-      )}
+      ) : null}
 
-      {!hasVideo && (
+      {!hasVideo ? (
         <YouTubePlayerModal
           visible={showYouTubeModal}
           exerciseName={exerciseName}
           searchName={exercise?.name_en}
           onClose={() => setShowYouTubeModal(false)}
         />
-      )}
+      ) : null}
     </View>
   );
 };
@@ -856,7 +981,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   cardBase: {
     width: CARD_WIDTH,
-    height: CARD_HEIGHT,
     borderRadius: borderRadius.xl,
     overflow: 'hidden',
     backgroundColor: theme.colors.surfaceAlt,
@@ -870,16 +994,14 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     top: 0,
     right: 0,
     bottom: 0,
-    width: IMAGE_WIDTH,
     zIndex: 1,
   },
   imageMaskContainer: {
-    width: IMAGE_WIDTH,
-    height: IMAGE_HEIGHT,
+    overflow: 'hidden',
   },
   exerciseImage: {
-    width: IMAGE_WIDTH,
-    height: IMAGE_HEIGHT,
+    width: '100%',
+    height: '100%',
   },
   playButton: {
     position: 'absolute',
@@ -902,16 +1024,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     top: 0,
     left: 0,
     bottom: 0,
-    width: INFO_WIDTH,
     zIndex: 2,
   },
   infoMaskContainer: {
-    width: INFO_WIDTH,
-    height: CARD_HEIGHT,
+    overflow: 'hidden',
   },
   infoBackground: {
-    width: INFO_WIDTH,
-    height: CARD_HEIGHT,
     backgroundColor: theme.colors.card,
   },
   infoArea: {
@@ -919,12 +1037,15 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     top: 0,
     left: 0,
     bottom: 0,
-    width: INFO_WIDTH,
     zIndex: 3,
   },
   infoContent: {
     flex: 1,
-    padding: spacing.md,
+    paddingLeft: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  infoHeader: {
     paddingRight: spacing.xl,
   },
   orderBadge: {
@@ -950,6 +1071,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   cardioSection: {
     flex: 1,
     paddingTop: spacing.xs,
+    paddingRight: spacing.xl,
   },
   cardioBadgeRow: {
     flexDirection: 'row',
@@ -1014,30 +1136,58 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.textSecondary,
   },
-  controlRow: {
+  strengthSection: {
+    flex: 1,
+    alignItems: 'flex-start',
+    paddingTop: spacing.xs,
+    paddingBottom: 0,
+  },
+  strengthInteractiveColumn: {
+    flex: 1,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  metricsStack: {
+    width: '100%',
+  },
+  staticMetricsStack: {
+    width: '100%',
+    paddingTop: spacing.xs,
+  },
+  metricRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingVertical: spacing.xs,
+    gap: spacing.xs,
   },
   readOnlyControlRow: {
     justifyContent: 'center',
   },
-  controlButton: {
-    width: 36,
-    height: 36,
+  metricButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  metricValueSlot: {
+    flex: 1,
+    minWidth: 0,
   },
   valueContainer: {
+    width: '100%',
+    minHeight: 50,
     alignItems: 'center',
-    minWidth: 84,
+    justifyContent: 'center',
   },
   editableValueContainer: {
     paddingHorizontal: spacing.xs,
     borderRadius: borderRadius.md,
   },
   valueContainerEditing: {
+    width: '100%',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     backgroundColor: theme.colors.inputBackground,
@@ -1046,11 +1196,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: borderRadius.md,
   },
   readOnlyValueContainer: {
+    width: '100%',
     alignItems: 'center',
-    minWidth: 120,
+    minWidth: 0,
   },
   valueInput: {
-    minWidth: 72,
+    width: '100%',
     paddingVertical: 0,
     fontSize: fontSize.xl,
     fontWeight: '600',
@@ -1061,51 +1212,67 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: fontSize.xl,
     fontWeight: '600',
     color: theme.colors.textPrimary,
+    textAlign: 'center',
   },
   effortValueText: {
     fontSize: fontSize.lg,
     fontWeight: '700',
     color: theme.colors.textPrimary,
+    textAlign: 'center',
+  },
+  staticMetricRow: {
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  staticMetricValue: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    textAlign: 'center',
   },
   valueDimmed: {
     color: theme.colors.textMuted,
   },
   valueLabel: {
-    marginTop: 1,
+    marginTop: 2,
     fontSize: fontSize.xs,
     color: theme.colors.textMuted,
+    textAlign: 'center',
   },
   divider: {
-    width: '70%',
+    width: '100%',
     height: 1,
-    marginVertical: spacing.xs,
     backgroundColor: theme.colors.border,
   },
-  nextButton: {
+  actionDock: {
+    paddingTop: spacing.sm,
     alignSelf: 'flex-start',
-    marginTop: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: borderRadius.md,
+  },
+  actionDockTouchable: {
+    width: '100%',
+  },
+  nextButton: {
+    width: '100%',
+    minHeight: 52,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
   },
   nextButtonDisabled: {
     opacity: 0.6,
   },
   nextButtonText: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
+    fontSize: fontSize.xs,
+    fontWeight: '700',
     color: colors.white,
   },
   completedOverlayTouchable: {
     position: 'absolute',
     top: 0,
     left: 0,
-    right: 0,
     bottom: 0,
     zIndex: 10,
-    overflow: 'hidden',
-    borderTopLeftRadius: borderRadius.xl,
-    borderBottomLeftRadius: borderRadius.xl,
   },
   blurView: {
     flex: 1,

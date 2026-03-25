@@ -20,6 +20,8 @@ type ApiErrorPayload = {
   error?: string;
 };
 
+const CLOSED_WORKOUT_EDIT_ERROR = 'Workout must be reopened before editing sets';
+
 type PublicExtra = {
   nutritionApiUrl?: string;
   trainingApiUrl?: string;
@@ -123,6 +125,39 @@ const createApiError = (
   const apiError = new Error(errorMessage) as ApiError;
   apiError.status = error.response?.status;
   return apiError;
+};
+
+const extractApiErrorMessage = (error: AxiosError<ApiErrorPayload>) => {
+  const detail = error.response?.data?.detail;
+  const message = error.response?.data?.message;
+
+  if (typeof detail === 'string') {
+    return detail;
+  }
+
+  if (Array.isArray(message)) {
+    return message.join(', ');
+  }
+
+  if (typeof message === 'string') {
+    return message;
+  }
+
+  if (typeof error.response?.data?.error === 'string') {
+    return error.response.data.error;
+  }
+
+  return error.message;
+};
+
+const shouldSkipDevErrorLog = (error: AxiosError<ApiErrorPayload>) => {
+  if (error.response?.status !== 409) {
+    return false;
+  }
+
+  const message = extractApiErrorMessage(error);
+  return typeof message === 'string' &&
+    message.toLowerCase().includes(CLOSED_WORKOUT_EDIT_ERROR.toLowerCase());
 };
 
 const hydrateTokens = async (): Promise<SessionTokens> => {
@@ -298,7 +333,7 @@ const attachAuthInterceptors = (instance: AxiosInstance, label: 'nutrition' | 't
         }
       }
 
-      if (__DEV__ && !config?.skipErrorLogging) {
+      if (__DEV__ && !config?.skipErrorLogging && !shouldSkipDevErrorLog(error)) {
         console.warn(
           `[API:${label}] error`,
           error.config?.url,
