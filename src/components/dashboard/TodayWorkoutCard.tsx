@@ -173,9 +173,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   const hours = Math.floor(estimatedMinutes / 60);
   const minutes = estimatedMinutes % 60;
   const durationText = hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
-  const sessionCaption = trainingDay.session_label?.trim()
-    ? `Sesion ${trainingDay.session_index} - ${trainingDay.session_label.trim()}`
-    : `Sesion ${trainingDay.session_index}`;
+  const sessionCaption = `Sesion ${trainingDay.session_index}`;
   const isOverdueRecommendation = cardState.recommendation === 'overdue';
 
   return (
@@ -202,15 +200,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
           <View style={styles.glassBorder} pointerEvents="none" />
 
           <View style={styles.content}>
-            <View style={styles.topBadges}>
-              <View style={styles.positionBadge}>
-                <BlurView intensity={40} tint={theme.colors.blurTint} style={styles.positionBlur}>
-                  <Text style={styles.positionText}>
-                    Sesion {cardState.position} de {cardState.total}
-                  </Text>
-                </BlurView>
-              </View>
-
+            <View style={styles.headerMeta}>
               <View style={styles.dayBadge}>
                 <BlurView intensity={50} tint={theme.colors.blurTint} style={styles.dayBadgeBlur}>
                   <Text style={styles.dayBadgeText}>{cardState.dateLabel}</Text>
@@ -332,22 +322,8 @@ const createStyles = (theme: AppTheme) =>
       paddingTop: spacing.xl,
       justifyContent: 'space-between',
     },
-    topBadges: {
-      gap: spacing.sm,
-    },
-    positionBadge: {
-      alignSelf: 'flex-start',
-      borderRadius: borderRadius.full,
-      overflow: 'hidden',
-    },
-    positionBlur: {
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.xs,
-    },
-    positionText: {
-      fontSize: fontSize.xs,
-      fontWeight: '600',
-      color: theme.colors.textPrimary,
+    headerMeta: {
+      alignItems: 'flex-start',
     },
     dayBadge: {
       alignSelf: 'flex-start',

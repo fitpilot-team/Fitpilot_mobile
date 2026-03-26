@@ -10,7 +10,6 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import Svg, { Path } from 'react-native-svg';
@@ -24,7 +23,7 @@ import {
 } from '../../constants/colors';
 import { getAssetUrl, getVideoThumbnailUrl } from '../../services/api';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
-import type { DayExercise, ExerciseProgress } from '../../types';
+import type { DayExercise, ExerciseProgress, WorkoutScreenMode } from '../../types';
 import {
   formatDistanceMeters,
   formatDurationSeconds,
@@ -140,6 +139,7 @@ const InfoMask = ({ layout }: { layout: CardLayout }) => (
 );
 
 interface ExerciseCardProps {
+  mode: WorkoutScreenMode;
   dayExercise: DayExercise;
   progress: ExerciseProgress;
   currentSetNumber: number;
@@ -151,14 +151,14 @@ interface ExerciseCardProps {
   totalExercises: number;
   setInProgress: boolean;
   isSavingSet?: boolean;
-  readOnly?: boolean;
   onActivateExercise?: () => void;
   onRepsChange: (delta: number) => void;
   onRepsCommit?: (value: number) => void;
   onWeightChange: (delta: number) => void;
   onWeightCommit?: (value: number) => void;
   onEffortChange?: (delta: number) => void;
-  onNextSet: () => void;
+  onAdvanceSet?: () => void;
+  onSaveSet?: () => void;
   onSelectSet?: (setNumber: number) => void;
   onDeleteSet?: (setNumber: number) => void;
   onVideoPress?: () => void;
@@ -265,6 +265,7 @@ const StaticMetricRow = ({
 );
 
 export const ExerciseCard: React.FC<ExerciseCardProps> = ({
+  mode,
   dayExercise,
   progress,
   currentSetNumber,
@@ -276,21 +277,20 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   totalExercises,
   setInProgress,
   isSavingSet = false,
-  readOnly = false,
   onActivateExercise,
   onRepsChange,
   onRepsCommit,
   onWeightChange,
   onWeightCommit,
   onEffortChange,
-  onNextSet,
+  onAdvanceSet,
+  onSaveSet,
   onSelectSet,
   onDeleteSet,
   onVideoPress,
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
-  const [isEditing, setIsEditing] = useState(false);
   const [editingField, setEditingField] = useState<EditingField>(null);
   const [repsDraft, setRepsDraft] = useState(() => formatEditableNumber(currentReps));
   const [weightDraft, setWeightDraft] = useState(() => formatEditableNumber(currentWeight));
@@ -309,9 +309,12 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   const hasThumbnail = !!thumbnailUrl;
   const isCompleted = progress.is_completed;
   const isCardio = isCardioExercise(dayExercise);
-  const showControls = !readOnly && (!isCompleted || isEditing);
-  const controlsDisabled = readOnly || !showControls || isSavingSet;
-  const canEditCompletedExercise = isCompleted && !readOnly;
+  const isReviewMode = mode === 'review';
+  const isHistoricalEditMode = mode === 'historicalEdit';
+  const isLiveMode = mode === 'live';
+  const isInteractiveMode = !isReviewMode;
+  const showControls = isInteractiveMode && (isActive || !isCompleted);
+  const controlsDisabled = !isInteractiveMode || !showControls || isSavingSet;
   const showStrengthEffort = shouldShowStrengthEffort(dayExercise);
   const isEffortEditable = showStrengthEffort && isEditableEffortType(dayExercise.effort_type);
   const currentEffortLabel = formatEffortValue(
@@ -319,7 +322,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
     currentEffortValue ?? dayExercise.effort_value,
   );
   const controlAccentColor = controlsDisabled ? theme.colors.iconMuted : theme.colors.primary;
-  const showCurrentSetChip = !readOnly && !isCompleted && (isActive || setInProgress);
+  const showCurrentSetChip = isInteractiveMode && (isActive || (isLiveMode && setInProgress));
   const unitLabel = isCardio ? 'bloque' : 'serie';
   const currentUnitLabel = isCardio ? 'Bloque' : 'Serie';
   const cardioSummaryLabel = getCardioSummaryLabel(dayExercise);
@@ -423,14 +426,13 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   }, [editingField, isActive]);
 
   useEffect(() => {
-    if (!readOnly) {
+    if (showControls) {
       return;
     }
 
-    setIsEditing(false);
     setEditingField(null);
     skipBlurFieldRef.current = null;
-  }, [readOnly]);
+  }, [showControls]);
 
   const handleVideoPress = useCallback(() => {
     if (hasVideo) {
@@ -591,13 +593,18 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
     showStrengthEffort,
   ]);
 
-  const nextButtonLabel = useMemo(() => {
+  const primaryAction = isHistoricalEditMode ? onSaveSet : onAdvanceSet;
+  const primaryActionLabel = useMemo(() => {
+    if (isHistoricalEditMode) {
+      return `Guardar ${unitLabel} ${currentSetNumber}`;
+    }
+
     if (!setInProgress) {
       return `Iniciar ${unitLabel} ${currentSetNumber}`;
     }
 
     return `Finalizar ${unitLabel} ${currentSetNumber}`;
-  }, [currentSetNumber, setInProgress, unitLabel]);
+  }, [currentSetNumber, isHistoricalEditMode, setInProgress, unitLabel]);
 
   return (
     <View style={styles.container}>
@@ -815,71 +822,50 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
                     <View style={[styles.actionDock, { width: cardLayout.actionDockWidth }]}>
                       <TouchableOpacity
-                        onPress={onNextSet}
+                        onPress={primaryAction}
                         activeOpacity={0.8}
-                        disabled={controlsDisabled}
+                        disabled={controlsDisabled || !primaryAction}
                         style={styles.actionDockTouchable}
                       >
                         <LinearGradient
                           colors={[brandColors.navy, brandColors.sky]}
                           start={{ x: 0, y: 0 }}
                           end={{ x: 1, y: 1 }}
-                          style={[styles.nextButton, controlsDisabled && styles.nextButtonDisabled]}
+                          style={[
+                            styles.nextButton,
+                            (controlsDisabled || !primaryAction) && styles.nextButtonDisabled,
+                          ]}
                         >
                           <Text style={styles.nextButtonText} numberOfLines={1} ellipsizeMode="tail">
-                            {nextButtonLabel}
+                            {primaryActionLabel}
                           </Text>
                         </LinearGradient>
                       </TouchableOpacity>
                     </View>
                   </View>
                 ) : (
-                  <View style={[styles.staticMetricsStack, { width: cardLayout.metricsWidth }]}>
-                    {strengthMetrics.map((metric, index) => (
-                      <React.Fragment key={metric.key}>
-                        <StaticMetricRow
-                          styles={styles}
-                          value={metric.value}
-                          label={metric.label}
-                        />
-                        {index < strengthMetrics.length - 1 ? <View style={styles.divider} /> : null}
-                      </React.Fragment>
-                    ))}
-                  </View>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={onActivateExercise}
+                    disabled={!isInteractiveMode || !onActivateExercise || isSavingSet}
+                  >
+                    <View style={[styles.staticMetricsStack, { width: cardLayout.metricsWidth }]}>
+                      {strengthMetrics.map((metric, index) => (
+                        <React.Fragment key={metric.key}>
+                          <StaticMetricRow
+                            styles={styles}
+                            value={metric.value}
+                            label={metric.label}
+                          />
+                          {index < strengthMetrics.length - 1 ? <View style={styles.divider} /> : null}
+                        </React.Fragment>
+                      ))}
+                    </View>
+                  </TouchableOpacity>
                 )}
               </View>
             )}
           </View>
-
-          {canEditCompletedExercise && !isEditing ? (
-            <TouchableOpacity
-              style={[styles.completedOverlayTouchable, { width: cardLayout.infoWidth }]}
-              activeOpacity={0.9}
-              onPress={() => setIsEditing(true)}
-            >
-              <MaskedView
-                style={[styles.infoMaskContainer, { width: cardLayout.infoWidth, height: cardLayout.cardHeight }]}
-                maskElement={<InfoMask layout={cardLayout} />}
-              >
-                <BlurView intensity={25} tint={theme.colors.blurTint} style={styles.blurView}>
-                  <View style={styles.completedOverlayContent}>
-                    <View style={styles.checkCircle}>
-                      <Ionicons name="checkmark" size={32} color={theme.colors.primary} />
-                    </View>
-                    <Text style={styles.completedText}>Completado</Text>
-                    <Text style={styles.tapToEditText}>Toca para editar</Text>
-                  </View>
-                </BlurView>
-              </MaskedView>
-            </TouchableOpacity>
-          ) : null}
-
-          {canEditCompletedExercise && isEditing ? (
-            <TouchableOpacity style={styles.editingBadge} onPress={() => setIsEditing(false)}>
-              <Ionicons name="close-circle" size={20} color={colors.white} />
-              <Text style={styles.editingBadgeText}>Cerrar</Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
       </View>
 
@@ -911,10 +897,10 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
                   isCurrentSet && setInProgress && styles.setChipInProgress,
                 ]}
                 activeOpacity={0.85}
-                disabled={readOnly || !onSelectSet}
+                disabled={isReviewMode || !onSelectSet}
                 onPress={() => onSelectSet?.(setNumber)}
                 onLongPress={() => {
-                  if (isSetCompleted && !readOnly) {
+                  if (isSetCompleted && isHistoricalEditMode) {
                     onDeleteSet?.(setNumber);
                   }
                 }}

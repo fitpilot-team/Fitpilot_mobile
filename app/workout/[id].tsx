@@ -22,7 +22,13 @@ import type { ToastConfig } from '../../src/components/workout';
 import { borderRadius, colors, fontSize, spacing } from '../../src/constants/colors';
 import { useWorkoutStore } from '../../src/store/workoutStore';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
-import type { DayExercise, ExercisePhase, ExerciseProgress } from '../../src/types';
+import type {
+  DayExercise,
+  ExercisePhase,
+  ExerciseProgress,
+  WorkoutScreenMode,
+  WorkoutStatus,
+} from '../../src/types';
 import {
   clampEffortValue,
   isCardioExercise,
@@ -30,13 +36,21 @@ import {
   shouldShowStrengthEffort,
 } from '../../src/utils/formatters';
 import { formatLocalShortWeekday, getLocalDayNumber } from '../../src/utils/date';
+import {
+  createWorkoutExerciseDraft,
+  DEFAULT_WORKOUT_EXERCISE_DRAFT,
+  getDayExerciseByProgress,
+  getExerciseDraftValues,
+  getExerciseTargetSetNumber,
+  type WorkoutExerciseDraft,
+} from '../../src/utils/workoutSession';
 
-type ExerciseDraftValues = {
+type ExerciseDraftOverrides = Partial<{
   reps: number;
   weight: number;
   effortValue: number | null;
-  rest: number;
-};
+  restSeconds: number;
+}>;
 
 type ListItem =
   | { type: 'separator'; data: { phase: ExercisePhase } }
@@ -53,6 +67,17 @@ type ListItem =
 
 const PHASE_ORDER: Record<ExercisePhase, number> = { warmup: 0, main: 1, cooldown: 2 };
 
+const getWorkoutScreenMode = (
+  status: WorkoutStatus | undefined,
+  openedFromStatus: WorkoutStatus | null,
+): WorkoutScreenMode => {
+  if (status !== 'in_progress') {
+    return 'review';
+  }
+
+  return openedFromStatus && openedFromStatus !== 'in_progress' ? 'historicalEdit' : 'live';
+};
+
 export default function WorkoutSessionScreen() {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -62,35 +87,40 @@ export default function WorkoutSessionScreen() {
     isLoading,
     isSavingSet,
     error,
-    currentExerciseIndex,
-    currentSetNumber,
-    currentReps,
-    currentWeight,
-    currentEffortValue,
     loadWorkoutState,
     reopenWorkout,
-    logSet,
+    saveSet,
     deleteLoggedSet,
-    completeWorkout,
+    closeWorkout,
     abandonWorkout,
-    setCurrentReps,
-    setCurrentWeight,
-    setCurrentEffortValue,
-    setCurrentExerciseIndex,
-    setCurrentSetNumber,
     clearError,
   } = useWorkoutStore();
 
   const workoutTrainingDay = currentWorkout?.training_day ?? null;
-  const isWorkoutReadOnly = currentWorkout?.workout_log.status !== 'in_progress';
-
+  const [exerciseDraft, setExerciseDraft] = useState<WorkoutExerciseDraft>(DEFAULT_WORKOUT_EXERCISE_DRAFT);
+  const [openedFromStatus, setOpenedFromStatus] = useState<WorkoutStatus | null>(null);
   const [showRestTimer, setShowRestTimer] = useState(false);
-  const [restSeconds, setRestSeconds] = useState(90);
   const [collapsedPhases, setCollapsedPhases] = useState<Set<ExercisePhase>>(new Set());
   const [setsInProgress, setSetsInProgress] = useState<Record<number, boolean>>({});
   const [toastVisible, setToastVisible] = useState(false);
   const [toastConfig, setToastConfig] = useState<ToastConfig | null>(null);
-  const skipExerciseDraftSyncRef = useRef(false);
+  const loadedWorkoutIdRef = useRef<string | null>(null);
+  const syncDraftOptionsRef = useRef<{ exerciseIndex?: number; targetSetNumber?: number } | null>(null);
+
+  const currentExerciseIndex = exerciseDraft.currentExerciseIndex;
+  const currentSetNumber = exerciseDraft.currentSetNumber;
+  const currentReps = exerciseDraft.currentReps;
+  const currentWeight = exerciseDraft.currentWeight;
+  const currentEffortValue = exerciseDraft.currentEffortValue;
+  const restSeconds = exerciseDraft.restSeconds;
+
+  const screenMode = useMemo(
+    () => getWorkoutScreenMode(currentWorkout?.workout_log.status, openedFromStatus),
+    [currentWorkout?.workout_log.status, openedFromStatus],
+  );
+  const isReviewMode = screenMode === 'review';
+  const isLiveMode = screenMode === 'live';
+  const isHistoricalEditMode = screenMode === 'historicalEdit';
 
   const showToast = useCallback((config: ToastConfig) => {
     setToastVisible(false);
@@ -100,41 +130,17 @@ export default function WorkoutSessionScreen() {
     }, 50);
   }, []);
 
-  const getExerciseEffortDefault = useCallback((exercise: DayExercise | undefined) => {
-    if (!shouldShowStrengthEffort(exercise) || exercise?.effort_value == null) {
-      return null;
-    }
-
-    if (isEditableEffortType(exercise.effort_type)) {
-      return clampEffortValue(exercise.effort_value);
-    }
-
-    return exercise.effort_value;
-  }, []);
-
-  const getExerciseDefaults = useCallback(
-    (
-      exercise: DayExercise | undefined,
-      progress: ExerciseProgress | undefined,
-      targetSetNumber?: number,
-    ): ExerciseDraftValues => {
-      const selectedSet = targetSetNumber
-        ? progress?.sets_data?.find((setLog) => setLog.set_number === targetSetNumber)
-        : undefined;
-      const lastSet = selectedSet ?? progress?.sets_data?.[progress.sets_data.length - 1];
-      const isCardio = isCardioExercise(exercise);
-
-      return {
-        reps: lastSet?.reps_completed ?? (isCardio ? 1 : exercise?.reps_min ?? 12),
-        weight: isCardio ? 0 : lastSet?.weight_kg ?? 0,
-        effortValue: lastSet?.effort_value ?? getExerciseEffortDefault(exercise),
-        rest: exercise?.interval_rest_seconds || exercise?.rest_seconds || 90,
-      };
-    },
-    [getExerciseEffortDefault],
-  );
-
   useEffect(() => {
+    loadedWorkoutIdRef.current = null;
+    syncDraftOptionsRef.current = null;
+    setOpenedFromStatus(null);
+    setExerciseDraft(DEFAULT_WORKOUT_EXERCISE_DRAFT);
+    setCollapsedPhases(new Set());
+    setSetsInProgress({});
+    setShowRestTimer(false);
+    setToastVisible(false);
+    setToastConfig(null);
+
     if (workoutLogId) {
       void loadWorkoutState(workoutLogId);
     }
@@ -147,7 +153,22 @@ export default function WorkoutSessionScreen() {
   }, [clearError, error]);
 
   useEffect(() => {
-    if (!isWorkoutReadOnly) {
+    if (!currentWorkout) {
+      return;
+    }
+
+    if (loadedWorkoutIdRef.current !== currentWorkout.workout_log.id) {
+      loadedWorkoutIdRef.current = currentWorkout.workout_log.id;
+      setOpenedFromStatus(currentWorkout.workout_log.status);
+    }
+
+    const nextDraft = createWorkoutExerciseDraft(currentWorkout, syncDraftOptionsRef.current ?? undefined);
+    syncDraftOptionsRef.current = null;
+    setExerciseDraft(nextDraft);
+  }, [currentWorkout]);
+
+  useEffect(() => {
+    if (isLiveMode) {
       return;
     }
 
@@ -155,45 +176,16 @@ export default function WorkoutSessionScreen() {
     setShowRestTimer(false);
     setToastVisible(false);
     setToastConfig(null);
-  }, [isWorkoutReadOnly]);
+  }, [isLiveMode]);
 
-  useEffect(() => {
-    if (!currentWorkout || !workoutTrainingDay) {
+  const navigateToOrigin = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
       return;
     }
 
-    if (skipExerciseDraftSyncRef.current) {
-      skipExerciseDraftSyncRef.current = false;
-      return;
-    }
-
-    const currentExercise = currentWorkout.exercises_progress[currentExerciseIndex];
-    if (!currentExercise) {
-      return;
-    }
-
-    const dayExercise = workoutTrainingDay.exercises.find(
-      (exercise) => exercise.id === currentExercise.day_exercise_id,
-    );
-    if (!dayExercise) {
-      return;
-    }
-
-    const defaults = getExerciseDefaults(dayExercise, currentExercise, currentSetNumber);
-    setCurrentReps(defaults.reps);
-    setCurrentWeight(defaults.weight);
-    setCurrentEffortValue(defaults.effortValue);
-    setRestSeconds(defaults.rest);
-  }, [
-    currentExerciseIndex,
-    currentSetNumber,
-    currentWorkout,
-    getExerciseDefaults,
-    setCurrentEffortValue,
-    setCurrentReps,
-    setCurrentWeight,
-    workoutTrainingDay,
-  ]);
+    router.replace('/(tabs)');
+  }, []);
 
   const togglePhaseCollapse = useCallback((phase: ExercisePhase) => {
     setCollapsedPhases((previous) => {
@@ -218,9 +210,7 @@ export default function WorkoutSessionScreen() {
         return null;
       }
 
-      const exercise = workoutTrainingDay.exercises.find(
-        (item) => item.id === progress.day_exercise_id,
-      );
+      const exercise = getDayExerciseByProgress(workoutTrainingDay, progress);
       if (!exercise) {
         return null;
       }
@@ -230,10 +220,48 @@ export default function WorkoutSessionScreen() {
     [currentWorkout, workoutTrainingDay],
   );
 
+  const getResolvedExerciseDraft = useCallback(
+    (exerciseIndex: number, targetSetNumber?: number) => {
+      const context = getExerciseContext(exerciseIndex);
+      if (!context) {
+        return null;
+      }
+
+      const resolvedSetNumber = getExerciseTargetSetNumber(
+        context.exercise,
+        context.progress,
+        targetSetNumber,
+      );
+      const defaults = getExerciseDraftValues(
+        context.exercise,
+        context.progress,
+        resolvedSetNumber,
+      );
+      const isCurrentExercise = exerciseIndex === currentExerciseIndex;
+
+      return {
+        context,
+        targetSetNumber: resolvedSetNumber,
+        reps: isCurrentExercise ? currentReps : defaults.reps,
+        weight: isCurrentExercise ? currentWeight : defaults.weight,
+        effortValue: isCurrentExercise ? currentEffortValue ?? defaults.effortValue : defaults.effortValue,
+        restSeconds: isCurrentExercise ? restSeconds : defaults.restSeconds,
+      };
+    },
+    [
+      currentEffortValue,
+      currentExerciseIndex,
+      currentReps,
+      currentWeight,
+      getExerciseContext,
+      restSeconds,
+    ],
+  );
+
   const applyExerciseDraft = useCallback(
     (
       exerciseIndex: number,
-      overrides: Partial<ExerciseDraftValues> = {},
+      overrides: ExerciseDraftOverrides = {},
       targetSetNumber?: number,
     ) => {
       const context = getExerciseContext(exerciseIndex);
@@ -241,47 +269,41 @@ export default function WorkoutSessionScreen() {
         return null;
       }
 
-      const defaults = getExerciseDefaults(context.exercise, context.progress, targetSetNumber);
-      const nextDraft = { ...defaults, ...overrides };
-
-      skipExerciseDraftSyncRef.current = exerciseIndex !== currentExerciseIndex;
-
-      if (exerciseIndex !== currentExerciseIndex) {
-        setCurrentExerciseIndex(exerciseIndex);
-      }
-
-      setCurrentSetNumber(
-        targetSetNumber ?? Math.min((context.progress.completed_sets || 0) + 1, context.exercise.sets || 1),
+      const resolvedSetNumber = getExerciseTargetSetNumber(
+        context.exercise,
+        context.progress,
+        targetSetNumber,
       );
-      setCurrentReps(nextDraft.reps);
-      setCurrentWeight(nextDraft.weight);
-      setCurrentEffortValue(nextDraft.effortValue);
-      setRestSeconds(nextDraft.rest);
+      const defaults = getExerciseDraftValues(
+        context.exercise,
+        context.progress,
+        resolvedSetNumber,
+      );
+
+      setExerciseDraft({
+        currentExerciseIndex: exerciseIndex,
+        currentSetNumber: resolvedSetNumber,
+        currentReps: overrides.reps ?? defaults.reps,
+        currentWeight: overrides.weight ?? defaults.weight,
+        currentEffortValue: overrides.effortValue ?? defaults.effortValue,
+        restSeconds: overrides.restSeconds ?? defaults.restSeconds,
+      });
 
       return context;
     },
-    [
-      currentExerciseIndex,
-      getExerciseContext,
-      getExerciseDefaults,
-      setCurrentEffortValue,
-      setCurrentExerciseIndex,
-      setCurrentSetNumber,
-      setCurrentReps,
-      setCurrentWeight,
-    ],
+    [getExerciseContext],
   );
 
   const handleActivateExercise = useCallback((exerciseIndex: number) => {
-    if (isWorkoutReadOnly) {
+    if (isReviewMode) {
       return;
     }
 
     applyExerciseDraft(exerciseIndex);
-  }, [applyExerciseDraft, isWorkoutReadOnly]);
+  }, [applyExerciseDraft, isReviewMode]);
 
   const handleSelectSet = useCallback((exerciseIndex: number, setNumber: number) => {
-    if (isWorkoutReadOnly) {
+    if (isReviewMode) {
       return;
     }
 
@@ -291,7 +313,8 @@ export default function WorkoutSessionScreen() {
     }
 
     const selectedSet = context.progress.sets_data.find((setLog) => setLog.set_number === setNumber);
-    const defaults = getExerciseDefaults(context.exercise, context.progress, setNumber);
+    const defaults = getExerciseDraftValues(context.exercise, context.progress, setNumber);
+
     applyExerciseDraft(
       exerciseIndex,
       {
@@ -302,10 +325,10 @@ export default function WorkoutSessionScreen() {
       setNumber,
     );
     setSetsInProgress((previous) => ({ ...previous, [exerciseIndex]: false }));
-  }, [applyExerciseDraft, getExerciseContext, getExerciseDefaults, isWorkoutReadOnly]);
+  }, [applyExerciseDraft, getExerciseContext, isReviewMode]);
 
   const handleDeleteSet = useCallback((exerciseIndex: number, setNumber: number) => {
-    if (!currentWorkout || isWorkoutReadOnly) {
+    if (!currentWorkout || !isHistoricalEditMode) {
       return;
     }
 
@@ -317,77 +340,70 @@ export default function WorkoutSessionScreen() {
 
     Alert.alert(
       'Eliminar serie',
-      `¿Quieres eliminar la serie ${setNumber}?`,
+      `Quieres eliminar la serie ${setNumber}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Eliminar',
           style: 'destructive',
           onPress: async () => {
-            setCurrentExerciseIndex(exerciseIndex);
-            setCurrentSetNumber(Math.max(1, setNumber - 1));
-            setSetsInProgress((previous) => ({ ...previous, [exerciseIndex]: false }));
-            await deleteLoggedSet(targetSet.id);
+            syncDraftOptionsRef.current = {
+              exerciseIndex,
+              targetSetNumber: setNumber,
+            };
+
+            const didDeleteSet = await deleteLoggedSet(targetSet.id);
+            if (!didDeleteSet) {
+              syncDraftOptionsRef.current = null;
+            }
           },
         },
       ],
     );
-  }, [
-    currentWorkout,
-    deleteLoggedSet,
-    isWorkoutReadOnly,
-    setCurrentExerciseIndex,
-    setCurrentSetNumber,
-  ]);
+  }, [currentWorkout, deleteLoggedSet, isHistoricalEditMode]);
 
   const handleRepsChange = useCallback((delta: number, exerciseIndex: number) => {
-    if (isWorkoutReadOnly) {
+    if (isReviewMode) {
       return;
     }
 
-    const context = getExerciseContext(exerciseIndex);
-    if (!context) {
+    const resolvedDraft = getResolvedExerciseDraft(
+      exerciseIndex,
+      exerciseIndex === currentExerciseIndex ? currentSetNumber : undefined,
+    );
+    if (!resolvedDraft) {
       return;
     }
 
-    const defaults = getExerciseDefaults(context.exercise, context.progress, currentSetNumber);
-    const baseReps = exerciseIndex === currentExerciseIndex ? currentReps : defaults.reps;
-    applyExerciseDraft(exerciseIndex, { reps: Math.max(1, baseReps + delta) }, currentSetNumber);
-  }, [
-    applyExerciseDraft,
-    currentExerciseIndex,
-    currentReps,
-    currentSetNumber,
-    getExerciseContext,
-    getExerciseDefaults,
-    isWorkoutReadOnly,
-  ]);
+    applyExerciseDraft(
+      exerciseIndex,
+      { reps: Math.max(1, resolvedDraft.reps + delta) },
+      resolvedDraft.targetSetNumber,
+    );
+  }, [applyExerciseDraft, currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft, isReviewMode]);
 
   const handleWeightChange = useCallback((delta: number, exerciseIndex: number) => {
-    if (isWorkoutReadOnly) {
+    if (isReviewMode) {
       return;
     }
 
-    const context = getExerciseContext(exerciseIndex);
-    if (!context) {
+    const resolvedDraft = getResolvedExerciseDraft(
+      exerciseIndex,
+      exerciseIndex === currentExerciseIndex ? currentSetNumber : undefined,
+    );
+    if (!resolvedDraft) {
       return;
     }
 
-    const defaults = getExerciseDefaults(context.exercise, context.progress, currentSetNumber);
-    const baseWeight = exerciseIndex === currentExerciseIndex ? currentWeight : defaults.weight;
-    applyExerciseDraft(exerciseIndex, { weight: Math.max(0, baseWeight + delta) }, currentSetNumber);
-  }, [
-    applyExerciseDraft,
-    currentExerciseIndex,
-    currentSetNumber,
-    currentWeight,
-    getExerciseContext,
-    getExerciseDefaults,
-    isWorkoutReadOnly,
-  ]);
+    applyExerciseDraft(
+      exerciseIndex,
+      { weight: Math.max(0, resolvedDraft.weight + delta) },
+      resolvedDraft.targetSetNumber,
+    );
+  }, [applyExerciseDraft, currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft, isReviewMode]);
 
   const handleRepsCommit = useCallback((nextReps: number, exerciseIndex: number) => {
-    if (isWorkoutReadOnly) {
+    if (isReviewMode) {
       return;
     }
 
@@ -396,10 +412,10 @@ export default function WorkoutSessionScreen() {
       { reps: Math.max(1, Math.round(nextReps)) },
       currentSetNumber,
     );
-  }, [applyExerciseDraft, currentSetNumber, isWorkoutReadOnly]);
+  }, [applyExerciseDraft, currentSetNumber, isReviewMode]);
 
   const handleWeightCommit = useCallback((nextWeight: number, exerciseIndex: number) => {
-    if (isWorkoutReadOnly) {
+    if (isReviewMode) {
       return;
     }
 
@@ -408,89 +424,147 @@ export default function WorkoutSessionScreen() {
       { weight: Math.max(0, nextWeight) },
       currentSetNumber,
     );
-  }, [applyExerciseDraft, currentSetNumber, isWorkoutReadOnly]);
+  }, [applyExerciseDraft, currentSetNumber, isReviewMode]);
 
   const handleEffortChange = useCallback((delta: number, exerciseIndex: number) => {
-    if (isWorkoutReadOnly) {
+    if (isReviewMode) {
       return;
     }
 
-    const context = getExerciseContext(exerciseIndex);
+    const resolvedDraft = getResolvedExerciseDraft(
+      exerciseIndex,
+      exerciseIndex === currentExerciseIndex ? currentSetNumber : undefined,
+    );
     if (
-      !context ||
-      !shouldShowStrengthEffort(context.exercise) ||
-      !isEditableEffortType(context.exercise.effort_type)
+      !resolvedDraft ||
+      !shouldShowStrengthEffort(resolvedDraft.context.exercise) ||
+      !isEditableEffortType(resolvedDraft.context.exercise.effort_type)
     ) {
       return;
     }
 
-    const defaults = getExerciseDefaults(context.exercise, context.progress, currentSetNumber);
-    const baseEffort = exerciseIndex === currentExerciseIndex
-      ? currentEffortValue ?? defaults.effortValue ?? 0
-      : defaults.effortValue ?? 0;
-
     applyExerciseDraft(
       exerciseIndex,
-      { effortValue: clampEffortValue(baseEffort + delta) },
-      currentSetNumber,
+      { effortValue: clampEffortValue((resolvedDraft.effortValue ?? 0) + delta) },
+      resolvedDraft.targetSetNumber,
     );
-  }, [
-    applyExerciseDraft,
-    currentEffortValue,
-    currentExerciseIndex,
-    currentSetNumber,
-    getExerciseContext,
-    getExerciseDefaults,
-    isWorkoutReadOnly,
-  ]);
+  }, [applyExerciseDraft, currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft, isReviewMode]);
 
-  const handleNextSet = useCallback(async (exerciseIndex: number, setNumber: number, totalSets: number) => {
-    if (isSavingSet || isWorkoutReadOnly || !currentWorkout || !workoutTrainingDay) {
+  const saveResolvedSet = useCallback(
+    async (
+      exerciseIndex: number,
+      targetSetNumber: number,
+      options?: { nextExerciseIndex?: number; nextSetNumber?: number },
+    ) => {
+      const resolvedDraft = getResolvedExerciseDraft(exerciseIndex, targetSetNumber);
+      if (!resolvedDraft) {
+        return false;
+      }
+
+      syncDraftOptionsRef.current = {
+        exerciseIndex: options?.nextExerciseIndex ?? exerciseIndex,
+        targetSetNumber: options?.nextSetNumber ?? targetSetNumber,
+      };
+
+      const isCardio = isCardioExercise(resolvedDraft.context.exercise);
+      const didSaveSet = await saveSet({
+        dayExerciseId: resolvedDraft.context.progress.day_exercise_id,
+        setNumber: targetSetNumber,
+        repsCompleted: isCardio ? 1 : resolvedDraft.reps,
+        weightKg: isCardio ? undefined : resolvedDraft.weight > 0 ? resolvedDraft.weight : undefined,
+        effortValue:
+          shouldShowStrengthEffort(resolvedDraft.context.exercise) &&
+          isEditableEffortType(resolvedDraft.context.exercise.effort_type)
+            ? resolvedDraft.effortValue ?? 0
+            : undefined,
+      });
+
+      if (!didSaveSet) {
+        syncDraftOptionsRef.current = null;
+      }
+
+      return didSaveSet;
+    },
+    [getResolvedExerciseDraft, saveSet],
+  );
+
+  const handleHistoricalSaveSet = useCallback(async (exerciseIndex: number, setNumber: number) => {
+    if (isSavingSet || !isHistoricalEditMode) {
       return;
     }
 
-    const exerciseProgress = currentWorkout.exercises_progress[exerciseIndex];
-    if (!exerciseProgress) {
+    const resolvedDraft = getResolvedExerciseDraft(exerciseIndex, setNumber);
+    if (!resolvedDraft) {
       return;
     }
 
-    const dayExercise = workoutTrainingDay.exercises.find(
-      (exercise) => exercise.id === exerciseProgress.day_exercise_id,
+    const hasExistingSet = resolvedDraft.context.progress.sets_data.some(
+      (setLog) => setLog.set_number === setNumber,
     );
-    if (!dayExercise) {
+    const nextPendingSetNumber = Math.min(
+      resolvedDraft.context.progress.completed_sets + 1,
+      resolvedDraft.context.exercise.sets,
+    );
+
+    if (!hasExistingSet && setNumber !== nextPendingSetNumber) {
+      Alert.alert(
+        'Serie no disponible',
+        'Solo puedes editar una serie existente o registrar la siguiente serie pendiente.',
+      );
+      return;
+    }
+
+    await saveResolvedSet(exerciseIndex, setNumber);
+  }, [getResolvedExerciseDraft, isHistoricalEditMode, isSavingSet, saveResolvedSet]);
+
+  const handleLiveSetAction = useCallback(async (exerciseIndex: number, setNumber: number, totalSets: number) => {
+    if (isSavingSet || !isLiveMode || !currentWorkout) {
+      return;
+    }
+
+    const resolvedDraft = getResolvedExerciseDraft(exerciseIndex, setNumber);
+    if (!resolvedDraft) {
       return;
     }
 
     if (exerciseIndex !== currentExerciseIndex) {
-      setCurrentExerciseIndex(exerciseIndex);
+      applyExerciseDraft(
+        exerciseIndex,
+        {
+          reps: resolvedDraft.reps,
+          weight: resolvedDraft.weight,
+          effortValue: resolvedDraft.effortValue,
+          restSeconds: resolvedDraft.restSeconds,
+        },
+        setNumber,
+      );
     }
 
     const setIsInProgress = setsInProgress[exerciseIndex] || false;
-    const unitLabel = isCardioExercise(dayExercise) ? 'Bloque' : 'Serie';
+    const unitLabel = isCardioExercise(resolvedDraft.context.exercise) ? 'Bloque' : 'Serie';
 
     if (!setIsInProgress) {
       setSetsInProgress((previous) => ({ ...previous, [exerciseIndex]: true }));
       showToast({
         message:
-          setNumber === 1 && exerciseProgress.completed_sets === 0
-            ? '¡Empieza!'
+          setNumber === 1 && resolvedDraft.context.progress.completed_sets === 0
+            ? 'Empieza'
             : `${unitLabel} ${setNumber} en marcha`,
-        subtitle: setNumber === 1 && exerciseProgress.completed_sets === 0 ? 'Mantén buena forma' : 'Tú puedes',
+        subtitle:
+          setNumber === 1 && resolvedDraft.context.progress.completed_sets === 0
+            ? 'Manten buena forma'
+            : 'Tu puedes',
         icon: 'flame-outline',
         iconColor: '#F97316',
       });
       return;
     }
 
-    const didSaveSet = await logSet({
-      dayExerciseId: exerciseProgress.day_exercise_id,
-      setNumber,
-      repsCompleted: isCardioExercise(dayExercise) ? 1 : currentReps,
-      weightKg: isCardioExercise(dayExercise) ? undefined : currentWeight > 0 ? currentWeight : undefined,
-      effortValue:
-        shouldShowStrengthEffort(dayExercise) && isEditableEffortType(dayExercise.effort_type)
-          ? currentEffortValue ?? getExerciseDefaults(dayExercise, exerciseProgress, setNumber).effortValue ?? 0
-          : undefined,
+    const nextExerciseIndex = exerciseIndex + 1;
+    const hasNextExercise = nextExerciseIndex < currentWorkout.exercises_progress.length;
+    const didSaveSet = await saveResolvedSet(exerciseIndex, setNumber, {
+      nextExerciseIndex: setNumber >= totalSets && hasNextExercise ? nextExerciseIndex : exerciseIndex,
+      nextSetNumber: setNumber >= totalSets ? 1 : Math.min(setNumber + 1, totalSets),
     });
 
     setSetsInProgress((previous) => ({ ...previous, [exerciseIndex]: false }));
@@ -501,17 +575,11 @@ export default function WorkoutSessionScreen() {
 
     if (setNumber >= totalSets) {
       showToast({
-        message: '¡Ejercicio completado!',
+        message: 'Ejercicio completado',
         subtitle: 'Excelente trabajo',
         icon: 'trophy-outline',
         iconColor: '#3B82F6',
       });
-
-      const nextIndex = exerciseIndex + 1;
-      if (nextIndex < currentWorkout.exercises_progress.length) {
-        setCurrentExerciseIndex(nextIndex);
-        setCurrentSetNumber(1);
-      }
       return;
     }
 
@@ -523,74 +591,114 @@ export default function WorkoutSessionScreen() {
     });
     setShowRestTimer(true);
   }, [
-    currentEffortValue,
+    applyExerciseDraft,
     currentExerciseIndex,
-    currentReps,
-    currentWeight,
     currentWorkout,
-    getExerciseDefaults,
+    getResolvedExerciseDraft,
+    isLiveMode,
     isSavingSet,
-    isWorkoutReadOnly,
-    logSet,
-    setCurrentExerciseIndex,
-    setCurrentSetNumber,
-    showToast,
+    saveResolvedSet,
     setsInProgress,
-    workoutTrainingDay,
+    showToast,
   ]);
 
   const handleReopen = useCallback(async () => {
-    await reopenWorkout(workoutLogId);
-  }, [reopenWorkout, workoutLogId]);
-
-  const handleFinishWorkout = useCallback(() => {
-    if (isWorkoutReadOnly) {
-      void handleReopen();
+    if (!workoutLogId || !isReviewMode) {
       return;
     }
 
+    await reopenWorkout(workoutLogId);
+  }, [isReviewMode, reopenWorkout, workoutLogId]);
+
+  const handleCloseHistoricalWorkout = useCallback(async () => {
+    if (isSavingSet || isLoading || !isHistoricalEditMode) {
+      return;
+    }
+
+    const didCloseWorkout = await closeWorkout();
+    if (didCloseWorkout) {
+      navigateToOrigin();
+    }
+  }, [closeWorkout, isHistoricalEditMode, isLoading, isSavingSet, navigateToOrigin]);
+
+  const handleFinishLiveWorkout = useCallback(() => {
     Alert.alert(
       'Finalizar entrenamiento',
-      '¿Estás seguro de que quieres finalizar el entrenamiento?',
+      'Estas seguro de que quieres finalizar el entrenamiento?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Finalizar',
           onPress: async () => {
-            await completeWorkout();
-            router.replace('/(tabs)');
+            const didCloseWorkout = await closeWorkout();
+            if (didCloseWorkout) {
+              navigateToOrigin();
+            }
           },
         },
       ],
     );
-  }, [completeWorkout, handleReopen, isWorkoutReadOnly]);
+  }, [closeWorkout, navigateToOrigin]);
+
+  const handlePrimaryFooterAction = useCallback(() => {
+    if (isReviewMode) {
+      void handleReopen();
+      return;
+    }
+
+    if (isHistoricalEditMode) {
+      void handleCloseHistoricalWorkout();
+      return;
+    }
+
+    handleFinishLiveWorkout();
+  }, [
+    handleCloseHistoricalWorkout,
+    handleFinishLiveWorkout,
+    handleReopen,
+    isHistoricalEditMode,
+    isReviewMode,
+  ]);
 
   const handleGoBack = useCallback(() => {
-    if (isWorkoutReadOnly) {
-      router.back();
+    if (isReviewMode) {
+      navigateToOrigin();
+      return;
+    }
+
+    if (isHistoricalEditMode) {
+      void handleCloseHistoricalWorkout();
       return;
     }
 
     Alert.alert(
       'Salir del entrenamiento',
-      '¿Quieres guardar tu progreso y salir, o abandonar el entrenamiento?',
+      'Quieres guardar tu progreso y salir, o abandonar el entrenamiento?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Guardar y salir',
-          onPress: () => router.back(),
+          onPress: navigateToOrigin,
         },
         {
           text: 'Abandonar',
           style: 'destructive',
           onPress: async () => {
-            await abandonWorkout();
-            router.replace('/(tabs)');
+            const didAbandonWorkout = await abandonWorkout();
+            if (didAbandonWorkout) {
+              navigateToOrigin();
+            }
           },
         },
       ],
     );
-  }, [abandonWorkout, isWorkoutReadOnly]);
+  }, [
+    abandonWorkout,
+    handleCloseHistoricalWorkout,
+    isHistoricalEditMode,
+    isReviewMode,
+    navigateToOrigin,
+  ]);
 
   const groupedExercises = useMemo((): ListItem[] => {
     if (!currentWorkout || !workoutTrainingDay) {
@@ -599,17 +707,19 @@ export default function WorkoutSessionScreen() {
 
     const exerciseWithProgress = currentWorkout.exercises_progress
       .map((progress, originalIndex) => {
-        const exercise = workoutTrainingDay.exercises.find(
-          (item) => item.id === progress.day_exercise_id,
-        );
+        const exercise = getDayExerciseByProgress(workoutTrainingDay, progress);
         return exercise ? { exercise, progress, originalIndex } : null;
       })
-      .filter((item): item is { exercise: DayExercise; progress: ExerciseProgress; originalIndex: number } => item !== null)
+      .filter(
+        (item): item is { exercise: DayExercise; progress: ExerciseProgress; originalIndex: number } =>
+          item !== null,
+      )
       .sort((left, right) => {
         const phaseCompare = PHASE_ORDER[left.exercise.phase] - PHASE_ORDER[right.exercise.phase];
         if (phaseCompare !== 0) {
           return phaseCompare;
         }
+
         return left.exercise.order_index - right.exercise.order_index;
       });
 
@@ -664,9 +774,7 @@ export default function WorkoutSessionScreen() {
     }
 
     const currentExercise = currentWorkout.exercises_progress[currentExerciseIndex];
-    const dayExercise = workoutTrainingDay.exercises.find(
-      (exercise) => exercise.id === currentExercise?.day_exercise_id,
-    );
+    const dayExercise = getDayExerciseByProgress(workoutTrainingDay, currentExercise);
     return dayExercise?.phase || null;
   }, [currentExerciseIndex, currentWorkout, workoutTrainingDay]);
 
@@ -684,6 +792,53 @@ export default function WorkoutSessionScreen() {
 
     setCollapsedPhases(nextCollapsed);
   }, [currentExercisePhase, groupedExercises.length, phaseCompletionStatus]);
+
+  const modeBanner = useMemo(() => {
+    if (isReviewMode) {
+      return {
+        title: 'Ver registro',
+        subtitle: 'Este entrenamiento esta cerrado. Reabrelo solo si necesitas corregir series.',
+        buttonLabel: 'Editar registro',
+      };
+    }
+
+    if (isHistoricalEditMode) {
+      return {
+        title: 'Edicion historica',
+        subtitle: 'Los cambios se guardan en este log y se cerrara al salir.',
+        buttonLabel: null,
+      };
+    }
+
+    return null;
+  }, [isHistoricalEditMode, isReviewMode]);
+
+  const footerConfig = useMemo(() => {
+    if (isReviewMode) {
+      return {
+        label: 'Editar registro',
+        iconName: 'create-outline' as const,
+        colors: ['#0f766e', '#34d399'] as const,
+        iconColor: '#0f766e',
+      };
+    }
+
+    if (isHistoricalEditMode) {
+      return {
+        label: 'Guardar cambios y cerrar',
+        iconName: 'checkmark-outline' as const,
+        colors: ['#0f766e', '#34d399'] as const,
+        iconColor: '#0f766e',
+      };
+    }
+
+    return {
+      label: 'Finalizar entrenamiento',
+      iconName: 'arrow-forward' as const,
+      colors: ['#182f50', '#67b6df'] as const,
+      iconColor: theme.isDark ? theme.colors.primary : '#182f50',
+    };
+  }, [isHistoricalEditMode, isReviewMode, theme.colors.primary, theme.isDark]);
 
   if (isLoading || !currentWorkout || !workoutTrainingDay) {
     return <LoadingSpinner fullScreen text="Cargando entrenamiento..." />;
@@ -719,17 +874,17 @@ export default function WorkoutSessionScreen() {
         </View>
       </LinearGradient>
 
-      {isWorkoutReadOnly ? (
-        <View style={styles.readOnlyBanner}>
-          <View style={styles.readOnlyCopy}>
-            <Text style={styles.readOnlyTitle}>Entrenamiento cerrado</Text>
-            <Text style={styles.readOnlySubtitle}>
-              Reábrelo para editar o eliminar series ya registradas.
-            </Text>
+      {modeBanner ? (
+        <View style={styles.modeBanner}>
+          <View style={styles.modeBannerCopy}>
+            <Text style={styles.modeBannerTitle}>{modeBanner.title}</Text>
+            <Text style={styles.modeBannerSubtitle}>{modeBanner.subtitle}</Text>
           </View>
-          <TouchableOpacity style={styles.readOnlyButton} onPress={handleReopen}>
-            <Text style={styles.readOnlyButtonText}>Reabrir</Text>
-          </TouchableOpacity>
+          {modeBanner.buttonLabel ? (
+            <TouchableOpacity style={styles.modeBannerButton} onPress={handleReopen}>
+              <Text style={styles.modeBannerButtonText}>{modeBanner.buttonLabel}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : null}
 
@@ -770,17 +925,14 @@ export default function WorkoutSessionScreen() {
           }
 
           const isActive = originalIndex === currentExerciseIndex;
-          const displaySetNumber = progress.is_completed
-            ? currentSetNumber && isActive
-              ? currentSetNumber
-              : exercise.sets
-            : isActive
-              ? currentSetNumber
-              : Math.min(progress.completed_sets + 1, exercise.sets);
-          const defaults = getExerciseDefaults(exercise, progress, displaySetNumber);
+          const displaySetNumber = isActive
+            ? currentSetNumber
+            : getExerciseTargetSetNumber(exercise, progress);
+          const defaults = getExerciseDraftValues(exercise, progress, displaySetNumber);
 
           return (
             <ExerciseCard
+              mode={screenMode}
               dayExercise={exercise}
               progress={progress}
               currentSetNumber={displaySetNumber}
@@ -792,37 +944,45 @@ export default function WorkoutSessionScreen() {
               totalExercises={totalInPhase}
               setInProgress={setsInProgress[originalIndex] || false}
               isSavingSet={isSavingSet}
-              readOnly={isWorkoutReadOnly}
-              onActivateExercise={isWorkoutReadOnly ? undefined : () => handleActivateExercise(originalIndex)}
+              onActivateExercise={isReviewMode ? undefined : () => handleActivateExercise(originalIndex)}
               onRepsChange={(delta) => handleRepsChange(delta, originalIndex)}
               onRepsCommit={(value) => handleRepsCommit(value, originalIndex)}
               onWeightChange={(delta) => handleWeightChange(delta, originalIndex)}
               onWeightCommit={(value) => handleWeightCommit(value, originalIndex)}
               onEffortChange={(delta) => handleEffortChange(delta, originalIndex)}
-              onNextSet={() => void handleNextSet(originalIndex, displaySetNumber, exercise.sets)}
-              onSelectSet={isWorkoutReadOnly ? undefined : (setNumber) => handleSelectSet(originalIndex, setNumber)}
-              onDeleteSet={isWorkoutReadOnly ? undefined : (setNumber) => handleDeleteSet(originalIndex, setNumber)}
+              onAdvanceSet={
+                isLiveMode
+                  ? () => void handleLiveSetAction(originalIndex, displaySetNumber, exercise.sets)
+                  : undefined
+              }
+              onSaveSet={
+                isHistoricalEditMode
+                  ? () => void handleHistoricalSaveSet(originalIndex, displaySetNumber)
+                  : undefined
+              }
+              onSelectSet={isReviewMode ? undefined : (setNumber) => handleSelectSet(originalIndex, setNumber)}
+              onDeleteSet={
+                isHistoricalEditMode ? (setNumber) => handleDeleteSet(originalIndex, setNumber) : undefined
+              }
             />
           );
         }}
       />
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.finishButtonWrapper} onPress={handleFinishWorkout} activeOpacity={0.82}>
+        <TouchableOpacity style={styles.finishButtonWrapper} onPress={handlePrimaryFooterAction} activeOpacity={0.82}>
           <LinearGradient
-            colors={isWorkoutReadOnly ? ['#0f766e', '#34d399'] : ['#182f50', '#67b6df']}
+            colors={footerConfig.colors}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.finishButton}
           >
-            <Text style={styles.finishButtonTextActive}>
-              {isWorkoutReadOnly ? 'Reabrir para editar' : 'Finalizar entrenamiento'}
-            </Text>
+            <Text style={styles.finishButtonTextActive}>{footerConfig.label}</Text>
             <View style={styles.finishArrowActive}>
               <Ionicons
-                name={isWorkoutReadOnly ? 'create-outline' : 'arrow-forward'}
+                name={footerConfig.iconName}
                 size={16}
-                color={isWorkoutReadOnly ? '#0f766e' : theme.isDark ? theme.colors.primary : '#182f50'}
+                color={footerConfig.iconColor}
               />
             </View>
           </LinearGradient>
@@ -890,7 +1050,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: colors.white,
     fontWeight: '700',
   },
-  readOnlyBanner: {
+  modeBanner: {
     marginHorizontal: spacing.lg,
     marginBottom: spacing.sm,
     padding: spacing.md,
@@ -902,26 +1062,26 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  readOnlyCopy: {
+  modeBannerCopy: {
     flex: 1,
   },
-  readOnlyTitle: {
+  modeBannerTitle: {
     fontSize: fontSize.base,
     fontWeight: '700',
     color: theme.colors.textPrimary,
   },
-  readOnlySubtitle: {
+  modeBannerSubtitle: {
     marginTop: spacing.xs,
     fontSize: fontSize.sm,
     color: theme.colors.textMuted,
   },
-  readOnlyButton: {
+  modeBannerButton: {
     borderRadius: borderRadius.full,
     backgroundColor: '#0f766e',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  readOnlyButtonText: {
+  modeBannerButtonText: {
     fontSize: fontSize.xs,
     fontWeight: '700',
     color: colors.white,

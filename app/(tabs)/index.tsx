@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAuthStore } from '../../src/store/authStore';
@@ -43,12 +44,14 @@ export default function HomeScreen() {
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset();
+  const isFocused = useIsFocused();
   const { user } = useAuthStore();
   const {
     activeMacrocycle,
     dashboardWorkoutLogs,
     microcycleProgress,
     dashboardDataVersion,
+    workoutLogsVersion,
     isLoading,
     isStartingWorkout,
     error,
@@ -65,6 +68,7 @@ export default function HomeScreen() {
   const [focusedDateKey, setFocusedDateKey] = useState<string | null>(null);
   const [isSessionPickerVisible, setIsSessionPickerVisible] = useState(false);
   const [hasPlayedEntryAnimation, setHasPlayedEntryAnimation] = useState(false);
+  const lastLoadedWorkoutLogsVersionRef = useRef<number | null>(null);
 
   const programTimelineModel = useMemo(
     () => buildProgramTimelineModel(activeMacrocycle, dashboardWorkoutLogs),
@@ -85,17 +89,32 @@ export default function HomeScreen() {
     [shouldAnimateEntry],
   );
 
-  useEffect(() => {
-    const loadInitialDashboard = async () => {
+  const syncDashboardData = useCallback(
+    async (version = workoutLogsVersion) => {
       if (!user?.id) {
         return;
       }
 
       await loadDashboardData(user.id);
-    };
+      lastLoadedWorkoutLogsVersionRef.current = version;
+    },
+    [loadDashboardData, user?.id, workoutLogsVersion],
+  );
 
-    void loadInitialDashboard();
-  }, [loadDashboardData, user?.id]);
+  useEffect(() => {
+    if (!isFocused || !user?.id) {
+      return;
+    }
+
+    if (
+      dashboardDataVersion !== 0 &&
+      lastLoadedWorkoutLogsVersionRef.current === workoutLogsVersion
+    ) {
+      return;
+    }
+
+    void syncDashboardData(workoutLogsVersion);
+  }, [dashboardDataVersion, isFocused, syncDashboardData, user?.id, workoutLogsVersion]);
 
   useEffect(() => {
     if (!shouldAnimateEntry) {
@@ -157,8 +176,9 @@ export default function HomeScreen() {
 
     setRefreshing(true);
     await loadDashboardData(user.id);
+    lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
     setRefreshing(false);
-  }, [loadDashboardData, user?.id]);
+  }, [loadDashboardData, user?.id, workoutLogsVersion]);
 
   const openWorkoutSession = useCallback(
     async (session: MicrocycleSessionProgress) => {
