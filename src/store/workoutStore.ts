@@ -3,21 +3,17 @@ import { trainingClient } from '../services/api';
 import type {
   AbandonReason,
   CurrentWorkoutState,
-  DayExercise,
-  ExerciseProgress,
   ExerciseSetLog,
   Macrocycle,
   MicrocycleProgress,
   MissedWorkout,
-  TrainingDay,
   WorkoutLog,
 } from '../types';
 import {
-  clampEffortValue,
-  isCardioExercise,
-  isEditableEffortType,
-  shouldShowStrengthEffort,
-} from '../utils/formatters';
+  removeSetFromWorkoutState,
+  reopenWorkoutState,
+  upsertSetInWorkoutState,
+} from '../utils/workoutSession';
 
 interface WorkoutState {
   activeMacrocycle: Macrocycle | null;
@@ -26,6 +22,7 @@ interface WorkoutState {
   currentWorkout: CurrentWorkoutState | null;
   missedWorkouts: MissedWorkout[];
   dashboardDataVersion: number;
+  workoutLogsVersion: number;
 
   isLoading: boolean;
   isStartingWorkout: boolean;
@@ -33,120 +30,31 @@ interface WorkoutState {
   isLoadingMissed: boolean;
   error: string | null;
 
-  currentExerciseIndex: number;
-  currentSetNumber: number;
-  currentReps: number;
-  currentWeight: number;
-  currentEffortValue: number | null;
-
   loadDashboardData: (clientId: string) => Promise<void>;
   loadMissedWorkouts: (daysBack?: number) => Promise<void>;
   startWorkout: (trainingDayId: string) => Promise<string | null>;
   loadWorkoutState: (workoutLogId: string) => Promise<void>;
-  reopenWorkout: (workoutLogId?: string) => Promise<void>;
-  logSet: (data: {
+  reopenWorkout: (workoutLogId?: string) => Promise<boolean>;
+  saveSet: (data: {
     dayExerciseId: string;
     setNumber: number;
     repsCompleted: number;
     weightKg?: number;
     effortValue?: number;
   }) => Promise<boolean>;
-  deleteLoggedSet: (setLogId: string) => Promise<void>;
-  completeWorkout: () => Promise<void>;
-  abandonWorkout: (reason?: AbandonReason, notes?: string) => Promise<void>;
+  deleteLoggedSet: (setLogId: string) => Promise<boolean>;
+  closeWorkout: () => Promise<boolean>;
+  abandonWorkout: (reason?: AbandonReason, notes?: string) => Promise<boolean>;
   dismissMissedWorkouts: () => void;
-
-  setCurrentExerciseIndex: (index: number) => void;
-  setCurrentSetNumber: (setNumber: number) => void;
-  setCurrentReps: (reps: number) => void;
-  setCurrentWeight: (weight: number) => void;
-  setCurrentEffortValue: (effortValue: number | null) => void;
-  nextExercise: () => void;
   clearError: () => void;
   reset: () => void;
 }
 
-type ExerciseDefaults = {
-  reps: number;
-  weight: number;
-  effortValue: number | null;
-  restSeconds: number;
-};
-
 const CLOSED_WORKOUT_EDIT_ERROR = 'Workout must be reopened before editing sets';
-const CLOSED_WORKOUT_CLIENT_MESSAGE = 'El entrenamiento está cerrado. Reábrelo para editar.';
+const CLOSED_WORKOUT_CLIENT_MESSAGE = 'El entrenamiento esta cerrado. Reabrelo para editar.';
 
-const getExerciseEffortDefault = (dayExercise?: DayExercise): number | null => {
-  if (!shouldShowStrengthEffort(dayExercise) || dayExercise?.effort_value == null) {
-    return null;
-  }
-
-  if (isEditableEffortType(dayExercise.effort_type)) {
-    return clampEffortValue(dayExercise.effort_value);
-  }
-
-  return dayExercise.effort_value;
-};
-
-const getExerciseDefaults = (
-  dayExercise?: DayExercise,
-  progress?: ExerciseProgress,
-  targetSetNumber?: number,
-): ExerciseDefaults => {
-  const preferredSet = targetSetNumber
-    ? progress?.sets_data?.find((setLog) => setLog.set_number === targetSetNumber)
-    : undefined;
-  const lastSet = preferredSet ?? progress?.sets_data?.[progress.sets_data.length - 1];
-  const isCardio = isCardioExercise(dayExercise);
-
-  return {
-    reps: lastSet?.reps_completed ?? (isCardio ? 1 : dayExercise?.reps_min ?? 12),
-    weight: isCardio ? 0 : lastSet?.weight_kg ?? 0,
-    effortValue: lastSet?.effort_value ?? getExerciseEffortDefault(dayExercise),
-    restSeconds: dayExercise?.interval_rest_seconds || dayExercise?.rest_seconds || 90,
-  };
-};
-
-const getDayExerciseByProgress = (
-  trainingDay: TrainingDay | null | undefined,
-  progress?: ExerciseProgress,
-): DayExercise | undefined =>
-  trainingDay?.exercises.find((exercise) => exercise.id === progress?.day_exercise_id);
-
-const hydrateWorkoutDraft = (
-  workoutState: CurrentWorkoutState,
-  exerciseIndex?: number,
-  targetSetNumber?: number,
-) => {
-  const safeIndex = Math.max(
-    0,
-    Math.min(
-      exerciseIndex ?? workoutState.exercises_progress.findIndex((exercise) => !exercise.is_completed),
-      Math.max(workoutState.exercises_progress.length - 1, 0),
-    ),
-  );
-  const normalizedIndex = safeIndex < 0 ? 0 : safeIndex;
-  const currentExercise = workoutState.exercises_progress[normalizedIndex];
-  const dayExercise = getDayExerciseByProgress(workoutState.training_day, currentExercise);
-  const defaults = getExerciseDefaults(dayExercise, currentExercise, targetSetNumber);
-
-  return {
-    currentExerciseIndex: normalizedIndex,
-    currentSetNumber: targetSetNumber ?? Math.min((currentExercise?.completed_sets || 0) + 1, dayExercise?.sets || 1),
-    currentReps: defaults.reps,
-    currentWeight: defaults.weight,
-    currentEffortValue: defaults.effortValue,
-  };
-};
-
-const fetchHydratedWorkoutState = async (
-  workoutLogId: string,
-  options?: { exerciseIndex?: number; targetSetNumber?: number },
-) => {
-  const state = await trainingClient.get<CurrentWorkoutState>(`/workout-logs/${workoutLogId}/state`);
-  const draft = hydrateWorkoutDraft(state, options?.exerciseIndex, options?.targetSetNumber);
-  return { state, draft };
-};
+const fetchWorkoutState = async (workoutLogId: string) =>
+  trainingClient.get<CurrentWorkoutState>(`/workout-logs/${workoutLogId}/state`);
 
 const isClosedWorkoutEditError = (error: { status?: number; message?: string } | null | undefined) =>
   error?.status === 409 &&
@@ -160,18 +68,13 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   currentWorkout: null,
   missedWorkouts: [],
   dashboardDataVersion: 0,
+  workoutLogsVersion: 0,
 
   isLoading: false,
   isStartingWorkout: false,
   isSavingSet: false,
   isLoadingMissed: false,
   error: null,
-
-  currentExerciseIndex: 0,
-  currentSetNumber: 1,
-  currentReps: 12,
-  currentWeight: 0,
-  currentEffortValue: null,
 
   loadDashboardData: async (clientId: string) => {
     set({ isLoading: true, error: null });
@@ -246,19 +149,19 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       const workoutLog = await trainingClient.post<WorkoutLog>('/workout-logs', {
         training_day_id: trainingDayId,
       });
-      const { state, draft } = await fetchHydratedWorkoutState(workoutLog.id);
+      const state = await fetchWorkoutState(workoutLog.id);
 
-      set({
+      set((previousState) => ({
         currentWorkout: state,
         isStartingWorkout: false,
-        ...draft,
-      });
+        workoutLogsVersion: previousState.workoutLogsVersion + 1,
+      }));
 
       return workoutLog.id;
     } catch (error: any) {
       set({
         isStartingWorkout: false,
-        error: error.message || 'Error al abrir la sesi\u00f3n',
+        error: error.message || 'Error al abrir la sesion',
       });
       return null;
     }
@@ -268,17 +171,16 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const { state, draft } = await fetchHydratedWorkoutState(workoutLogId);
+      const state = await fetchWorkoutState(workoutLogId);
 
       set({
         currentWorkout: state,
         isLoading: false,
-        ...draft,
       });
     } catch (error: any) {
       set({
         isLoading: false,
-        error: error.message || 'Error al cargar la sesi\u00f3n',
+        error: error.message || 'Error al cargar la sesion',
       });
     }
   },
@@ -286,29 +188,43 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   reopenWorkout: async (workoutLogId?: string) => {
     const targetWorkoutLogId = workoutLogId ?? get().currentWorkout?.workout_log.id;
     if (!targetWorkoutLogId) {
-      return;
+      return false;
     }
 
     set({ isLoading: true, error: null });
 
     try {
       await trainingClient.post<WorkoutLog>(`/workout-logs/${targetWorkoutLogId}/reopen`);
-      const { state, draft } = await fetchHydratedWorkoutState(targetWorkoutLogId);
 
-      set({
-        currentWorkout: state,
-        isLoading: false,
-        ...draft,
+      set((state) => {
+        const currentWorkout =
+          state.currentWorkout?.workout_log.id === targetWorkoutLogId && state.currentWorkout
+            ? reopenWorkoutState(state.currentWorkout)
+            : state.currentWorkout;
+
+        return {
+          currentWorkout,
+          isLoading: false,
+          workoutLogsVersion: state.workoutLogsVersion + 1,
+        };
       });
+
+      if (get().currentWorkout?.workout_log.id !== targetWorkoutLogId) {
+        const state = await fetchWorkoutState(targetWorkoutLogId);
+        set({ currentWorkout: state });
+      }
+
+      return true;
     } catch (error: any) {
       set({
         isLoading: false,
         error: error.message || 'No fue posible reabrir el entrenamiento',
       });
+      return false;
     }
   },
 
-  logSet: async (data) => {
+  saveSet: async (data) => {
     const { currentWorkout } = get();
     if (!currentWorkout) {
       return false;
@@ -317,7 +233,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     set({ isSavingSet: true, error: null });
 
     try {
-      await trainingClient.post<ExerciseSetLog>(
+      const savedSetLog = await trainingClient.post<ExerciseSetLog>(
         `/workout-logs/${currentWorkout.workout_log.id}/sets`,
         {
           day_exercise_id: data.dayExerciseId,
@@ -328,31 +244,24 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         },
       );
 
-      const { state, draft } = await fetchHydratedWorkoutState(
-        currentWorkout.workout_log.id,
-        { exerciseIndex: get().currentExerciseIndex },
-      );
-
-      set({
-        currentWorkout: state,
+      set((state) => ({
+        currentWorkout: state.currentWorkout
+          ? upsertSetInWorkoutState(state.currentWorkout, savedSetLog)
+          : state.currentWorkout,
         isSavingSet: false,
-        ...draft,
-      });
+        workoutLogsVersion: state.workoutLogsVersion + 1,
+      }));
 
       return true;
     } catch (error: any) {
       if (isClosedWorkoutEditError(error)) {
         try {
-          const { state, draft } = await fetchHydratedWorkoutState(
-            currentWorkout.workout_log.id,
-            { exerciseIndex: get().currentExerciseIndex },
-          );
+          const state = await fetchWorkoutState(currentWorkout.workout_log.id);
 
           set({
             currentWorkout: state,
             isSavingSet: false,
             error: CLOSED_WORKOUT_CLIENT_MESSAGE,
-            ...draft,
           });
         } catch {
           set({
@@ -376,7 +285,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   deleteLoggedSet: async (setLogId: string) => {
     const { currentWorkout } = get();
     if (!currentWorkout) {
-      return;
+      return false;
     }
 
     set({ isSavingSet: true, error: null });
@@ -386,35 +295,24 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         `/workout-logs/${currentWorkout.workout_log.id}/sets/${setLogId}`,
       );
 
-      const { state, draft } = await fetchHydratedWorkoutState(
-        currentWorkout.workout_log.id,
-        {
-          exerciseIndex: get().currentExerciseIndex,
-          targetSetNumber: Math.max(1, get().currentSetNumber - 1),
-        },
-      );
-
-      set({
-        currentWorkout: state,
+      set((state) => ({
+        currentWorkout: state.currentWorkout
+          ? removeSetFromWorkoutState(state.currentWorkout, setLogId)
+          : state.currentWorkout,
         isSavingSet: false,
-        ...draft,
-      });
+        workoutLogsVersion: state.workoutLogsVersion + 1,
+      }));
+
+      return true;
     } catch (error: any) {
       if (isClosedWorkoutEditError(error)) {
         try {
-          const { state, draft } = await fetchHydratedWorkoutState(
-            currentWorkout.workout_log.id,
-            {
-              exerciseIndex: get().currentExerciseIndex,
-              targetSetNumber: Math.max(1, get().currentSetNumber - 1),
-            },
-          );
+          const state = await fetchWorkoutState(currentWorkout.workout_log.id);
 
           set({
             currentWorkout: state,
             isSavingSet: false,
             error: CLOSED_WORKOUT_CLIENT_MESSAGE,
-            ...draft,
           });
         } catch {
           set({
@@ -423,20 +321,22 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
           });
         }
 
-        return;
+        return false;
       }
 
       set({
         isSavingSet: false,
         error: error.message || 'No fue posible eliminar la serie',
       });
+
+      return false;
     }
   },
 
-  completeWorkout: async () => {
+  closeWorkout: async () => {
     const { currentWorkout } = get();
     if (!currentWorkout) {
-      return;
+      return false;
     }
 
     set({ isLoading: true, error: null });
@@ -446,28 +346,29 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         status: 'completed',
       });
 
-      set({
+      set((state) => ({
         currentWorkout: null,
         isLoading: false,
-        currentExerciseIndex: 0,
-        currentSetNumber: 1,
-        currentReps: 12,
-        currentWeight: 0,
-        currentEffortValue: null,
-      });
+        workoutLogsVersion: state.workoutLogsVersion + 1,
+      }));
+
+      return true;
     } catch (error: any) {
       set({
         isLoading: false,
         error: error.message || 'No fue posible finalizar el entrenamiento',
       });
+      return false;
     }
   },
 
   abandonWorkout: async (reason?: AbandonReason, notes?: string) => {
     const { currentWorkout } = get();
     if (!currentWorkout) {
-      return;
+      return false;
     }
+
+    set({ isLoading: true, error: null });
 
     try {
       await trainingClient.patch(`/workout-logs/${currentWorkout.workout_log.id}`, {
@@ -476,52 +377,24 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
         abandon_notes: notes,
       });
 
-      set({
+      set((state) => ({
         currentWorkout: null,
-        currentExerciseIndex: 0,
-        currentSetNumber: 1,
-        currentReps: 12,
-        currentWeight: 0,
-        currentEffortValue: null,
-      });
+        isLoading: false,
+        workoutLogsVersion: state.workoutLogsVersion + 1,
+      }));
+
+      return true;
     } catch (error: any) {
-      set({ error: error.message || 'No fue posible abandonar el entrenamiento' });
+      set({
+        isLoading: false,
+        error: error.message || 'No fue posible abandonar el entrenamiento',
+      });
+      return false;
     }
   },
 
   dismissMissedWorkouts: () => {
     set({ missedWorkouts: [] });
-  },
-
-  setCurrentExerciseIndex: (index) => set({ currentExerciseIndex: index }),
-  setCurrentSetNumber: (setNumber) => set({ currentSetNumber: setNumber }),
-  setCurrentReps: (reps) => set({ currentReps: reps }),
-  setCurrentWeight: (weight) => set({ currentWeight: weight }),
-  setCurrentEffortValue: (effortValue) => set({ currentEffortValue: effortValue }),
-
-  nextExercise: () => {
-    const { currentExerciseIndex, currentWorkout } = get();
-    if (!currentWorkout) {
-      return;
-    }
-
-    const nextIndex = currentExerciseIndex + 1;
-    if (nextIndex < currentWorkout.exercises_progress.length) {
-      const nextProgress = currentWorkout.exercises_progress[nextIndex];
-      const dayExercise = getDayExerciseByProgress(currentWorkout.training_day, nextProgress);
-      const defaults = getExerciseDefaults(dayExercise, nextProgress);
-
-      set({
-        currentExerciseIndex: nextIndex,
-        currentSetNumber: Math.min(
-          (nextProgress?.completed_sets || 0) + 1,
-          dayExercise?.sets || 1,
-        ),
-        currentReps: defaults.reps,
-        currentWeight: defaults.weight,
-        currentEffortValue: defaults.effortValue,
-      });
-    }
   },
 
   clearError: () => set({ error: null }),
@@ -534,15 +407,11 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       currentWorkout: null,
       missedWorkouts: [],
       dashboardDataVersion: 0,
+      workoutLogsVersion: 0,
       isLoading: false,
       isStartingWorkout: false,
       isSavingSet: false,
       isLoadingMissed: false,
       error: null,
-      currentExerciseIndex: 0,
-      currentSetNumber: 1,
-      currentReps: 12,
-      currentWeight: 0,
-      currentEffortValue: null,
     }),
 }));

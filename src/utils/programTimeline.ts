@@ -352,7 +352,7 @@ const buildEmptyCardState = (
 
 const getSessionActionLabel = (session: ProgramTimelineSession) => {
   if (session.actual_status === 'completed') {
-    return 'ver sesion';
+    return 'ver registro';
   }
 
   if (session.actual_status === 'abandoned') {

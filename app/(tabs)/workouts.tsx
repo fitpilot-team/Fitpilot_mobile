@@ -1,4 +1,4 @@
-import React, { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import React, { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
 import { AnalyticsRangeSelector } from '../../src/components/workout-analytics/AnalyticsRangeSelector';
@@ -30,6 +31,7 @@ import {
   updateWorkoutAnalyticsPreferences,
 } from '../../src/services/workoutAnalytics';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import { useWorkoutStore } from '../../src/store/workoutStore';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
@@ -412,6 +414,8 @@ export default function WorkoutsScreen() {
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset();
+  const isFocused = useIsFocused();
+  const { workoutLogsVersion } = useWorkoutStore();
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
   const [dashboard, setDashboard] = useState<WorkoutAnalyticsDashboard | null>(null);
   const [activeTab, setActiveTab] = useState<WorkoutAnalyticsTab>('overview');
@@ -429,6 +433,7 @@ export default function WorkoutsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const deferredExerciseSearch = useDeferredValue(exerciseSearchQuery);
+  const lastLoadedWorkoutLogsVersionRef = useRef<number | null>(null);
 
   const hasAnyHistory = (dashboard?.summary.total_sessions ?? 0) > 0;
   const hasRangeData = (dashboard?.summary.sessions_in_range ?? 0) > 0;
@@ -499,8 +504,22 @@ export default function WorkoutsScreen() {
   );
 
   useEffect(() => {
-    void loadDashboard();
-  }, [loadDashboard]);
+    if (!isFocused) {
+      return;
+    }
+
+    if (dashboard && lastLoadedWorkoutLogsVersionRef.current === workoutLogsVersion) {
+      return;
+    }
+
+    void (async () => {
+      await loadDashboard();
+      if (activeTab === 'history') {
+        await loadHistoryPage({ reset: true });
+      }
+      lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
+    })();
+  }, [activeTab, dashboard, isFocused, loadDashboard, loadHistoryPage, workoutLogsVersion]);
 
   useEffect(() => {
     if (activeTab !== 'history') {
@@ -516,11 +535,13 @@ export default function WorkoutsScreen() {
         loadDashboard({ refresh: true }),
         loadHistoryPage({ reset: true, refresh: true }),
       ]);
+      lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
       return;
     }
 
     await loadDashboard({ refresh: true });
-  }, [activeTab, loadDashboard, loadHistoryPage]);
+    lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
+  }, [activeTab, loadDashboard, loadHistoryPage, workoutLogsVersion]);
 
   const handleSaveRepRanges = useCallback(async (nextRepRanges: RepRangeBucket[]) => {
     setIsSavingRanges(true);
@@ -529,13 +550,14 @@ export default function WorkoutsScreen() {
       await updateWorkoutAnalyticsPreferences({ rep_ranges: nextRepRanges });
       setIsRangeEditorVisible(false);
       await loadDashboard();
+      lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
     } catch (saveError) {
       const apiError = saveError as ApiError;
       Alert.alert('Error', apiError.message || 'No fue posible guardar tus rangos.');
     } finally {
       setIsSavingRanges(false);
     }
-  }, [loadDashboard]);
+  }, [loadDashboard, workoutLogsVersion]);
 
   const heroMetrics = useMemo(() => {
     const summary = dashboard?.summary;
@@ -872,7 +894,7 @@ export default function WorkoutsScreen() {
                     <View style={[styles.sectionBlock, shellStyle]}>
                       <SectionHeading
                         title="Sesiones recientes"
-                        subtitle="Abre cualquier log para revisar o editar lo registrado."
+                        subtitle="Abre cualquier log para revisar el registro y corregirlo desde detalle si hace falta."
                         actionLabel={recentHistoryPreview.length ? 'Abrir historial' : undefined}
                         onActionPress={recentHistoryPreview.length ? () => handleTabChange('history') : undefined}
                       />

@@ -174,6 +174,7 @@ export interface Macrocycle {
 
 // Workout tracking types
 export type WorkoutStatus = 'in_progress' | 'completed' | 'abandoned';
+export type WorkoutScreenMode = 'review' | 'live' | 'historicalEdit';
 export type AbandonReason = 'time' | 'injury' | 'fatigue' | 'motivation' | 'schedule' | 'other';
 
 export interface ExerciseSetLog {
