@@ -24,6 +24,7 @@ import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 interface DietMealCardProps {
   meal: ClientDietMeal;
   onRecipeIngredientPress?: (recipe: ClientDietRecipeCard, ingredient: ClientDietIngredientRow) => void;
+  onStandaloneFoodPress?: (food: ClientDietFoodRow) => void;
 }
 
 type DietMealCardStyles = ReturnType<typeof createStyles>;
@@ -204,10 +205,9 @@ const IngredientRow: React.FC<{
     : theme.isDark
       ? theme.colors.border
       : foodGroupVisual.borderColor;
-  const isSwappableRecipeIngredient = (
-    accent === 'recipe' &&
+  const isSwappableIngredient = (
     Boolean(onPress) &&
-    Boolean(ingredient.exchangeGroupId && ingredient.recipeIngredientId)
+    Boolean(ingredient.exchangeGroupId && (ingredient.recipeIngredientId || ingredient.menuItemId))
   );
 
   const content = (
@@ -239,7 +239,7 @@ const IngredientRow: React.FC<{
             ) : null}
           </View>
 
-          {isSwappableRecipeIngredient ? (
+          {isSwappableIngredient ? (
             <View
               style={[
                 styles.recipeSwapBadge,
@@ -257,7 +257,7 @@ const IngredientRow: React.FC<{
 
         <PortionChips ingredient={ingredient} accent={accent} styles={styles} theme={theme} />
 
-        {isSwappableRecipeIngredient ? (
+        {isSwappableIngredient ? (
           <View style={styles.recipeSwapHintRow}>
             <Ionicons
               name="sparkles-outline"
@@ -279,15 +279,15 @@ const IngredientRow: React.FC<{
     styles.foodRow,
     isDarkRecipe ? styles.recipeFoodRow : null,
     accent === 'food' ? { borderColor } : null,
-    isSwappableRecipeIngredient ? styles.recipeFoodRowInteractive : null,
+    isSwappableIngredient ? styles.recipeFoodRowInteractive : null,
   ];
 
-  if (isSwappableRecipeIngredient && onPress) {
+  if (isSwappableIngredient && onPress) {
     return (
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={`Cambiar ingrediente ${ingredient.label}`}
+        accessibilityLabel={`Cambiar ${accent === 'recipe' ? 'ingrediente' : 'alimento'} ${ingredient.label}`}
         style={({ pressed }) => [
           ...containerStyle,
           pressed ? styles.recipeFoodRowPressed : null,
@@ -430,7 +430,11 @@ const RecipeCard: React.FC<{
   );
 };
 
-export const DietMealCard: React.FC<DietMealCardProps> = ({ meal, onRecipeIngredientPress }) => {
+export const DietMealCard: React.FC<DietMealCardProps> = ({
+  meal,
+  onRecipeIngredientPress,
+  onStandaloneFoodPress,
+}) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const caloriesLabel = formatCalories(meal.totalCalories);
@@ -520,6 +524,7 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({ meal, onRecipeIngred
                   ingredient={food}
                   styles={styles}
                   theme={theme}
+                  onPress={onStandaloneFoodPress ? () => onStandaloneFoodPress(food) : undefined}
                 />
               ))}
             </View>
