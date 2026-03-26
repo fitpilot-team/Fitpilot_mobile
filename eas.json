@@ -29,5 +29,12 @@
         "EXPO_PUBLIC_PRIVACY_URL": "https://pro.fitpilot.fit/es/privacy"
       }
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6761150149"
+      }
+    }
   }
 }
