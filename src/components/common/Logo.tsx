@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -10,18 +10,17 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useAppTheme } from '../../theme';
 import { brandColors } from '../../constants/colors';
+import { LogoMark } from './LogoMark';
 
-// Import SVG files directly as components
-import GradientLogo from '../../../assets/FitPilot- DarkLogo.svg';
-import StandardLogo from '../../../assets/FitPilot-Logo.svg';
-import FPIcon from '../../../assets/FP-Icon.svg';
+import FullDarkLogo from '../../../assets/logo-full-dark.svg';
+import FullLightLogo from '../../../assets/logo-full-light.svg';
 
 interface LogoProps {
   size?: 'xs' | 'sm' | 'md' | 'lg';
   showText?: boolean;
   animated?: boolean;
-  forceGradient?: boolean;
-  variant?: 'full' | 'icon';
+  color?: string;
+  variant?: 'fullLight' | 'fullDark' | 'mark';
 }
 
 const SIZES = {
@@ -37,12 +36,12 @@ export const Logo: React.FC<LogoProps> = ({
   size = 'md',
   showText = false,
   animated = false,
-  forceGradient = false,
-  variant = 'full',
+  color,
+  variant,
 }) => {
   const { theme } = useAppTheme();
   const progress = useSharedValue(animated ? 0 : 1);
-  const useGradient = forceGradient || theme.isDark;
+  const resolvedVariant = variant ?? (theme.isDark ? 'fullDark' : 'fullLight');
 
   useEffect(() => {
     if (animated) {
@@ -61,28 +60,17 @@ export const Logo: React.FC<LogoProps> = ({
   }));
 
   const dimensions = SIZES[size];
+  const isMark = resolvedVariant === 'mark';
+  const width = showText && !isMark ? dimensions.width * 2.5 : dimensions.width;
+  const height = showText && !isMark ? dimensions.height * 2.5 : dimensions.height;
+  const markColor = color ?? (theme.isDark ? '#ffffff' : brandColors.navy);
 
-  // Use the imported SVG components
-  // Note: FitPilot-GradientLogo.svg has the text integrated
-  const LogoComponent = variant === 'icon' ? FPIcon : (useGradient ? GradientLogo : StandardLogo);
-
-  const iconColor = useMemo(() => {
-    if (variant !== 'icon') {
-      return undefined;
-    }
-    return theme.isDark ? '#FFFFFF' : brandColors.navy;
-  }, [theme.isDark, variant]);
-
-  // Adjust size based on design intent
-  const width = showText && variant !== 'icon' ? dimensions.width * 2.5 : dimensions.width;
-  const height = showText && variant !== 'icon' ? dimensions.height * 2.5 : dimensions.height;
-
-  const content = (
-    <LogoComponent
-      width={width}
-      height={height}
-      color={iconColor}
-    />
+  const content = isMark ? (
+    <LogoMark size={width} wingColor={markColor} />
+  ) : resolvedVariant === 'fullDark' ? (
+    <FullDarkLogo width={width} height={height} />
+  ) : (
+    <FullLightLogo width={width} height={height} />
   );
 
   if (animated) {

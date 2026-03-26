@@ -1,11 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Appearance, View, StyleSheet } from 'react-native';
 import { ThemeProvider } from '@react-navigation/native';
 import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
+import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '../src/store/authStore';
-import { LoadingSpinner } from '../src/components/common';
+import { StartupBrandIntro } from '../src/components/common';
 import { buildNavigationTheme, useAppTheme, useThemedStyles } from '../src/theme';
 
 // Configurar Reanimated logger para suprimir mensajes de strict mode
@@ -13,11 +14,15 @@ configureReanimatedLogger({
   level: ReanimatedLogLevel.warn,
   strict: false,
 });
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
   const { isInitialized, initialize } = useAuthStore();
   const { hydrateTheme, isHydrated, syncWithSystem, theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const [showStartupIntro, setShowStartupIntro] = useState(false);
+  const [isNativeSplashHidden, setIsNativeSplashHidden] = useState(false);
+  const isReady = isInitialized && isHydrated;
 
   useEffect(() => {
     void initialize();
@@ -32,20 +37,45 @@ export default function RootLayout() {
     };
   }, [hydrateTheme, initialize, syncWithSystem]);
 
-  if (!isInitialized || !isHydrated) {
-    return (
-      <View style={styles.loadingContainer}>
-        <LoadingSpinner text="Cargando..." />
-        <StatusBar style={theme.statusBarStyle} />
-      </View>
-    );
+  useEffect(() => {
+    if (!isReady || showStartupIntro || isNativeSplashHidden) {
+      return;
+    }
+
+    setShowStartupIntro(true);
+  }, [isNativeSplashHidden, isReady, showStartupIntro]);
+
+  useEffect(() => {
+    if (!showStartupIntro || isNativeSplashHidden) {
+      return;
+    }
+
+    let cancelled = false;
+    const frame = requestAnimationFrame(() => {
+      void SplashScreen.hideAsync()
+        .catch(() => undefined)
+        .finally(() => {
+          if (!cancelled) {
+            setIsNativeSplashHidden(true);
+          }
+        });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [isNativeSplashHidden, showStartupIntro]);
+
+  if (!isReady) {
+    return null;
   }
 
   const navigationTheme = buildNavigationTheme(theme);
 
   return (
     <ThemeProvider value={navigationTheme}>
-      <>
+      <View style={styles.root}>
         <Stack
           screenOptions={{
             headerShown: false,
@@ -93,18 +123,19 @@ export default function RootLayout() {
             }}
           />
         </Stack>
-        <StatusBar style={theme.statusBarStyle} />
-      </>
+        {showStartupIntro ? (
+          <StartupBrandIntro onComplete={() => setShowStartupIntro(false)} />
+        ) : null}
+        <StatusBar style={showStartupIntro ? 'light' : theme.statusBarStyle} />
+      </View>
     </ThemeProvider>
   );
 }
 
 const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
   StyleSheet.create({
-    loadingContainer: {
+    root: {
       flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
       backgroundColor: theme.colors.background,
     },
   });

@@ -5,6 +5,8 @@ export { Input } from './Input';
 export { PhoneInput } from './PhoneInput';
 export { LoadingSpinner } from './LoadingSpinner';
 export { Logo } from './Logo';
+export { LogoMark } from './LogoMark';
+export { StartupBrandIntro } from './StartupBrandIntro';
 export { GlassCard } from './GlassCard';
 export { Skeleton, WorkoutCardSkeleton, ChartSkeleton, StatCardSkeleton, ListItemSkeleton } from './Skeleton';
 export { TabScreenWrapper } from './TabScreenWrapper';
