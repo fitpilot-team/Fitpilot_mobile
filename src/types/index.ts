@@ -435,6 +435,7 @@ export interface ClientDietPortion {
 
 export interface ClientDietIngredientRow {
   id: string;
+  menuItemId?: number;
   recipeIngredientId?: number;
   foodId?: number | null;
   exchangeGroupId?: number | null;

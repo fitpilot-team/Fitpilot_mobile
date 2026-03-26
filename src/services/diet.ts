@@ -106,17 +106,25 @@ type NutritionFoodSwapCandidateResponse = {
 
 type NutritionMenuItemResponse = {
   id: number;
+  food_id?: number | null;
+  exchange_group_id?: number | null;
   quantity?: number | string | null;
   equivalent_quantity?: number | string | null;
   recipe_id?: number | null;
   serving_unit_id?: number | null;
+  is_client_swap?: boolean | null;
+  original_food_id?: number | null;
+  original_food_name?: string | null;
   foods?: NutritionFoodResponse | null;
   exchange_groups?: {
     name?: string | null;
   } | null;
   serving_units?: {
+    id?: number | null;
+    food_id?: number | null;
     unit_name?: string | null;
     gram_equivalent?: number | string | null;
+    is_exchange_unit?: boolean | null;
   } | null;
   recipe_summary?: NutritionRecipeSummaryResponse | null;
   recipe_detail?: NutritionEmbeddedRecipeDetailResponse | null;
@@ -417,11 +425,17 @@ const resolveRecipeForItem = (
 
 const mapStandaloneFoodRow = (item: NutritionMenuItemResponse): ClientDietFoodRow => ({
   id: String(item.id),
+  menuItemId: item.id,
+  foodId: item.food_id ?? item.foods?.id ?? null,
+  exchangeGroupId: item.exchange_group_id ?? item.foods?.exchange_group_id ?? null,
   label:
     item.foods?.name?.trim() ||
     item.exchange_groups?.name?.trim() ||
     'Alimento',
   exchangeGroupName: item.exchange_groups?.name?.trim() || null,
+  isClientSwap: Boolean(item.is_client_swap),
+  originalFoodId: item.original_food_id ?? null,
+  originalLabel: item.original_food_name?.trim() || null,
   portion: derivePortionFromMenuItem(item),
 });
 
@@ -538,6 +552,11 @@ const mapDietMenu = (
   };
 };
 
+export const mapDietMenuResponse = (
+  menu: NutritionMenuResponse,
+  assignedDate: string,
+): ClientDietMenu => mapDietMenu(menu, assignedDate, new Map());
+
 const mapDietRecipeDetailResponse = (
   recipe: NutritionRecipeDetailResponse,
 ): ClientDietRecipeDetail => {
@@ -604,6 +623,32 @@ export const resetDietRecipeIngredientSwap = async (
   );
 
   return mapDietRecipeDetailResponse(recipe);
+};
+
+export const swapDietStandaloneFood = async (
+  menuId: number,
+  menuItemId: number,
+  foodId: number,
+  assignedDate: string,
+): Promise<ClientDietMenu> => {
+  const menu = await nutritionClient.put<NutritionMenuResponse>(
+    `/menus/${menuId}/items/${menuItemId}/client-swap`,
+    { food_id: foodId },
+  );
+
+  return mapDietMenuResponse(menu, assignedDate);
+};
+
+export const resetDietStandaloneFoodSwap = async (
+  menuId: number,
+  menuItemId: number,
+  assignedDate: string,
+): Promise<ClientDietMenu> => {
+  const menu = await nutritionClient.delete<NutritionMenuResponse>(
+    `/menus/${menuId}/items/${menuItemId}/client-swap`,
+  );
+
+  return mapDietMenuResponse(menu, assignedDate);
 };
 
 export const getTodayDietDateKey = getTodayDateKey;

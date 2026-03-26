@@ -30,13 +30,16 @@ import {
   getClientDietMenuPool,
   getFoodsByExchangeGroup,
   resetDietRecipeIngredientSwap,
+  resetDietStandaloneFoodSwap,
   swapDietRecipeIngredient,
+  swapDietStandaloneFood,
   getTodayDietDateKey,
 } from '../../src/services/diet';
 import { getDashboardContentWidth } from '../../src/utils/layout';
 import { formatLocalDate, getLocalWeekKey } from '../../src/utils/date';
 import type {
   ApiError,
+  ClientDietFoodRow,
   ClientDietIngredientRow,
   ClientDietMenu,
   ClientDietRecipeCard,
@@ -53,8 +56,13 @@ const formatLongDate = (value: string) =>
   });
 
 type SelectedSwapTarget = {
+  type: 'recipe';
   recipeId: number;
   ingredient: ClientDietIngredientRow;
+} | {
+  type: 'standalone';
+  menuId: number;
+  ingredient: ClientDietFoodRow;
 } | null;
 
 const applyRecipeDetailToRecipeCard = (
@@ -144,6 +152,45 @@ const applyRecipeDetailToMenuPool = (
 
   return Object.fromEntries(nextEntries);
 };
+
+const mergeUpdatedMenu = (
+  currentMenu: ClientDietMenu,
+  updatedMenu: ClientDietMenu,
+): ClientDietMenu => (
+  currentMenu.menuId !== updatedMenu.menuId
+    ? currentMenu
+    : {
+        ...updatedMenu,
+        id: currentMenu.id,
+        assignedDate: currentMenu.assignedDate,
+      }
+);
+
+const applyUpdatedMenuToWeekDays = (
+  days: ClientDietWeekDay[],
+  updatedMenu: ClientDietMenu,
+): ClientDietWeekDay[] =>
+  days.map((day) => {
+    if (!day.assignedMenu || day.assignedMenu.menuId !== updatedMenu.menuId) {
+      return day;
+    }
+
+    return {
+      ...day,
+      assignedMenu: mergeUpdatedMenu(day.assignedMenu, updatedMenu),
+    };
+  });
+
+const applyUpdatedMenuToMenuPool = (
+  poolByDate: Record<string, ClientDietMenu[]>,
+  updatedMenu: ClientDietMenu,
+): Record<string, ClientDietMenu[]> =>
+  Object.fromEntries(
+    Object.entries(poolByDate).map(([dateKey, menus]) => [
+      dateKey,
+      menus.map((menu) => mergeUpdatedMenu(menu, updatedMenu)),
+    ]),
+  );
 
 export default function DietScreen() {
   const { width } = useWindowDimensions();
@@ -393,7 +440,11 @@ export default function DietScreen() {
   const loadSwapFoods = useCallback(async (ingredient: ClientDietIngredientRow | null) => {
     if (!ingredient?.exchangeGroupId) {
       setSwapFoods([]);
-      setSwapFoodsError('Este ingrediente no tiene equivalentes disponibles.');
+      setSwapFoodsError(
+        ingredient?.recipeIngredientId
+          ? 'Este ingrediente no tiene equivalentes disponibles.'
+          : 'Este alimento no tiene equivalentes disponibles.',
+      );
       return;
     }
 
@@ -426,6 +477,12 @@ export default function DietScreen() {
     setError(null);
   }, []);
 
+  const applyUpdatedMenu = useCallback((menu: ClientDietMenu) => {
+    setDietDays((currentDays) => applyUpdatedMenuToWeekDays(currentDays, menu));
+    setMenuPoolByDate((currentPool) => applyUpdatedMenuToMenuPool(currentPool, menu));
+    setError(null);
+  }, []);
+
   const handleOpenRecipeIngredientSwap = useCallback(
     (recipe: ClientDietRecipeCard, ingredient: ClientDietIngredientRow) => {
       if (!ingredient.exchangeGroupId || !ingredient.recipeIngredientId) {
@@ -433,8 +490,27 @@ export default function DietScreen() {
       }
 
       setSelectedSwapTarget({
+        type: 'recipe',
         recipeId: recipe.recipeId,
         ingredient,
+      });
+      setSwapFoods([]);
+      setSwapFoodsError(null);
+      setIsSwapModalVisible(true);
+    },
+    [],
+  );
+
+  const handleOpenStandaloneFoodSwap = useCallback(
+    (menu: ClientDietMenu, food: ClientDietFoodRow) => {
+      if (!food.exchangeGroupId || !food.menuItemId) {
+        return;
+      }
+
+      setSelectedSwapTarget({
+        type: 'standalone',
+        menuId: menu.menuId,
+        ingredient: food,
       });
       setSwapFoods([]);
       setSwapFoodsError(null);
@@ -462,7 +538,7 @@ export default function DietScreen() {
   }, [loadSwapFoods, selectedIngredient]);
 
   const handleSelectSwapFood = useCallback(async (food: ClientFoodSwapCandidate) => {
-    if (!selectedSwapTarget?.recipeId || !selectedIngredient?.recipeIngredientId) {
+    if (!selectedSwapTarget || !selectedIngredient) {
       return;
     }
 
@@ -470,12 +546,25 @@ export default function DietScreen() {
     setSwapFoodsError(null);
 
     try {
-      const response = await swapDietRecipeIngredient(
-        selectedSwapTarget.recipeId,
-        selectedIngredient.recipeIngredientId,
-        food.id,
-      );
-      applyUpdatedRecipeDetail(response);
+      if (selectedSwapTarget.type === 'recipe' && selectedIngredient.recipeIngredientId) {
+        const response = await swapDietRecipeIngredient(
+          selectedSwapTarget.recipeId,
+          selectedIngredient.recipeIngredientId,
+          food.id,
+        );
+        applyUpdatedRecipeDetail(response);
+      } else if (selectedSwapTarget.type === 'standalone' && selectedIngredient.menuItemId) {
+        const response = await swapDietStandaloneFood(
+          selectedSwapTarget.menuId,
+          selectedIngredient.menuItemId,
+          food.id,
+          selectedDate,
+        );
+        applyUpdatedMenu(response);
+      } else {
+        return;
+      }
+
       setIsSwapModalVisible(false);
       setSelectedSwapTarget(null);
     } catch (saveError) {
@@ -484,10 +573,10 @@ export default function DietScreen() {
     } finally {
       setIsSavingSwap(false);
     }
-  }, [applyUpdatedRecipeDetail, selectedIngredient?.recipeIngredientId, selectedSwapTarget?.recipeId]);
+  }, [applyUpdatedMenu, applyUpdatedRecipeDetail, selectedDate, selectedIngredient, selectedSwapTarget]);
 
   const handleResetSwap = useCallback(async () => {
-    if (!selectedSwapTarget?.recipeId || !selectedIngredient?.recipeIngredientId) {
+    if (!selectedSwapTarget || !selectedIngredient) {
       return;
     }
 
@@ -495,20 +584,38 @@ export default function DietScreen() {
     setSwapFoodsError(null);
 
     try {
-      const response = await resetDietRecipeIngredientSwap(
-        selectedSwapTarget.recipeId,
-        selectedIngredient.recipeIngredientId,
-      );
-      applyUpdatedRecipeDetail(response);
+      if (selectedSwapTarget.type === 'recipe' && selectedIngredient.recipeIngredientId) {
+        const response = await resetDietRecipeIngredientSwap(
+          selectedSwapTarget.recipeId,
+          selectedIngredient.recipeIngredientId,
+        );
+        applyUpdatedRecipeDetail(response);
+      } else if (selectedSwapTarget.type === 'standalone' && selectedIngredient.menuItemId) {
+        const response = await resetDietStandaloneFoodSwap(
+          selectedSwapTarget.menuId,
+          selectedIngredient.menuItemId,
+          selectedDate,
+        );
+        applyUpdatedMenu(response);
+      } else {
+        return;
+      }
+
       setIsSwapModalVisible(false);
       setSelectedSwapTarget(null);
     } catch (resetError) {
       const apiError = resetError as ApiError;
-      setSwapFoodsError(apiError.message || 'No fue posible restaurar el ingrediente original.');
+      setSwapFoodsError(
+        apiError.message || (
+          selectedSwapTarget.type === 'recipe'
+            ? 'No fue posible restaurar el ingrediente original.'
+            : 'No fue posible restaurar el alimento original.'
+        ),
+      );
     } finally {
       setIsSavingSwap(false);
     }
-  }, [applyUpdatedRecipeDetail, selectedIngredient?.recipeIngredientId, selectedSwapTarget?.recipeId]);
+  }, [applyUpdatedMenu, applyUpdatedRecipeDetail, selectedDate, selectedIngredient, selectedSwapTarget]);
 
   if (!user) {
     router.replace('/login');
@@ -622,6 +729,11 @@ export default function DietScreen() {
                           <DietMealCard
                             meal={meal}
                             onRecipeIngredientPress={handleOpenRecipeIngredientSwap}
+                            onStandaloneFoodPress={
+                              visibleMenu
+                                ? (food) => handleOpenStandaloneFoodSwap(visibleMenu, food)
+                                : undefined
+                            }
                           />
                         </Animated.View>
                       ))

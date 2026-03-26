@@ -14,11 +14,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../common';
 import { borderRadius, fontSize, spacing } from '../../constants/colors';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
-import type { ClientDietIngredientRow, ClientFoodSwapCandidate } from '../../types';
+import type { ClientDietFoodRow, ClientDietIngredientRow, ClientFoodSwapCandidate } from '../../types';
 
 interface RecipeIngredientSwapModalProps {
   visible: boolean;
-  ingredient: ClientDietIngredientRow | null;
+  ingredient: ClientDietIngredientRow | ClientDietFoodRow | null;
   foods: ClientFoodSwapCandidate[];
   isLoading: boolean;
   isSaving: boolean;
@@ -93,9 +93,10 @@ export const RecipeIngredientSwapModal: React.FC<RecipeIngredientSwapModalProps>
     onClose();
   };
 
+  const isRecipeIngredient = Boolean(ingredient?.recipeIngredientId);
   const supportingText = ingredient?.exchangeGroupName
     ? `Elige un equivalente dentro de ${ingredient.exchangeGroupName}.`
-    : 'Elige un alimento equivalente para este ingrediente.';
+    : `Elige un alimento equivalente para este ${isRecipeIngredient ? 'ingrediente' : 'alimento'}.`;
 
   return (
     <Modal
@@ -109,8 +110,8 @@ export const RecipeIngredientSwapModal: React.FC<RecipeIngredientSwapModalProps>
         <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
           <View style={styles.header}>
             <View style={styles.headerCopy}>
-              <Text style={styles.title}>Cambiar ingrediente</Text>
-              <Text style={styles.subtitle}>{ingredient?.label || 'Ingrediente'}</Text>
+              <Text style={styles.title}>{isRecipeIngredient ? 'Cambiar ingrediente' : 'Cambiar alimento'}</Text>
+              <Text style={styles.subtitle}>{ingredient?.label || (isRecipeIngredient ? 'Ingrediente' : 'Alimento')}</Text>
               <Text style={styles.supportingText}>{supportingText}</Text>
             </View>
             <TouchableOpacity
@@ -158,7 +159,7 @@ export const RecipeIngredientSwapModal: React.FC<RecipeIngredientSwapModalProps>
               <ActivityIndicator size="small" color={theme.colors.primary} />
               <Text style={styles.stateTitle}>Cargando equivalentes...</Text>
               <Text style={styles.stateText}>
-                Estamos buscando alimentos del mismo grupo para este ingrediente.
+                Estamos buscando alimentos del mismo grupo para este {isRecipeIngredient ? 'ingrediente' : 'alimento'}.
               </Text>
             </View>
           ) : error && foods.length === 0 ? (
