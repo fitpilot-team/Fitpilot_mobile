@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Image, Modal, Pressable, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -78,6 +78,78 @@ const getIngredientMeasure = (ingredient: ClientDietIngredientRow | ClientDietFo
   return METRIC_MEASURE_PATTERN.test(householdLabel) ? householdLabel : '--';
 };
 
+const PortionChip: React.FC<{
+  label: string;
+  value: string;
+  isDarkRecipe: boolean;
+  styles: DietMealCardStyles;
+  theme: AppTheme;
+}> = ({
+  label,
+  value,
+  isDarkRecipe,
+  styles,
+  theme,
+}) => {
+  const chipRef = useRef<View>(null);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
+
+  if (!value || value === '--') return null;
+
+  const handlePress = () => {
+    chipRef.current?.measureInWindow((x, y, width, height) => {
+      setPosition({ x, y, width, height });
+      setTooltipVisible(true);
+    });
+  };
+
+  return (
+    <>
+      <View ref={chipRef} collapsable={false}>
+        <Pressable
+          onPress={handlePress}
+          style={({ pressed }) => [
+            styles.portionChip,
+            isDarkRecipe ? styles.recipePortionChip : null,
+            pressed && styles.portionChipPressed,
+          ]}
+        >
+          <Text style={[styles.portionChipText, isDarkRecipe ? styles.recipePortionChipText : null]}>
+            {value}
+          </Text>
+        </Pressable>
+      </View>
+
+      <Modal
+        visible={tooltipVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTooltipVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setTooltipVisible(false)}>
+          <View style={styles.tooltipOverlay}>
+            <View
+              style={[
+                styles.tooltipContent,
+                {
+                  position: 'absolute',
+                  top: position.y - 72,
+                  left: Math.max(16, position.x + position.width / 2 - 80),
+                },
+              ]}
+            >
+              <Text style={styles.tooltipLabel}>{label}</Text>
+              <Text style={styles.tooltipValue}>{value}</Text>
+              <View style={styles.tooltipArrow} />
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+    </>
+  );
+};
+
 const PortionChips: React.FC<{
   ingredient: ClientDietIngredientRow | ClientDietFoodRow;
   accent: IngredientAccent;
@@ -94,32 +166,20 @@ const PortionChips: React.FC<{
 
   return (
     <View style={styles.portionRow}>
-      <View style={[styles.portionInfoItem, isDarkRecipe ? styles.recipePortionInfoItem : null]}>
-        <Text style={[styles.portionInfoLabel, isDarkRecipe ? styles.recipePortionInfoLabel : null]}>
-          Unidad casera
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={[styles.portionInfoValue, isDarkRecipe ? styles.recipePortionInfoValue : null]}
-        >
-          {ingredient.portion.householdLabel || '--'}
-        </Text>
-      </View>
-      <View style={[styles.portionInfoItem, isDarkRecipe ? styles.recipePortionInfoItem : null]}>
-        <Text style={[styles.portionInfoLabel, isDarkRecipe ? styles.recipePortionInfoLabel : null]}>
-          Medida
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.portionInfoValue,
-            styles.portionInfoValueRight,
-            isDarkRecipe ? styles.recipePortionInfoValue : null,
-          ]}
-        >
-          {measure}
-        </Text>
-      </View>
+      <PortionChip
+        label="Unidad casera"
+        value={ingredient.portion.householdLabel || '--'}
+        isDarkRecipe={isDarkRecipe}
+        styles={styles}
+        theme={theme}
+      />
+      <PortionChip
+        label="Medida"
+        value={measure}
+        isDarkRecipe={isDarkRecipe}
+        styles={styles}
+        theme={theme}
+      />
     </View>
   );
 };
@@ -766,6 +826,78 @@ function createStyles(theme: AppTheme) {
     },
     recipePortionInfoValue: {
       color: DARK_RECIPE_INGREDIENT_CHIP_VALUE,
+    },
+    portionChip: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: 6,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.isDark ? theme.colors.surfaceAlt : colors.white,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.colors.border : '#E2E8F0',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    recipePortionChip: {
+      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+      borderColor: 'rgba(103, 182, 223, 0.2)',
+    },
+    portionChipPressed: {
+      opacity: 0.8,
+      transform: [{ scale: 0.96 }],
+    },
+    portionChipText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    recipePortionChipText: {
+      color: DARK_RECIPE_INGREDIENT_CHIP_VALUE,
+    },
+    tooltipOverlay: {
+      flex: 1,
+      backgroundColor: 'transparent',
+    },
+    tooltipContent: {
+      backgroundColor: theme.isDark ? '#1E293B' : '#FFFFFF',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderRadius: borderRadius.lg,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 10,
+      elevation: 8,
+      minWidth: 160,
+      maxWidth: 240,
+    },
+    tooltipLabel: {
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      color: theme.isDark ? '#94A3B8' : '#64748B',
+      letterSpacing: 0.8,
+      marginBottom: 4,
+    },
+    tooltipValue: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+      textAlign: 'center',
+    },
+    tooltipArrow: {
+      position: 'absolute',
+      bottom: -6,
+      left: '50%',
+      marginLeft: -6,
+      width: 12,
+      height: 12,
+      backgroundColor: theme.isDark ? '#1E293B' : '#FFFFFF',
+      transform: [{ rotate: '45deg' }],
+      zIndex: -1,
     },
     recipeSwapHintRow: {
       marginTop: spacing.sm,

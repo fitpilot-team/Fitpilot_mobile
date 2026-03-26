@@ -716,6 +716,7 @@ export default function MeasurementsScreen() {
           accessibilityLabel="Registrar nueva medicion"
           icon={<Ionicons name="add-outline" size={28} color="#ffffff" />}
           onPress={() => setIsFormVisible(true)}
+          bottomOffset={100}
         />
 
         <MeasurementDetailModal
