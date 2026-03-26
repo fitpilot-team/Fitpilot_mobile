@@ -15,8 +15,9 @@ import { Button, Card, LoadingSpinner } from '../../../src/components/common';
 import { AnalyticsRangeSelector } from '../../../src/components/workout-analytics/AnalyticsRangeSelector';
 import { ExerciseTrendChart } from '../../../src/components/workout-analytics/ExerciseTrendChart';
 import { DEFAULT_WORKOUT_ANALYTICS_RANGE } from '../../../src/constants/workoutAnalytics';
-import { borderRadius, colors, fontSize, shadows, spacing } from '../../../src/constants/colors';
+import { borderRadius, fontSize, shadows, spacing } from '../../../src/constants/colors';
 import { getWorkoutAnalyticsExerciseDetail } from '../../../src/services/workoutAnalytics';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../../src/theme';
 import type {
   ApiError,
   ExerciseTrendDetail,
@@ -30,24 +31,13 @@ import {
   normalizeWorkoutAnalyticsRange,
 } from '../../../src/utils/workoutAnalytics';
 
-const DetailSummaryCard = ({
-  value,
-  label,
-}: {
-  value: string;
-  label: string;
-}) => (
-  <View style={styles.summaryCard}>
-    <Text style={styles.summaryValue}>{value}</Text>
-    <Text style={styles.summaryLabel}>{label}</Text>
-  </View>
-);
-
 export default function ExerciseTrendDetailScreen() {
   const { exerciseId, range: rangeParam } = useLocalSearchParams<{
     exerciseId: string;
     range?: string;
   }>();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
   const [range, setRange] = useState<WorkoutAnalyticsRange>(
     normalizeWorkoutAnalyticsRange(rangeParam, DEFAULT_WORKOUT_ANALYTICS_RANGE),
@@ -132,7 +122,7 @@ export default function ExerciseTrendDetailScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} activeOpacity={0.85} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color={colors.gray[900]} />
+          <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.title}>{detail?.exercise_name ?? 'Ejercicio'}</Text>
@@ -148,7 +138,9 @@ export default function ExerciseTrendDetailScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={() => void loadDetail({ refresh: true })}
-            tintColor={colors.primary[500]}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+            progressBackgroundColor={theme.colors.surface}
           />
         }
       >
@@ -165,7 +157,10 @@ export default function ExerciseTrendDetailScreen() {
         {summaryCards.length ? (
           <View style={styles.summaryGrid}>
             {summaryCards.map((card) => (
-              <DetailSummaryCard key={card.label} value={card.value} label={card.label} />
+              <View key={card.label} style={styles.summaryCard}>
+                <Text style={styles.summaryValue}>{card.value}</Text>
+                <Text style={styles.summaryLabel}>{card.label}</Text>
+              </View>
             ))}
           </View>
         ) : null}
@@ -218,7 +213,7 @@ export default function ExerciseTrendDetailScreen() {
               ))
           ) : (
             <Card style={styles.emptyCard}>
-              <Ionicons name="analytics-outline" size={40} color={colors.gray[300]} />
+              <Ionicons name="analytics-outline" size={40} color={theme.colors.iconMuted} />
               <Text style={styles.emptyTitle}>Sin registros en este rango</Text>
               <Text style={styles.emptyText}>
                 Cambia la ventana temporal para revisar mas sesiones de este ejercicio.
@@ -231,165 +226,176 @@ export default function ExerciseTrendDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.white,
-    ...shadows.sm,
-  },
-  headerCopy: {
-    flex: 1,
-  },
-  title: {
-    fontSize: fontSize['2xl'],
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  subtitle: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl + 80,
-    gap: spacing.lg,
-  },
-  errorCard: {
-    gap: spacing.sm,
-  },
-  errorTitle: {
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  errorText: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  summaryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  summaryCard: {
-    width: '48%',
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.white,
-    padding: spacing.md,
-    ...shadows.sm,
-  },
-  summaryValue: {
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  summaryLabel: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-    textTransform: 'uppercase',
-  },
-  chartCard: {
-    padding: spacing.lg,
-  },
-  sectionContainer: {
-    gap: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  sectionSubtitle: {
-    marginTop: spacing.xs,
-    marginBottom: spacing.md,
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-  },
-  recordCard: {
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.white,
-    padding: spacing.md,
-    ...shadows.sm,
-  },
-  recordTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    alignItems: 'center',
-  },
-  recordDate: {
-    flex: 1,
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-    color: colors.gray[900],
-    textTransform: 'capitalize',
-  },
-  recordBucket: {
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.primary[50],
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  recordBucketText: {
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    color: colors.primary[700],
-  },
-  recordStatsRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: spacing.md,
-  },
-  recordStatPill: {
-    flex: 1,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.gray[50],
-    padding: spacing.sm,
-  },
-  recordStatLabel: {
-    fontSize: fontSize.xs,
-    color: colors.gray[500],
-  },
-  recordStatValue: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  emptyCard: {
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.xl,
-  },
-  emptyTitle: {
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  emptyText: {
-    fontSize: fontSize.sm,
-    color: colors.gray[500],
-    textAlign: 'center',
-  },
-});
+const createStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...shadows.sm,
+    },
+    headerCopy: {
+      flex: 1,
+    },
+    title: {
+      fontSize: fontSize['2xl'],
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: spacing.lg,
+      paddingBottom: spacing.xxl + 80,
+      gap: spacing.lg,
+    },
+    errorCard: {
+      gap: spacing.sm,
+    },
+    errorTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    errorText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    summaryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+    },
+    summaryCard: {
+      width: '48%',
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.md,
+      ...shadows.sm,
+    },
+    summaryValue: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    summaryLabel: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+    },
+    chartCard: {
+      padding: spacing.lg,
+    },
+    sectionContainer: {
+      gap: spacing.md,
+    },
+    sectionTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    sectionSubtitle: {
+      marginTop: spacing.xs,
+      marginBottom: spacing.md,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    recordCard: {
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.md,
+      ...shadows.sm,
+    },
+    recordTopRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+      alignItems: 'center',
+    },
+    recordDate: {
+      flex: 1,
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+      textTransform: 'capitalize',
+    },
+    recordBucket: {
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.primarySoft,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+    },
+    recordBucketText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.primary,
+    },
+    recordStatsRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
+      marginTop: spacing.md,
+    },
+    recordStatPill: {
+      flex: 1,
+      borderRadius: borderRadius.md,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.sm,
+    },
+    recordStatLabel: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    recordStatValue: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    emptyCard: {
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingVertical: spacing.xl,
+    },
+    emptyTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    emptyText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+    },
+  });
