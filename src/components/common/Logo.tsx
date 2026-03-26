@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -9,21 +9,24 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import { useAppTheme } from '../../theme';
+import { brandColors } from '../../constants/colors';
 
 // Import SVG files directly as components
 import GradientLogo from '../../../assets/FitPilot- DarkLogo.svg';
 import StandardLogo from '../../../assets/FitPilot-Logo.svg';
+import FPIcon from '../../../assets/FP-Icon.svg';
 
 interface LogoProps {
   size?: 'xs' | 'sm' | 'md' | 'lg';
   showText?: boolean;
   animated?: boolean;
   forceGradient?: boolean;
+  variant?: 'full' | 'icon';
 }
 
 const SIZES = {
   xs: { width: 28, height: 28 },
-  sm: { width: 40, height: 40 },
+  sm: { width: 55, height: 55 },
   md: { width: 80, height: 80 },
   lg: { width: 160, height: 160 },
 };
@@ -35,6 +38,7 @@ export const Logo: React.FC<LogoProps> = ({
   showText = false,
   animated = false,
   forceGradient = false,
+  variant = 'full',
 }) => {
   const { theme } = useAppTheme();
   const progress = useSharedValue(animated ? 0 : 1);
@@ -60,16 +64,24 @@ export const Logo: React.FC<LogoProps> = ({
 
   // Use the imported SVG components
   // Note: FitPilot-GradientLogo.svg has the text integrated
-  const LogoComponent = useGradient ? GradientLogo : StandardLogo;
+  const LogoComponent = variant === 'icon' ? FPIcon : (useGradient ? GradientLogo : StandardLogo);
+
+  const iconColor = useMemo(() => {
+    if (variant !== 'icon') {
+      return undefined;
+    }
+    return theme.isDark ? '#FFFFFF' : brandColors.navy;
+  }, [theme.isDark, variant]);
 
   // Adjust size based on design intent
-  const width = showText ? dimensions.width * 2.5 : dimensions.width;
-  const height = showText ? dimensions.height * 2.5 : dimensions.height;
+  const width = showText && variant !== 'icon' ? dimensions.width * 2.5 : dimensions.width;
+  const height = showText && variant !== 'icon' ? dimensions.height * 2.5 : dimensions.height;
 
   const content = (
     <LogoComponent
       width={width}
       height={height}
+      color={iconColor}
     />
   );
 

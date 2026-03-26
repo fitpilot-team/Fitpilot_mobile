@@ -73,7 +73,7 @@ export default function LoginScreen() {
               animated
             />
           </View>
-          <Text style={styles.tagline}>Tu entrenamiento personalizado</Text>
+          <Text style={styles.tagline}>Tu entrenamiento y dieta personalizados</Text>
         </View>
       </LinearGradient>
 

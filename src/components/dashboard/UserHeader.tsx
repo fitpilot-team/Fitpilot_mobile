@@ -65,7 +65,7 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
 
       <View style={styles.rightSection}>
         <View style={styles.logoContainer}>
-          <Logo size="sm" showText={false} />
+          <Logo size="sm" variant="icon" showText={false} />
         </View>
         {onMenuPress ? (
           <TouchableOpacity onPress={onMenuPress} style={styles.menuButton}>
