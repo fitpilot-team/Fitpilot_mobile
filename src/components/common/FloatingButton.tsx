@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   ViewStyle,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, shadows } from '../../constants/colors';
-import { useAppTheme } from '../../theme';
+import { brandColors, colors, shadows } from '../../constants/colors';
 
 interface FloatingButtonProps {
   onPress: () => void;
@@ -34,7 +34,6 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   style,
 }) => {
   const insets = useSafeAreaInsets();
-  const { theme } = useAppTheme();
   const isDisabled = disabled || isLoading;
 
   return (
@@ -52,13 +51,26 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
           borderRadius: size / 2,
           bottom: Math.max(insets.bottom, 0) + bottomOffset,
           right: rightOffset,
-          backgroundColor: theme.colors.primary,
         },
         isDisabled && styles.disabled,
         style,
       ]}
     >
-      {isLoading ? <ActivityIndicator color={colors.white} size="small" /> : icon}
+      <LinearGradient
+        colors={[brandColors.navy, brandColors.sky]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[
+          styles.gradient,
+          {
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+          },
+        ]}
+      >
+        {isLoading ? <ActivityIndicator color={colors.white} size="small" /> : icon}
+      </LinearGradient>
     </TouchableOpacity>
   );
 };
@@ -66,10 +78,13 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
 const styles = StyleSheet.create({
   button: {
     position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
     ...shadows.lg,
     elevation: 8,
+  },
+  gradient: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   disabled: {
     opacity: 0.6,

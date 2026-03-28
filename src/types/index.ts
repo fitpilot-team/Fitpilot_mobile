@@ -535,7 +535,7 @@ export interface ClientDietWeekDay {
   assignedDate: string;
   isToday: boolean;
   assignedMenuId: number | null;
-  assignedMenu: ClientDietMenu | null;
+  menuOptions: ClientDietMenu[];
 }
 
 // API types

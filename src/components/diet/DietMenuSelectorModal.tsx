@@ -18,8 +18,10 @@ interface DietMenuSelectorModalProps {
   visible: boolean;
   dateLabel: string;
   menus: ClientDietMenu[];
-  selectedMenuId: number | null;
+  getMenuLabel: (menu: ClientDietMenu, index: number) => string;
+  visibleMenuId: number | null;
   assignedMenuId: number | null;
+  primaryMenuId: number | null;
   isLoading: boolean;
   error?: string | null;
   onClose: () => void;
@@ -31,8 +33,10 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
   visible,
   dateLabel,
   menus,
-  selectedMenuId,
+  getMenuLabel,
+  visibleMenuId,
   assignedMenuId,
+  primaryMenuId,
   isLoading,
   error = null,
   onClose,
@@ -91,7 +95,7 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
               <Ionicons name="restaurant-outline" size={36} color={theme.colors.iconMuted} />
               <Text style={styles.emptyTitle}>Sin menus disponibles</Text>
               <Text style={styles.emptyText}>
-                Esta fecha no tiene alternativas visibles en el pool.
+                Esta fecha no tiene menus visibles para mostrar.
               </Text>
             </View>
           ) : (
@@ -100,29 +104,30 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
               contentContainerStyle={styles.contentContainer}
               showsVerticalScrollIndicator={false}
             >
-              {menus.map((menu) => {
-                const isSelected = menu.menuId === selectedMenuId;
+              {menus.map((menu, index) => {
+                const isVisible = menu.menuId === visibleMenuId;
                 const isAssigned = menu.menuId === assignedMenuId;
+                const isPrimary = menu.menuId === primaryMenuId;
 
                 return (
                   <TouchableOpacity
                     key={menu.id}
-                    style={[styles.optionCard, isSelected && styles.optionCardSelected]}
+                    style={[styles.optionCard, isVisible && styles.optionCardSelected]}
                     onPress={() => onSelect(menu)}
                     activeOpacity={0.85}
                   >
                     <View style={styles.optionHeader}>
                       <View style={styles.optionCopy}>
-                        <Text style={styles.optionTitle}>{menu.title}</Text>
+                        <Text style={styles.optionTitle}>{getMenuLabel(menu, index)}</Text>
                         <Text style={styles.optionSubtitle} numberOfLines={2}>
                           {menu.description || 'Sin descripcion adicional.'}
                         </Text>
                       </View>
-                      <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
+                      <View style={[styles.checkCircle, isVisible && styles.checkCircleSelected]}>
                         <Ionicons
-                          name={isSelected ? 'checkmark' : 'ellipse-outline'}
+                          name={isVisible ? 'checkmark' : 'ellipse-outline'}
                           size={18}
-                          color={isSelected ? (theme.isDark ? theme.colors.background : colors.white) : theme.colors.iconMuted}
+                          color={isVisible ? (theme.isDark ? theme.colors.background : colors.white) : theme.colors.iconMuted}
                         />
                       </View>
                     </View>
@@ -144,8 +149,12 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
                         <View style={[styles.badge, styles.assignedBadge]}>
                           <Text style={[styles.badgeText, styles.assignedBadgeText]}>Asignado</Text>
                         </View>
+                      ) : isPrimary ? (
+                        <View style={[styles.badge, styles.primaryBadge]}>
+                          <Text style={[styles.badgeText, styles.primaryBadgeText]}>Principal</Text>
+                        </View>
                       ) : null}
-                      {isSelected && !isAssigned ? (
+                      {isVisible && menu.menuId !== primaryMenuId ? (
                         <View style={[styles.badge, styles.previewBadge]}>
                           <Text style={[styles.badgeText, styles.previewBadgeText]}>Vista previa</Text>
                         </View>
@@ -326,6 +335,9 @@ const createStyles = (theme: AppTheme) =>
     assignedBadge: {
       backgroundColor: theme.isDark ? 'rgba(96, 165, 250, 0.16)' : `${brandColors.navy}12`,
     },
+    primaryBadge: {
+      backgroundColor: theme.isDark ? 'rgba(37, 99, 235, 0.18)' : `${brandColors.navy}16`,
+    },
     previewBadge: {
       backgroundColor: theme.isDark ? 'rgba(103, 182, 223, 0.18)' : `${brandColors.sky}16`,
     },
@@ -337,6 +349,9 @@ const createStyles = (theme: AppTheme) =>
     },
     assignedBadgeText: {
       color: theme.isDark ? theme.colors.primary : brandColors.navy,
+    },
+    primaryBadgeText: {
+      color: theme.isDark ? colors.white : brandColors.navy,
     },
     previewBadgeText: {
       color: brandColors.sky,

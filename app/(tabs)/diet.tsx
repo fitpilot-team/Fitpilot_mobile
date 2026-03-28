@@ -27,7 +27,7 @@ import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/ho
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import {
   getClientDietCalendar,
-  getClientDietMenuPool,
+  getClientDietMenuCalendar,
   getFoodsByExchangeGroup,
   resetDietRecipeIngredientSwap,
   resetDietStandaloneFoodSwap,
@@ -36,6 +36,12 @@ import {
   getTodayDietDateKey,
 } from '../../src/services/diet';
 import { getDashboardContentWidth } from '../../src/utils/layout';
+import {
+  mergeDietMenuOptionsByDate,
+  resolvePrimaryDietMenu,
+  resolvePrimaryDietMenuId,
+  resolveVisibleDietMenu,
+} from '../../src/utils/dietMenuSelection';
 import { formatLocalDate, getLocalWeekKey } from '../../src/utils/date';
 import type {
   ApiError,
@@ -120,26 +126,12 @@ const applyRecipeDetailToWeekDays = (
   recipeDetail: ClientDietRecipeDetail,
 ): ClientDietWeekDay[] =>
   days.map((day) => {
-    if (!day.assignedMenu) {
+    if (day.menuOptions.length === 0) {
       return day;
     }
 
-    const nextAssignedMenu = applyRecipeDetailToMenu(day.assignedMenu, recipeDetail);
-    return nextAssignedMenu === day.assignedMenu
-      ? day
-      : {
-          ...day,
-          assignedMenu: nextAssignedMenu,
-        };
-  });
-
-const applyRecipeDetailToMenuPool = (
-  poolByDate: Record<string, ClientDietMenu[]>,
-  recipeDetail: ClientDietRecipeDetail,
-): Record<string, ClientDietMenu[]> => {
-  const nextEntries = Object.entries(poolByDate).map(([dateKey, menus]) => {
     let hasChanges = false;
-    const nextMenus = menus.map((menu) => {
+    const nextMenuOptions = day.menuOptions.map((menu) => {
       const nextMenu = applyRecipeDetailToMenu(menu, recipeDetail);
       if (nextMenu !== menu) {
         hasChanges = true;
@@ -147,11 +139,13 @@ const applyRecipeDetailToMenuPool = (
       return nextMenu;
     });
 
-    return [dateKey, hasChanges ? nextMenus : menus] as const;
+    return !hasChanges
+      ? day
+      : {
+          ...day,
+          menuOptions: nextMenuOptions,
+        };
   });
-
-  return Object.fromEntries(nextEntries);
-};
 
 const mergeUpdatedMenu = (
   currentMenu: ClientDietMenu,
@@ -171,26 +165,17 @@ const applyUpdatedMenuToWeekDays = (
   updatedMenu: ClientDietMenu,
 ): ClientDietWeekDay[] =>
   days.map((day) => {
-    if (!day.assignedMenu || day.assignedMenu.menuId !== updatedMenu.menuId) {
+    if (!day.menuOptions.some((menu) => menu.menuId === updatedMenu.menuId)) {
       return day;
     }
 
     return {
       ...day,
-      assignedMenu: mergeUpdatedMenu(day.assignedMenu, updatedMenu),
+      menuOptions: day.menuOptions.map((menu) => mergeUpdatedMenu(menu, updatedMenu)),
     };
   });
 
-const applyUpdatedMenuToMenuPool = (
-  poolByDate: Record<string, ClientDietMenu[]>,
-  updatedMenu: ClientDietMenu,
-): Record<string, ClientDietMenu[]> =>
-  Object.fromEntries(
-    Object.entries(poolByDate).map(([dateKey, menus]) => [
-      dateKey,
-      menus.map((menu) => mergeUpdatedMenu(menu, updatedMenu)),
-    ]),
-  );
+const buildDietMenuLabel = (index: number) => `Menu ${index + 1}`;
 
 export default function DietScreen() {
   const { width } = useWindowDimensions();
@@ -203,9 +188,9 @@ export default function DietScreen() {
   const [dietDays, setDietDays] = useState<ClientDietWeekDay[]>([]);
   const [selectedDate, setSelectedDate] = useState(getTodayDietDateKey());
   const [previewMenuIdByDate, setPreviewMenuIdByDate] = useState<Record<string, number>>({});
-  const [menuPoolByDate, setMenuPoolByDate] = useState<Record<string, ClientDietMenu[]>>({});
-  const [menuPoolLoadingByDate, setMenuPoolLoadingByDate] = useState<Record<string, boolean>>({});
-  const [menuPoolErrorByDate, setMenuPoolErrorByDate] = useState<Record<string, string | null>>({});
+  const [menuOptionsHydratedByDate, setMenuOptionsHydratedByDate] = useState<Record<string, boolean>>({});
+  const [menuOptionsLoadingByDate, setMenuOptionsLoadingByDate] = useState<Record<string, boolean>>({});
+  const [menuOptionsErrorByDate, setMenuOptionsErrorByDate] = useState<Record<string, string | null>>({});
   const [isMenuSelectorVisible, setIsMenuSelectorVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -238,9 +223,9 @@ export default function DietScreen() {
         const today = getTodayDietDateKey();
 
         setDietDays(days);
-        setMenuPoolByDate({});
-        setMenuPoolLoadingByDate({});
-        setMenuPoolErrorByDate({});
+        setMenuOptionsHydratedByDate({});
+        setMenuOptionsLoadingByDate({});
+        setMenuOptionsErrorByDate({});
         setPreviewMenuIdByDate({});
         setError(null);
         setIsMenuSelectorVisible(false);
@@ -261,9 +246,9 @@ export default function DietScreen() {
         });
       } catch (loadError: any) {
         setDietDays([]);
-        setMenuPoolByDate({});
-        setMenuPoolLoadingByDate({});
-        setMenuPoolErrorByDate({});
+        setMenuOptionsHydratedByDate({});
+        setMenuOptionsLoadingByDate({});
+        setMenuOptionsErrorByDate({});
         setPreviewMenuIdByDate({});
         setError(loadError?.message || 'No se pudo cargar tu dieta.');
         setIsSwapModalVisible(false);
@@ -279,51 +264,53 @@ export default function DietScreen() {
     [user],
   );
 
-  const loadMenuPool = useCallback(
+  const loadMenuCalendar = useCallback(
     async (dateKey: string) => {
       if (!user) {
-        return [];
+        return;
       }
 
-      if (menuPoolByDate[dateKey]) {
-        return menuPoolByDate[dateKey];
+      if (menuOptionsHydratedByDate[dateKey] || menuOptionsLoadingByDate[dateKey]) {
+        return;
       }
 
-      if (menuPoolLoadingByDate[dateKey]) {
-        return [];
-      }
-
-      setMenuPoolLoadingByDate((currentState) => ({
+      setMenuOptionsLoadingByDate((currentState) => ({
         ...currentState,
         [dateKey]: true,
       }));
 
       try {
-        const poolMenus = await getClientDietMenuPool(user.id, dateKey);
-        setMenuPoolByDate((currentState) => ({
+        const calendarMenusByDate = await getClientDietMenuCalendar(user.id, dateKey);
+        setDietDays((currentDays) => mergeDietMenuOptionsByDate(currentDays, calendarMenusByDate));
+        setMenuOptionsHydratedByDate((currentState) => ({
           ...currentState,
-          [dateKey]: poolMenus,
+          [dateKey]: true,
+          ...Object.fromEntries(
+            Object.keys(calendarMenusByDate).map((assignedDate) => [assignedDate, true] as const),
+          ),
         }));
-        setMenuPoolErrorByDate((currentState) => ({
+        setMenuOptionsErrorByDate((currentState) => ({
           ...currentState,
           [dateKey]: null,
         }));
-        return poolMenus;
       } catch (loadError: any) {
-        const message = loadError?.message || 'No se pudo cargar el pool de menus.';
-        setMenuPoolErrorByDate((currentState) => ({
+        const message = loadError?.message || 'No se pudieron cargar los menus visibles.';
+        setMenuOptionsErrorByDate((currentState) => ({
           ...currentState,
           [dateKey]: message,
         }));
-        return [];
+        setMenuOptionsHydratedByDate((currentState) => ({
+          ...currentState,
+          [dateKey]: true,
+        }));
       } finally {
-        setMenuPoolLoadingByDate((currentState) => ({
+        setMenuOptionsLoadingByDate((currentState) => ({
           ...currentState,
           [dateKey]: false,
         }));
       }
     },
-    [menuPoolByDate, menuPoolLoadingByDate, user],
+    [menuOptionsHydratedByDate, menuOptionsLoadingByDate, user],
   );
 
   useEffect(() => {
@@ -356,66 +343,76 @@ export default function DietScreen() {
     [dietDays, selectedDate],
   );
 
-  const selectedPoolMenus = useMemo(
-    () => menuPoolByDate[selectedDate] ?? [],
-    [menuPoolByDate, selectedDate],
+  useEffect(() => {
+    if (!selectedDay) {
+      return;
+    }
+
+    void loadMenuCalendar(selectedDate);
+  }, [loadMenuCalendar, selectedDate, selectedDay]);
+
+  const selectorMenus = useMemo(
+    () => selectedDay?.menuOptions ?? [],
+    [selectedDay],
   );
 
   const selectedPreviewMenuId = previewMenuIdByDate[selectedDate] ?? null;
-
-  const visibleMenu = useMemo(() => {
-    if (!selectedDay) {
-      return null;
-    }
-
-    if (selectedPreviewMenuId !== null) {
-      return (
-        selectedPoolMenus.find((menu) => menu.menuId === selectedPreviewMenuId) ??
-        selectedDay.assignedMenu
-      );
-    }
-
-    return selectedDay.assignedMenu;
-  }, [selectedDay, selectedPoolMenus, selectedPreviewMenuId]);
+  const primaryMenu = useMemo(() => resolvePrimaryDietMenu(selectedDay), [selectedDay]);
+  const primaryMenuId = useMemo(() => resolvePrimaryDietMenuId(selectedDay), [selectedDay]);
+  const visibleMenu = useMemo(
+    () => resolveVisibleDietMenu(selectedDay, selectedPreviewMenuId),
+    [selectedDay, selectedPreviewMenuId],
+  );
 
   const isPreviewMenu = Boolean(
     visibleMenu &&
-    selectedDay?.assignedMenuId &&
-    visibleMenu.menuId !== selectedDay.assignedMenuId,
+    primaryMenu &&
+    visibleMenu.menuId !== primaryMenu.menuId,
   );
+  const menuLabelsById = useMemo(
+    () => new Map(selectorMenus.map((menu, index) => [menu.menuId, buildDietMenuLabel(index)])),
+    [selectorMenus],
+  );
+  const visibleMenuLabel = visibleMenu
+    ? menuLabelsById.get(visibleMenu.menuId) ?? buildDietMenuLabel(0)
+    : 'Sin menu asignado';
 
-  const hasLoadedPoolForSelectedDate = Object.prototype.hasOwnProperty.call(menuPoolByDate, selectedDate);
-  const hasAvailablePool = Boolean(selectedDay?.assignedMenuId) && (
-    !hasLoadedPoolForSelectedDate || selectedPoolMenus.length > 0
+  const hasHydratedOptionsForSelectedDate = Boolean(menuOptionsHydratedByDate[selectedDate]);
+  const hasAvailableMenuOptions = Boolean(selectedDay) && (
+    selectorMenus.length > 0 || Boolean(selectedDay?.assignedMenuId) || !hasHydratedOptionsForSelectedDate
   );
-  const selectorSubtitle = !selectedDay?.assignedMenuId
+  const selectorSubtitle = !selectedDay
     ? 'No hay menus disponibles para esta fecha.'
     : isPreviewMenu
       ? 'Vista previa local activa. No guarda cambios.'
-      : menuPoolErrorByDate[selectedDate]
-        ? menuPoolErrorByDate[selectedDate] || 'No se pudo cargar el pool.'
-        : hasLoadedPoolForSelectedDate
-          ? `${selectedPoolMenus.length} menu${selectedPoolMenus.length === 1 ? '' : 's'} disponibles en el pool.`
-          : 'Explora los menus disponibles para esta fecha.';
+      : menuOptionsErrorByDate[selectedDate]
+        ? menuOptionsErrorByDate[selectedDate] || 'No se pudieron cargar los menus visibles.'
+        : menuOptionsLoadingByDate[selectedDate]
+          ? 'Cargando menus visibles para esta fecha.'
+          : hasHydratedOptionsForSelectedDate
+            ? selectorMenus.length > 0
+              ? `${selectorMenus.length} menu${selectorMenus.length === 1 ? '' : 's'} visibles para esta fecha.`
+              : 'No hay menus visibles para esta fecha.'
+            : 'Cargando menus visibles para esta fecha.';
 
   const handleOpenMenuSelector = useCallback(async () => {
-    if (!selectedDay?.assignedMenuId) {
+    if (!selectedDay) {
       return;
     }
 
     setIsMenuSelectorVisible(true);
-    if (!menuPoolByDate[selectedDate] && !menuPoolLoadingByDate[selectedDate]) {
-      await loadMenuPool(selectedDate);
+    if (!menuOptionsHydratedByDate[selectedDate] && !menuOptionsLoadingByDate[selectedDate]) {
+      await loadMenuCalendar(selectedDate);
     }
-  }, [loadMenuPool, menuPoolByDate, menuPoolLoadingByDate, selectedDate, selectedDay?.assignedMenuId]);
+  }, [loadMenuCalendar, menuOptionsHydratedByDate, menuOptionsLoadingByDate, selectedDate, selectedDay]);
 
   const handleCloseMenuSelector = useCallback(() => {
     setIsMenuSelectorVisible(false);
   }, []);
 
-  const handleRetryMenuPool = useCallback(async () => {
-    await loadMenuPool(selectedDate);
-  }, [loadMenuPool, selectedDate]);
+  const handleRetryMenuOptions = useCallback(async () => {
+    await loadMenuCalendar(selectedDate);
+  }, [loadMenuCalendar, selectedDate]);
 
   const handleSelectPreviewMenu = useCallback((menu: ClientDietMenu) => {
     if (!selectedDay) {
@@ -425,7 +422,7 @@ export default function DietScreen() {
     setPreviewMenuIdByDate((currentState) => {
       const nextState = { ...currentState };
 
-      if (menu.menuId === selectedDay.assignedMenuId) {
+      if (menu.menuId === primaryMenuId) {
         delete nextState[selectedDay.assignedDate];
       } else {
         nextState[selectedDay.assignedDate] = menu.menuId;
@@ -435,7 +432,7 @@ export default function DietScreen() {
     });
     setIsMenuSelectorVisible(false);
     setRenderVersion((currentValue) => currentValue + 1);
-  }, [selectedDay]);
+  }, [primaryMenuId, selectedDay]);
 
   const loadSwapFoods = useCallback(async (ingredient: ClientDietIngredientRow | null) => {
     if (!ingredient?.exchangeGroupId) {
@@ -473,13 +470,11 @@ export default function DietScreen() {
 
   const applyUpdatedRecipeDetail = useCallback((recipeDetail: ClientDietRecipeDetail) => {
     setDietDays((currentDays) => applyRecipeDetailToWeekDays(currentDays, recipeDetail));
-    setMenuPoolByDate((currentPool) => applyRecipeDetailToMenuPool(currentPool, recipeDetail));
     setError(null);
   }, []);
 
   const applyUpdatedMenu = useCallback((menu: ClientDietMenu) => {
     setDietDays((currentDays) => applyUpdatedMenuToWeekDays(currentDays, menu));
-    setMenuPoolByDate((currentPool) => applyUpdatedMenuToMenuPool(currentPool, menu));
     setError(null);
   }, []);
 
@@ -667,6 +662,7 @@ export default function DietScreen() {
                 <Animated.View entering={getEntryAnimation(140)} style={styles.heroSection}>
                   <DietHero
                     menu={visibleMenu}
+                    menuLabel={visibleMenuLabel}
                     assignedDate={selectedDay.assignedDate}
                     isToday={selectedDay.isToday}
                     isPreview={isPreviewMenu}
@@ -678,28 +674,28 @@ export default function DietScreen() {
                 <TouchableOpacity
                   style={[
                     styles.selectorCard,
-                    !hasAvailablePool && styles.selectorCardDisabled,
+                    !hasAvailableMenuOptions && styles.selectorCardDisabled,
                   ]}
                   onPress={handleOpenMenuSelector}
-                  disabled={!hasAvailablePool}
+                  disabled={!hasAvailableMenuOptions}
                   activeOpacity={0.85}
                 >
                   <View style={styles.selectorCopy}>
                     <Text style={styles.selectorEyebrow}>Menu visible</Text>
                     <Text style={styles.selectorTitle}>
-                      {visibleMenu?.title || 'Sin menu asignado'}
+                      {visibleMenuLabel}
                     </Text>
                     <Text style={styles.selectorSubtitle}>{selectorSubtitle}</Text>
                   </View>
 
                   <View style={styles.selectorAction}>
-                    {menuPoolLoadingByDate[selectedDate] ? (
+                    {menuOptionsLoadingByDate[selectedDate] ? (
                       <ActivityIndicator size="small" color={nutritionTheme.accentStrong} />
                     ) : (
                       <Ionicons
-                        name={hasAvailablePool ? 'chevron-forward-outline' : 'remove-outline'}
+                        name={hasAvailableMenuOptions ? 'chevron-forward-outline' : 'remove-outline'}
                         size={20}
-                        color={hasAvailablePool ? nutritionTheme.accentStrong : theme.colors.iconMuted}
+                        color={hasAvailableMenuOptions ? nutritionTheme.accentStrong : theme.colors.iconMuted}
                       />
                     )}
                   </View>
@@ -782,15 +778,17 @@ export default function DietScreen() {
         </ScrollView>
 
         <DietMenuSelectorModal
-          visible={isMenuSelectorVisible && Boolean(selectedDay?.assignedMenuId)}
+          visible={isMenuSelectorVisible && Boolean(selectedDay)}
           dateLabel={selectedDay ? formatLongDate(selectedDay.assignedDate) : ''}
-          menus={selectedPoolMenus}
-          selectedMenuId={visibleMenu?.menuId ?? selectedDay?.assignedMenuId ?? null}
+          menus={selectorMenus}
+          getMenuLabel={(menu, index) => menuLabelsById.get(menu.menuId) ?? buildDietMenuLabel(index)}
+          visibleMenuId={visibleMenu?.menuId ?? primaryMenuId ?? null}
           assignedMenuId={selectedDay?.assignedMenuId ?? null}
-          isLoading={Boolean(menuPoolLoadingByDate[selectedDate])}
-          error={menuPoolErrorByDate[selectedDate]}
+          primaryMenuId={primaryMenuId}
+          isLoading={Boolean(menuOptionsLoadingByDate[selectedDate])}
+          error={menuOptionsErrorByDate[selectedDate]}
           onClose={handleCloseMenuSelector}
-          onRetry={handleRetryMenuPool}
+          onRetry={handleRetryMenuOptions}
           onSelect={handleSelectPreviewMenu}
         />
 

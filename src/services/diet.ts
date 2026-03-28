@@ -150,6 +150,13 @@ type NutritionDailyBatchResponseItem = NutritionMenuResponse & {
   menu_id_selected_client?: number | null;
 };
 
+type NutritionMenuCalendarResponseItem = NutritionMenuResponse & {
+  assigned_date?: string | null;
+  assignment_start_date?: string | null;
+  assignment_end_date?: string | null;
+  menu_id_selected_client?: number | null;
+};
+
 type RecipeGroupAccumulator = {
   summary: ClientRecipeSummary;
   detail: NutritionEmbeddedRecipeDetailResponse | null;
@@ -699,9 +706,52 @@ export const getClientDietCalendar = async (
       assignedDate,
       isToday: assignedDate === todayDate,
       assignedMenuId: assignedMenu?.menuId ?? null,
-      assignedMenu,
+      menuOptions: assignedMenu ? [assignedMenu] : [],
     };
   });
+};
+
+export const getClientDietMenuCalendar = async (
+  clientId: string,
+  date: string,
+): Promise<Record<string, ClientDietMenu[]>> => {
+  const numericClientId = Number(clientId);
+  const targetDate = normalizeDateKey(date);
+
+  if (!Number.isInteger(numericClientId) || !targetDate) {
+    throw new Error('No se pudo resolver el cliente autenticado para cargar los menus del calendario.');
+  }
+
+  const calendarMenus = await nutritionClient.get<NutritionMenuCalendarResponseItem[]>(
+    `/menus/pool/calendar?client_id=${numericClientId}&date=${targetDate}`,
+    { skipErrorLogging: true },
+  );
+
+  if (!Array.isArray(calendarMenus) || calendarMenus.length === 0) {
+    return {};
+  }
+
+  const recipeSummaryMap = await buildRecipeSummaryMap(calendarMenus);
+  const menusByDate = new Map<string, Map<number, ClientDietMenu>>();
+
+  for (const menu of calendarMenus) {
+    const assignedDate = normalizeDateKey(menu.assigned_date);
+    if (!assignedDate) {
+      continue;
+    }
+
+    const mappedMenu = mapDietMenu(menu, assignedDate, recipeSummaryMap);
+    const existingMenus = menusByDate.get(assignedDate) ?? new Map<number, ClientDietMenu>();
+    existingMenus.set(mappedMenu.menuId, mappedMenu);
+    menusByDate.set(assignedDate, existingMenus);
+  }
+
+  return Object.fromEntries(
+    Array.from(menusByDate.entries()).map(([assignedDate, menus]) => [
+      assignedDate,
+      Array.from(menus.values()).sort((left, right) => compareDateKeys(left.assignedDate, right.assignedDate) || left.menuId - right.menuId),
+    ]),
+  );
 };
 
 export const getClientDietMenuPool = async (

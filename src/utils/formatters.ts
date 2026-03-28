@@ -178,3 +178,87 @@ export function getCardioSummaryLabel(
 
   return primaryParts.slice(0, 2).join(' / ') || 'Cardio';
 }
+
+/**
+ * Determine how many "blocks" (set chips) to show for a cardio exercise.
+ *
+ * - HIIT with intervals: respect backend `sets` value (they represent rounds).
+ * - LISS / MISS (steady-state): always 1 — a single continuous effort.
+ * - Cardio with rest_seconds > 0 AND sets > 1: respect sets (trainer intended
+ *   multiple rounds with rest between them).
+ * - Fallback: 1 block.
+ */
+export function getCardioEffectiveSets(
+  dayExercise: Partial<DayExercise> | null | undefined,
+): number {
+  if (!dayExercise) {
+    return 1;
+  }
+
+  const sets = dayExercise.sets ?? 1;
+  const hasIntervals = (dayExercise.intervals ?? 0) > 0;
+
+  // HIIT with intervals: each "set" is a round of intervals
+  if (hasIntervals && sets > 1) {
+    return sets;
+  }
+
+  // Steady-state cardio: always 1 continuous block
+  return 1;
+}
+
+const ZONE_HR_RANGES: Record<number, string> = {
+  1: '50-60%',
+  2: '60-70%',
+  3: '70-80%',
+  4: '80-90%',
+  5: '90-100%',
+};
+
+/**
+ * Build a compact label appropriate for cardio set-chips, replacing
+ * the strength-oriented RIR/RPE label.
+ *
+ * - HIIT  → "8x 30s/30s"
+ * - LISS  → "Z2 · 30 min"
+ * - MISS  → "Z3 · 25 min"
+ * - Generic → zone + duration, or just "Cardio"
+ */
+export function getCardioIntensityLabel(
+  dayExercise: Partial<DayExercise> | null | undefined,
+): string {
+  if (!dayExercise) {
+    return 'Cardio';
+  }
+
+  // HIIT with intervals: show interval pattern
+  if (dayExercise.intervals && dayExercise.work_seconds) {
+    const restPart = dayExercise.interval_rest_seconds
+      ? `/${dayExercise.interval_rest_seconds}s`
+      : '';
+    return `${dayExercise.intervals}x ${dayExercise.work_seconds}s${restPart}`;
+  }
+
+  // Steady-state: zone + duration
+  const zone = dayExercise.intensity_zone ?? dayExercise.exercise?.intensity_zone;
+  const zonePart = zone ? `Z${zone}` : null;
+  const durationPart = dayExercise.duration_seconds
+    ? formatDurationSeconds(dayExercise.duration_seconds)
+    : null;
+
+  if (zonePart && durationPart) {
+    return `${zonePart} · ${durationPart}`;
+  }
+
+  return zonePart || durationPart || 'Cardio';
+}
+
+/**
+ * Get the HR range description for an intensity zone (1-5).
+ */
+export function getZoneHrRange(zone: number | null | undefined): string | null {
+  if (zone == null || !ZONE_HR_RANGES[zone]) {
+    return null;
+  }
+  return ZONE_HR_RANGES[zone];
+}

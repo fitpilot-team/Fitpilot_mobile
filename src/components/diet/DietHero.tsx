@@ -8,6 +8,7 @@ import { formatLocalDate } from '../../utils/date';
 
 interface DietHeroProps {
   menu: ClientDietMenu;
+  menuLabel: string;
   assignedDate: string;
   isToday: boolean;
   isPreview?: boolean;
@@ -15,6 +16,7 @@ interface DietHeroProps {
 
 export const DietHero: React.FC<DietHeroProps> = ({
   menu,
+  menuLabel,
   assignedDate,
   isToday,
   isPreview = false,
@@ -42,7 +44,7 @@ export const DietHero: React.FC<DietHeroProps> = ({
         </View>
       </View>
 
-      <Text style={styles.title}>{menu.title}</Text>
+      <Text style={styles.title}>{menuLabel}</Text>
       <Text style={styles.subtitle}>{subtitle}</Text>
 
       <View style={styles.statsRow}>

@@ -34,15 +34,22 @@ import type {
   WorkoutStatus,
 } from '../../src/types';
 import {
+  clampEffortValue,
+  getCardioEffectiveSets,
   isCardioExercise,
   isEditableEffortType,
   shouldShowStrengthEffort,
 } from '../../src/utils/formatters';
+import {
+  adjustWorkoutMetricValue,
+  normalizeWorkoutMetricValue,
+} from '../../src/utils/workoutMetricInputs';
 import { formatLocalShortWeekday, getLocalDayNumber } from '../../src/utils/date';
 import {
   createNextSegmentDraft,
   createWorkoutExerciseDraft,
   DEFAULT_WORKOUT_EXERCISE_DRAFT,
+  findNextIncompleteExerciseIndex,
   getDayExerciseByProgress,
   getExerciseDraftValues,
   getSetGroupByNumber,
@@ -400,13 +407,53 @@ export default function WorkoutSessionScreen() {
     );
   }, [applyExerciseDraft, currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft, isReviewMode]);
 
+  const handleSegmentRepsCommit = useCallback((exerciseIndex: number, segmentIndex: number, nextValue: number) => {
+    const normalizedValue = normalizeWorkoutMetricValue('reps', nextValue);
+    if (normalizedValue == null) {
+      return;
+    }
+
+    updateDraftSegments(exerciseIndex, (segments) =>
+      segments.map((segment, index) =>
+        index === segmentIndex
+          ? {
+              ...segment,
+              reps_completed: normalizedValue,
+            }
+          : segment,
+      ),
+    );
+  }, [updateDraftSegments]);
+
   const handleSegmentRepsChange = useCallback((exerciseIndex: number, segmentIndex: number, delta: number) => {
     updateDraftSegments(exerciseIndex, (segments) =>
       segments.map((segment, index) =>
         index === segmentIndex
           ? {
               ...segment,
-              reps_completed: Math.max(1, segment.reps_completed + delta),
+              reps_completed: adjustWorkoutMetricValue(
+                'reps',
+                segment.reps_completed,
+                delta,
+              ) ?? segment.reps_completed,
+            }
+          : segment,
+      ),
+    );
+  }, [updateDraftSegments]);
+
+  const handleSegmentWeightCommit = useCallback((exerciseIndex: number, segmentIndex: number, nextValue: number) => {
+    const normalizedValue = normalizeWorkoutMetricValue('weight', nextValue);
+    if (normalizedValue == null) {
+      return;
+    }
+
+    updateDraftSegments(exerciseIndex, (segments) =>
+      segments.map((segment, index) =>
+        index === segmentIndex
+          ? {
+              ...segment,
+              weight_kg: normalizedValue,
             }
           : segment,
       ),
@@ -419,12 +466,42 @@ export default function WorkoutSessionScreen() {
         index === segmentIndex
           ? {
               ...segment,
-              weight_kg: Math.max(0, Number((segment.weight_kg + delta).toFixed(2))),
+              weight_kg: adjustWorkoutMetricValue(
+                'weight',
+                segment.weight_kg ?? 0,
+                delta,
+              ) ?? segment.weight_kg ?? 0,
             }
           : segment,
       ),
     );
   }, [updateDraftSegments]);
+
+  const handleSegmentEffortCommit = useCallback((exerciseIndex: number, segmentIndex: number, nextValue: number) => {
+    const resolvedDraft = getResolvedExerciseDraft(
+      exerciseIndex,
+      exerciseIndex === currentExerciseIndex ? currentSetNumber : undefined,
+    );
+    if (
+      !resolvedDraft ||
+      !shouldShowStrengthEffort(resolvedDraft.context.exercise) ||
+      !isEditableEffortType(resolvedDraft.context.exercise.effort_type)
+    ) {
+      return;
+    }
+
+    const normalizedValue = clampEffortValue(nextValue);
+    updateDraftSegments(exerciseIndex, (segments) =>
+      segments.map((segment, index) =>
+        index === segmentIndex
+          ? {
+              ...segment,
+              effort_value: normalizedValue,
+            }
+          : segment,
+      ),
+    );
+  }, [currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft, updateDraftSegments]);
 
   const handleSegmentEffortChange = useCallback((exerciseIndex: number, segmentIndex: number, delta: number) => {
     const resolvedDraft = getResolvedExerciseDraft(
@@ -444,7 +521,11 @@ export default function WorkoutSessionScreen() {
         index === segmentIndex
           ? {
               ...segment,
-              effort_value: Math.min(10, Math.max(0, Number(((segment.effort_value ?? 0) + delta).toFixed(1)))),
+              effort_value: adjustWorkoutMetricValue(
+                'effort',
+                segment.effort_value ?? 0,
+                delta,
+              ) ?? segment.effort_value ?? 0,
             }
           : segment,
       ),
@@ -455,13 +536,25 @@ export default function WorkoutSessionScreen() {
     handleSegmentRepsChange(exerciseIndex, 0, delta);
   }, [handleSegmentRepsChange]);
 
+  const handleRepsCommit = useCallback((nextValue: number, exerciseIndex: number) => {
+    handleSegmentRepsCommit(exerciseIndex, 0, nextValue);
+  }, [handleSegmentRepsCommit]);
+
   const handleWeightChange = useCallback((delta: number, exerciseIndex: number) => {
     handleSegmentWeightChange(exerciseIndex, 0, delta);
   }, [handleSegmentWeightChange]);
 
+  const handleWeightCommit = useCallback((nextValue: number, exerciseIndex: number) => {
+    handleSegmentWeightCommit(exerciseIndex, 0, nextValue);
+  }, [handleSegmentWeightCommit]);
+
   const handleEffortChange = useCallback((delta: number, exerciseIndex: number) => {
     handleSegmentEffortChange(exerciseIndex, 0, delta);
   }, [handleSegmentEffortChange]);
+
+  const handleEffortCommit = useCallback((nextValue: number, exerciseIndex: number) => {
+    handleSegmentEffortCommit(exerciseIndex, 0, nextValue);
+  }, [handleSegmentEffortCommit]);
 
   const handleAddSegment = useCallback((exerciseIndex: number) => {
     const resolvedDraft = getResolvedExerciseDraft(
@@ -560,9 +653,13 @@ export default function WorkoutSessionScreen() {
     const hasExistingSet = resolvedDraft.context.progress.sets_data.some(
       (setLog) => setLog.set_number === setNumber,
     );
+    const maxSets = isCardioExercise(resolvedDraft.context.exercise)
+      ? getCardioEffectiveSets(resolvedDraft.context.exercise)
+      : resolvedDraft.context.exercise.sets;
+
     const nextPendingSetNumber = Math.min(
       resolvedDraft.context.progress.completed_sets + 1,
-      resolvedDraft.context.exercise.sets,
+      maxSets,
     );
 
     if (!hasExistingSet && setNumber !== nextPendingSetNumber) {
@@ -617,11 +714,13 @@ export default function WorkoutSessionScreen() {
       return;
     }
 
-    const nextExerciseIndex = exerciseIndex + 1;
-    const hasNextExercise = nextExerciseIndex < currentWorkout.exercises_progress.length;
+    const nextIncompleteIndex = findNextIncompleteExerciseIndex(
+      currentWorkout.exercises_progress,
+      exerciseIndex,
+    );
     const didSaveSet = await saveResolvedSet(exerciseIndex, setNumber, {
-      nextExerciseIndex: setNumber >= totalSets && hasNextExercise ? nextExerciseIndex : exerciseIndex,
-      nextSetNumber: setNumber >= totalSets ? 1 : Math.min(setNumber + 1, totalSets),
+      nextExerciseIndex: setNumber >= totalSets ? nextIncompleteIndex : exerciseIndex,
+      nextSetNumber: setNumber >= totalSets ? undefined : Math.min(setNumber + 1, totalSets),
     });
 
     setSetsInProgress((previous) => ({ ...previous, [exerciseIndex]: false }));
@@ -1083,6 +1182,7 @@ export default function WorkoutSessionScreen() {
           }
 
           const isActive = originalIndex === currentExerciseIndex;
+          const effectiveSets = isCardioExercise(exercise) ? getCardioEffectiveSets(exercise) : exercise.sets;
           const displaySetNumber = isActive
             ? currentSetNumber
             : getExerciseTargetSetNumber(exercise, progress);
@@ -1117,16 +1217,22 @@ export default function WorkoutSessionScreen() {
                 shouldAutoplayPreview={exercise.id === autoplayExerciseId}
                 onActivateExercise={isReviewMode ? undefined : () => handleActivateExercise(originalIndex)}
                 onRepsChange={(delta) => handleRepsChange(delta, originalIndex)}
+                onRepsCommit={(nextValue) => handleRepsCommit(nextValue, originalIndex)}
                 onWeightChange={(delta) => handleWeightChange(delta, originalIndex)}
+                onWeightCommit={(nextValue) => handleWeightCommit(nextValue, originalIndex)}
                 onEffortChange={(delta) => handleEffortChange(delta, originalIndex)}
+                onEffortCommit={(nextValue) => handleEffortCommit(nextValue, originalIndex)}
                 onSegmentRepsChange={(segmentIndex, delta) => handleSegmentRepsChange(originalIndex, segmentIndex, delta)}
+                onSegmentRepsCommit={(segmentIndex, nextValue) => handleSegmentRepsCommit(originalIndex, segmentIndex, nextValue)}
                 onSegmentWeightChange={(segmentIndex, delta) => handleSegmentWeightChange(originalIndex, segmentIndex, delta)}
+                onSegmentWeightCommit={(segmentIndex, nextValue) => handleSegmentWeightCommit(originalIndex, segmentIndex, nextValue)}
                 onSegmentEffortChange={(segmentIndex, delta) => handleSegmentEffortChange(originalIndex, segmentIndex, delta)}
+                onSegmentEffortCommit={(segmentIndex, nextValue) => handleSegmentEffortCommit(originalIndex, segmentIndex, nextValue)}
                 onAddSegment={() => handleAddSegment(originalIndex)}
                 onRemoveSegment={(segmentIndex) => handleRemoveSegment(originalIndex, segmentIndex)}
                 onAdvanceSet={
                   isLiveMode
-                    ? () => void handleLiveSetAction(originalIndex, displaySetNumber, exercise.sets)
+                    ? () => void handleLiveSetAction(originalIndex, displaySetNumber, effectiveSets)
                     : undefined
                 }
                 onSaveSet={

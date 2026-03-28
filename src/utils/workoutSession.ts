@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import {
   clampEffortValue,
+  getCardioEffectiveSets,
   isCardioExercise,
   isEditableEffortType,
   shouldShowStrengthEffort,
@@ -69,8 +70,12 @@ export const getExerciseTargetSetNumber = (
   dayExercise?: DayExercise,
   progress?: ExerciseProgress,
   targetSetNumber?: number,
-) =>
-  targetSetNumber ?? Math.min((progress?.completed_sets ?? 0) + 1, dayExercise?.sets || 1);
+) => {
+  const maxSets = dayExercise && isCardioExercise(dayExercise)
+    ? getCardioEffectiveSets(dayExercise)
+    : (dayExercise?.sets || 1);
+  return targetSetNumber ?? Math.min((progress?.completed_sets ?? 0) + 1, maxSets);
+};
 
 const cloneSegmentDraft = (segment: WorkoutSetSegmentDraft, segmentIndex: number): WorkoutSetSegmentDraft => ({
   segment_index: segmentIndex,
@@ -221,3 +226,28 @@ export const getSetGroupByNumber = (
   setNumber: number,
 ): WorkoutSetGroup | undefined =>
   progress?.sets_data.find((setGroup) => setGroup.set_number === setNumber);
+
+/**
+ * Find the next incomplete exercise index starting from `currentIndex + 1`.
+ * Wraps around circularly so exercises before `currentIndex` are also
+ * considered if nothing is found after it. Returns `currentIndex` when
+ * every exercise is already completed.
+ */
+export const findNextIncompleteExerciseIndex = (
+  exercisesProgress: ExerciseProgress[],
+  currentIndex: number,
+): number => {
+  const count = exercisesProgress.length;
+  if (count === 0) {
+    return currentIndex;
+  }
+
+  for (let offset = 1; offset < count; offset++) {
+    const candidateIndex = (currentIndex + offset) % count;
+    if (!exercisesProgress[candidateIndex]?.is_completed) {
+      return candidateIndex;
+    }
+  }
+
+  return currentIndex;
+};

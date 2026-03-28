@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -24,11 +25,20 @@ import type { DayExercise, ExerciseProgress, WorkoutScreenMode } from '../../typ
 import {
   formatDurationSeconds,
   formatEffortValue,
+  getCardioEffectiveSets,
+  getCardioIntensityLabel,
   getCardioSummaryLabel,
   isCardioExercise,
   isEditableEffortType,
   shouldShowStrengthEffort,
 } from '../../utils/formatters';
+import {
+  adjustWorkoutMetricValue,
+  formatWorkoutMetricValue,
+  normalizeWorkoutMetricValue,
+  sanitizeWorkoutMetricDraft,
+  type WorkoutMetricField,
+} from '../../utils/workoutMetricInputs';
 import type { WorkoutSetSegmentDraft } from '../../utils/workoutSession';
 import { VideoPlayerModal, YouTubePlayerModal } from '../video';
 
@@ -36,7 +46,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
 const CARD_HEIGHT = 312;
 const INTERACTIVE_CARD_HEIGHT = 356;
-const IMAGE_WIDTH_RATIO = 0.55;
+const IMAGE_WIDTH_RATIO = 0.50;
 const DIAGONAL_WIDTH = 80;
 const YOUTUBE_RED = '#FF0000';
 const EXERCISE_PLACEHOLDER = require('../../../assets/exercise-placeholder.png');
@@ -72,11 +82,17 @@ interface ExerciseCardProps {
   isSavingSet?: boolean;
   onActivateExercise?: () => void;
   onRepsChange: (delta: number) => void;
+  onRepsCommit?: (value: number) => void;
   onWeightChange: (delta: number) => void;
+  onWeightCommit?: (value: number) => void;
   onEffortChange?: (delta: number) => void;
+  onEffortCommit?: (value: number) => void;
   onSegmentRepsChange?: (segmentIndex: number, delta: number) => void;
+  onSegmentRepsCommit?: (segmentIndex: number, value: number) => void;
   onSegmentWeightChange?: (segmentIndex: number, delta: number) => void;
+  onSegmentWeightCommit?: (segmentIndex: number, value: number) => void;
   onSegmentEffortChange?: (segmentIndex: number, delta: number) => void;
+  onSegmentEffortCommit?: (segmentIndex: number, value: number) => void;
   onAddSegment?: () => void;
   onRemoveSegment?: (segmentIndex: number) => void;
   onAdvanceSet?: () => void;
@@ -135,36 +151,144 @@ const InfoMask = ({ layout }: { layout: CardLayout }) => (
   </Svg>
 );
 
-const StepperMetric = ({
+const EditableStepperMetric = ({
+  field,
+  metricId,
   label,
   value,
-  onDecrement,
-  onIncrement,
+  onAdjust,
+  onCommitValue,
+  step,
   disabled,
   styles,
   accentColor,
+  placeholderColor,
 }: {
+  field: WorkoutMetricField;
+  metricId: string;
   label: string;
-  value: string;
-  onDecrement?: () => void;
-  onIncrement?: () => void;
+  value: number | null | undefined;
+  onAdjust?: (delta: number) => void;
+  onCommitValue?: (value: number) => void;
+  step: number;
   disabled: boolean;
   styles: ReturnType<typeof createStyles>;
   accentColor: string;
-}) => (
-  <View style={styles.metricRow}>
-    <TouchableOpacity style={styles.metricButton} disabled={disabled || !onDecrement} onPress={onDecrement}>
-      <Ionicons name="chevron-down" size={20} color={accentColor} />
-    </TouchableOpacity>
-    <View style={styles.metricValue}>
-      <Text style={styles.metricValueNumber}>{value}</Text>
-      <Text style={styles.metricValueLabel}>{label}</Text>
+  placeholderColor: string;
+}) => {
+  const [draftValue, setDraftValue] = useState(() =>
+    formatWorkoutMetricValue(field, value),
+  );
+  const [isFocused, setIsFocused] = useState(false);
+  const metricIdRef = useRef(metricId);
+
+  useEffect(() => {
+    if (metricIdRef.current !== metricId) {
+      metricIdRef.current = metricId;
+      setDraftValue(formatWorkoutMetricValue(field, value));
+      setIsFocused(false);
+      return;
+    }
+
+    if (!isFocused) {
+      setDraftValue(formatWorkoutMetricValue(field, value));
+    }
+  }, [field, isFocused, metricId, value]);
+
+  const handleCommit = useCallback(
+    (rawValue?: string) => {
+      const normalizedValue = normalizeWorkoutMetricValue(
+        field,
+        rawValue ?? draftValue,
+      );
+
+      if (normalizedValue == null) {
+        setDraftValue(formatWorkoutMetricValue(field, value));
+        return;
+      }
+
+      onCommitValue?.(normalizedValue);
+      setDraftValue(formatWorkoutMetricValue(field, normalizedValue));
+    },
+    [draftValue, field, onCommitValue, value],
+  );
+
+  const handleAdjust = useCallback(
+    (delta: number) => {
+      const baseValue =
+        normalizeWorkoutMetricValue(field, isFocused ? draftValue : value) ??
+        normalizeWorkoutMetricValue(field, value);
+
+      if (baseValue == null) {
+        return;
+      }
+
+      const nextValue = adjustWorkoutMetricValue(field, baseValue, delta);
+      if (nextValue == null) {
+        return;
+      }
+
+      if (!isFocused && onAdjust) {
+        onAdjust(delta);
+      } else {
+        onCommitValue?.(nextValue);
+      }
+
+      setDraftValue(formatWorkoutMetricValue(field, nextValue));
+    },
+    [draftValue, field, isFocused, onAdjust, onCommitValue, value],
+  );
+
+  return (
+    <View style={styles.metricRow}>
+      <TouchableOpacity
+        style={styles.metricButton}
+        disabled={disabled}
+        onPress={() => handleAdjust(-step)}
+      >
+        <Ionicons name="chevron-down" size={20} color={accentColor} />
+      </TouchableOpacity>
+      <View style={styles.metricValue}>
+        <View
+          style={[
+            styles.metricValueInputShell,
+            isFocused && styles.metricValueInputShellFocused,
+          ]}
+        >
+          <TextInput
+            value={draftValue}
+            onChangeText={(nextValue) =>
+              setDraftValue(sanitizeWorkoutMetricDraft(field, nextValue))
+            }
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => {
+              handleCommit();
+              setIsFocused(false);
+            }}
+            onSubmitEditing={() => {
+              handleCommit();
+              setIsFocused(false);
+            }}
+            keyboardType={field === 'reps' ? 'number-pad' : 'decimal-pad'}
+            returnKeyType="done"
+            editable={!disabled}
+            selectTextOnFocus
+            style={styles.metricValueInput}
+            placeholderTextColor={placeholderColor}
+          />
+        </View>
+        <Text style={styles.metricValueLabel}>{label}</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.metricButton}
+        disabled={disabled}
+        onPress={() => handleAdjust(step)}
+      >
+        <Ionicons name="chevron-up" size={20} color={accentColor} />
+      </TouchableOpacity>
     </View>
-    <TouchableOpacity style={styles.metricButton} disabled={disabled || !onIncrement} onPress={onIncrement}>
-      <Ionicons name="chevron-up" size={20} color={accentColor} />
-    </TouchableOpacity>
-  </View>
-);
+  );
+};
 
 const StaticMetric = ({
   label,
@@ -241,11 +365,17 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   isSavingSet = false,
   onActivateExercise,
   onRepsChange,
+  onRepsCommit,
   onWeightChange,
+  onWeightCommit,
   onEffortChange,
+  onEffortCommit,
   onSegmentRepsChange,
+  onSegmentRepsCommit,
   onSegmentWeightChange,
+  onSegmentWeightCommit,
   onSegmentEffortChange,
+  onSegmentEffortCommit,
   onAddSegment,
   onRemoveSegment,
   onAdvanceSet,
@@ -295,10 +425,11 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
         ? { uri: media.posterUrl }
         : EXERCISE_PLACEHOLDER;
   const layout = useMemo(
-    () => createCardLayout(!isCardio && showInlineControls ? 'interactive' : 'compact'),
-    [isCardio, showInlineControls],
+    () => createCardLayout(showInlineControls ? 'interactive' : 'compact'),
+    [showInlineControls],
   );
   const primaryAction = isHistoricalEditMode ? onSaveSet : onAdvanceSet;
+  const effectiveSets = isCardio ? getCardioEffectiveSets(dayExercise) : dayExercise.sets;
   const primaryActionLabel = isHistoricalEditMode
     ? `Guardar ${isCardio ? 'bloque' : 'serie'} ${currentSetNumber}`
     : `${setInProgress ? 'Finalizar' : 'Iniciar'} ${isCardio ? 'bloque' : 'serie'} ${currentSetNumber}`;
@@ -345,12 +476,13 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
   const chipLabelForSet = useCallback(
     (setNumber: number) => {
+      if (isCardio) {
+        return getCardioIntensityLabel(dayExercise);
+      }
+      
       const setGroup = progress.sets_data.find((item) => item.set_number === setNumber);
       if (!setGroup) {
         return usesSegmentedCapture ? setTypeDefinition.shortLabel : currentEffortLabel;
-      }
-      if (isCardio) {
-        return getCardioSummaryLabel(dayExercise);
       }
       if (setGroup.segment_count > 1) {
         return `${setGroup.segment_count} seg`;
@@ -404,55 +536,115 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
               <Text style={styles.exerciseName} numberOfLines={2}>{exerciseName}</Text>
               {!isCardio ? (
                 <TouchableOpacity style={styles.setTypeBadge} onPress={handleShowSetTypeInfo} activeOpacity={0.82}>
-                  <Text style={styles.setTypeShort}>{setTypeDefinition.shortLabel}</Text>
                   <Text style={styles.setTypeText} numberOfLines={1}>{setTypeDefinition.label}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
 
             {isCardio ? (
-              <View style={styles.cardioBlock}>
-                <Text style={styles.cardioTitle}>{getCardioSummaryLabel(dayExercise)}</Text>
-                <Text style={styles.cardioMeta}>
-                  {exercise?.cardio_subclass?.toUpperCase() || 'CARDIO'}
-                  {dayExercise.duration_seconds ? ` · ${formatDurationSeconds(dayExercise.duration_seconds)}` : ''}
-                </Text>
+              <View style={showInlineControls ? styles.strengthSection : styles.cardioBlock}>
+                <View style={showInlineControls ? [styles.strengthInteractiveColumn, { width: layout.actionDockWidth }] : undefined}>
+                  <View style={showInlineControls ? styles.metricsStack : undefined}>
+                    <Text style={styles.cardioTitle}>{getCardioSummaryLabel(dayExercise)}</Text>
+                    <View style={styles.cardioMetaChips}>
+                      <View style={styles.cardioMetaChip}>
+                        <Text style={styles.cardioMetaChipText}>
+                          {exercise?.cardio_subclass?.toUpperCase() || 'CARDIO'}
+                        </Text>
+                      </View>
+                      {dayExercise.intensity_zone ? (
+                        <View style={styles.cardioMetaChip}>
+                          <Text style={styles.cardioMetaChipText}>Z{dayExercise.intensity_zone}</Text>
+                        </View>
+                      ) : null}
+                      {dayExercise.distance_meters ? (
+                        <View style={styles.cardioMetaChip}>
+                          <Text style={styles.cardioMetaChipText}>
+                            {dayExercise.distance_meters >= 1000 
+                              ? `${(dayExercise.distance_meters / 1000).toFixed(1)} km` 
+                              : `${dayExercise.distance_meters} m`}
+                          </Text>
+                        </View>
+                      ) : null}
+                      {dayExercise.target_calories ? (
+                        <View style={styles.cardioMetaChip}>
+                          <Text style={styles.cardioMetaChipText}>{dayExercise.target_calories} cal</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                  
+                  {showInlineControls ? (
+                    <View style={[styles.actionDock, { width: layout.actionDockWidth }]}>
+                      <TouchableOpacity
+                        style={[styles.primaryButton, styles.actionDockTouchable, isSavingSet && styles.disabled]}
+                        disabled={isSavingSet || !primaryAction}
+                        onPress={primaryAction}
+                        activeOpacity={0.84}
+                      >
+                        <LinearGradient colors={[brandColors.navy, brandColors.sky]} style={styles.primaryButtonGradient}>
+                          <Text style={styles.primaryButtonText}>{primaryActionLabel}</Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </View>
               </View>
             ) : showInlineControls ? (
               <View style={styles.strengthSection}>
                 <View style={[styles.strengthInteractiveColumn, { width: layout.metricsWidth }]}>
                   <View style={styles.metricsStack}>
-                    <StepperMetric
+                    <EditableStepperMetric
+                      field="reps"
+                      metricId={`inline-reps-${currentSetNumber}`}
                       label={`Rep ${dayExercise.reps_min} a ${dayExercise.reps_max}`}
-                      value={`${currentReps}`}
-                      onDecrement={() => onRepsChange(-1)}
-                      onIncrement={() => onRepsChange(1)}
+                      value={currentReps}
+                      onAdjust={onRepsChange}
+                      onCommitValue={onRepsCommit}
+                      step={1}
                       disabled={isSavingSet}
                       styles={styles}
                       accentColor={accentColor}
+                      placeholderColor={theme.colors.textMuted}
                     />
                     <View style={styles.divider} />
-                    <StepperMetric
+                    <EditableStepperMetric
+                      field="weight"
+                      metricId={`inline-weight-${currentSetNumber}`}
                       label="Peso (kg)"
-                      value={`${formatCompact(currentWeight)} kg`}
-                      onDecrement={() => onWeightChange(-2.5)}
-                      onIncrement={() => onWeightChange(2.5)}
+                      value={currentWeight}
+                      onAdjust={onWeightChange}
+                      onCommitValue={onWeightCommit}
+                      step={2.5}
                       disabled={isSavingSet}
                       styles={styles}
                       accentColor={accentColor}
+                      placeholderColor={theme.colors.textMuted}
                     />
                     {showStrengthEffort ? (
                       <>
                         <View style={styles.divider} />
-                        <StepperMetric
-                          label="Intensidad"
-                          value={currentEffortLabel}
-                          onDecrement={isEffortEditable ? () => onEffortChange?.(-0.5) : undefined}
-                          onIncrement={isEffortEditable ? () => onEffortChange?.(0.5) : undefined}
-                          disabled={isSavingSet || !isEffortEditable}
-                          styles={styles}
-                          accentColor={accentColor}
-                        />
+                        {isEffortEditable ? (
+                          <EditableStepperMetric
+                            field="effort"
+                            metricId={`inline-effort-${currentSetNumber}`}
+                            label={dayExercise.effort_type}
+                            value={currentEffortValue ?? dayExercise.effort_value}
+                            onAdjust={onEffortChange}
+                            onCommitValue={onEffortCommit}
+                            step={0.5}
+                            disabled={isSavingSet}
+                            styles={styles}
+                            accentColor={accentColor}
+                            placeholderColor={theme.colors.textMuted}
+                          />
+                        ) : (
+                          <StaticMetric
+                            styles={styles}
+                            label="Intensidad"
+                            value={currentEffortLabel}
+                          />
+                        )}
                       </>
                     ) : null}
                   </View>
@@ -528,7 +720,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
 
       <View style={styles.setChipSection}>
         <View style={styles.setChipList}>
-          {Array.from({ length: dayExercise.sets }, (_, index) => {
+          {Array.from({ length: effectiveSets }, (_, index) => {
             const setNumber = index + 1;
             const setGroup = progress.sets_data.find((item) => item.set_number === setNumber);
             const isCompleted = !!setGroup;
@@ -558,7 +750,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
           })}
         </View>
         <Text style={styles.setIndicatorText}>
-          {isCardio ? 'Bloque' : 'Serie'} {currentSetNumber}/{dayExercise.sets}
+          {isCardio ? 'Bloque' : 'Serie'} {currentSetNumber}/{effectiveSets}
         </Text>
       </View>
 
@@ -588,38 +780,58 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = ({
               </View>
 
               <View style={styles.segmentMetricRow}>
-                <StepperMetric
+                <EditableStepperMetric
+                  field="reps"
+                  metricId={`segment-reps-${currentSetNumber}-${segmentIndex}`}
                   label="Reps"
-                  value={`${segment.reps_completed}`}
-                  onDecrement={() => onSegmentRepsChange?.(segmentIndex, -1)}
-                  onIncrement={() => onSegmentRepsChange?.(segmentIndex, 1)}
+                  value={segment.reps_completed}
+                  onAdjust={(delta) => onSegmentRepsChange?.(segmentIndex, delta)}
+                  onCommitValue={(nextValue) => onSegmentRepsCommit?.(segmentIndex, nextValue)}
+                  step={1}
                   disabled={isSavingSet}
                   styles={styles}
                   accentColor={accentColor}
+                  placeholderColor={theme.colors.textMuted}
                 />
               </View>
               <View style={styles.segmentMetricRow}>
-                <StepperMetric
+                <EditableStepperMetric
+                  field="weight"
+                  metricId={`segment-weight-${currentSetNumber}-${segmentIndex}`}
                   label="Peso (kg)"
-                  value={`${formatCompact(segment.weight_kg)} kg`}
-                  onDecrement={() => onSegmentWeightChange?.(segmentIndex, -2.5)}
-                  onIncrement={() => onSegmentWeightChange?.(segmentIndex, 2.5)}
+                  value={segment.weight_kg}
+                  onAdjust={(delta) => onSegmentWeightChange?.(segmentIndex, delta)}
+                  onCommitValue={(nextValue) => onSegmentWeightCommit?.(segmentIndex, nextValue)}
+                  step={2.5}
                   disabled={isSavingSet}
                   styles={styles}
                   accentColor={accentColor}
+                  placeholderColor={theme.colors.textMuted}
                 />
               </View>
               {showStrengthEffort ? (
                 <View style={styles.segmentMetricRow}>
-                  <StepperMetric
-                    label="Intensidad"
-                    value={formatEffortValue(dayExercise.effort_type, segment.effort_value ?? dayExercise.effort_value)}
-                    onDecrement={isEffortEditable ? () => onSegmentEffortChange?.(segmentIndex, -0.5) : undefined}
-                    onIncrement={isEffortEditable ? () => onSegmentEffortChange?.(segmentIndex, 0.5) : undefined}
-                    disabled={isSavingSet || !isEffortEditable}
-                    styles={styles}
-                    accentColor={accentColor}
-                  />
+                  {isEffortEditable ? (
+                    <EditableStepperMetric
+                      field="effort"
+                      metricId={`segment-effort-${currentSetNumber}-${segmentIndex}`}
+                      label={dayExercise.effort_type}
+                      value={segment.effort_value ?? dayExercise.effort_value}
+                      onAdjust={(delta) => onSegmentEffortChange?.(segmentIndex, delta)}
+                      onCommitValue={(nextValue) => onSegmentEffortCommit?.(segmentIndex, nextValue)}
+                      step={0.5}
+                      disabled={isSavingSet}
+                      styles={styles}
+                      accentColor={accentColor}
+                      placeholderColor={theme.colors.textMuted}
+                    />
+                  ) : (
+                    <StaticMetric
+                      styles={styles}
+                      label="Intensidad"
+                      value={formatEffortValue(dayExercise.effort_type, segment.effort_value ?? dayExercise.effort_value)}
+                    />
+                  )}
                 </View>
               ) : null}
             </View>
@@ -727,31 +939,35 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   infoAreaContainer: { position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 2 },
   infoBackground: { backgroundColor: theme.colors.card },
   infoArea: { position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 3 },
-  infoContent: { flex: 1, paddingLeft: spacing.md, paddingTop: spacing.md, paddingRight: spacing.xl, paddingBottom: spacing.md },
-  headerRow: { gap: spacing.xs },
+  infoContent: { flex: 1, paddingLeft: spacing.md, paddingTop: spacing.sm, paddingRight: spacing.xl, paddingBottom: spacing.sm },
+  headerRow: { gap: 2 },
   orderBadge: { alignSelf: 'flex-start', paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: borderRadius.sm, backgroundColor: theme.colors.surfaceAlt },
   orderBadgeText: { fontSize: fontSize.xs, fontWeight: '600', color: theme.colors.textMuted },
   exerciseName: { maxWidth: '85%', fontSize: fontSize.lg, fontWeight: '600', color: theme.colors.textPrimary },
-  setTypeBadge: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: borderRadius.full, backgroundColor: theme.colors.primarySoft, borderWidth: 1, borderColor: theme.colors.primaryBorder },
-  setTypeShort: { fontSize: fontSize.xs, fontWeight: '800', color: theme.colors.primary },
-  setTypeText: { maxWidth: 116, fontSize: fontSize.xs, fontWeight: '700', color: theme.colors.primary },
+  setTypeBadge: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: borderRadius.full, backgroundColor: theme.colors.primarySoft, borderWidth: 1, borderColor: theme.colors.primaryBorder },
+  setTypeText: { maxWidth: 152, fontSize: fontSize.xs, fontWeight: '700', color: theme.colors.primary },
   cardioBlock: { flex: 1, justifyContent: 'center', paddingRight: spacing.xl },
   cardioTitle: { fontSize: fontSize.base, fontWeight: '700', color: theme.colors.textPrimary },
-  cardioMeta: { marginTop: spacing.xs, fontSize: fontSize.sm, color: theme.colors.textMuted },
-  strengthSection: { flex: 1, alignItems: 'flex-start', paddingTop: spacing.xs },
+  cardioMetaChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  cardioMetaChip: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: borderRadius.sm, backgroundColor: theme.colors.surfaceAlt, borderWidth: 1, borderColor: theme.colors.border },
+  cardioMetaChipText: { fontSize: fontSize.xs, fontWeight: '600', color: theme.colors.textSecondary },
+  strengthSection: { flex: 1, alignItems: 'flex-start', paddingTop: 2 },
   strengthInteractiveColumn: { flex: 1, justifyContent: 'space-between', alignItems: 'flex-start' },
   metricsStack: { width: '100%' },
   staticMetricsStack: { width: '100%', paddingTop: spacing.xs },
-  metricRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  metricButton: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surfaceAlt, borderWidth: 1, borderColor: theme.colors.border },
-  metricValue: { flex: 1, minHeight: 50, alignItems: 'center', justifyContent: 'center' },
+  metricRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  metricButton: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surfaceAlt, borderWidth: 1, borderColor: theme.colors.border },
+  metricValue: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center' },
+  metricValueInputShell: { width: '100%', minHeight: 30, borderRadius: borderRadius.md, backgroundColor: theme.colors.surfaceAlt, borderWidth: 1, borderColor: theme.colors.border, justifyContent: 'center', paddingHorizontal: spacing.xs },
+  metricValueInputShellFocused: { borderColor: theme.colors.primary, backgroundColor: theme.colors.surface },
+  metricValueInput: { paddingVertical: 0, fontSize: fontSize.base, fontWeight: '700', color: theme.colors.textPrimary, textAlign: 'center' },
   metricValueNumber: { fontSize: fontSize.lg, fontWeight: '700', color: theme.colors.textPrimary, textAlign: 'center' },
   metricValueLabel: { marginTop: 2, fontSize: fontSize.xs, color: theme.colors.textMuted, textAlign: 'center' },
-  divider: { width: '100%', height: 1, backgroundColor: theme.colors.border, marginVertical: spacing.xs },
-  primaryButton: { marginTop: spacing.sm, borderRadius: borderRadius.lg, overflow: 'hidden' },
-  primaryButtonGradient: { minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  primaryButtonText: { fontSize: fontSize.sm, fontWeight: '700', color: colors.white },
-  actionDock: { paddingTop: spacing.sm, alignSelf: 'flex-start' },
+  divider: { width: '100%', height: 1, backgroundColor: theme.colors.border, marginVertical: 2 },
+  primaryButton: { marginTop: spacing.xs, borderRadius: borderRadius.lg, overflow: 'hidden' },
+  primaryButtonGradient: { minHeight: 40, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
+  primaryButtonText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.white },
+  actionDock: { paddingTop: spacing.xs, alignSelf: 'flex-start' },
   actionDockTouchable: { width: '100%' },
   disabled: { opacity: 0.6 },
   completedOverlayTouchable: { position: 'absolute', top: 0, left: 0, bottom: 0, zIndex: 10 },

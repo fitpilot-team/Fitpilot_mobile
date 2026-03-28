@@ -18,6 +18,7 @@ import type {
   ClientDietRecipeCard,
 } from '../../types';
 import { getSmaeGroupVisual } from '../../constants/smaeIcons';
+import { getDietPortionDisplayItems } from '../../utils/dietPortions';
 import { SmaeGroupIcon } from './SmaeGroupIcon';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 
@@ -56,28 +57,7 @@ const formatCalories = (value: number | null) => {
   return `${Math.round(value)} kcal`;
 };
 
-const formatMeasureValue = (value: number | null, suffix: string) => {
-  if (value === null) {
-    return '--';
-  }
 
-  return `${Number.isInteger(value) ? value : Number(value.toFixed(2))} ${suffix}`;
-};
-
-const METRIC_MEASURE_PATTERN = /(^|\s)(g|gr|gramo|gramos|kg|kilo|kilos|ml|mililitro|mililitros|l|litro|litros)$/i;
-
-const getIngredientMeasure = (ingredient: ClientDietIngredientRow | ClientDietFoodRow) => {
-  if (ingredient.portion.grams !== null) {
-    return formatMeasureValue(ingredient.portion.grams, 'g');
-  }
-
-  const householdLabel = ingredient.portion.householdLabel?.trim();
-  if (!householdLabel) {
-    return '--';
-  }
-
-  return METRIC_MEASURE_PATTERN.test(householdLabel) ? householdLabel : '--';
-};
 
 const PortionChip: React.FC<{
   label: string;
@@ -163,24 +143,20 @@ const PortionChips: React.FC<{
   theme,
 }) => {
   const isDarkRecipe = theme.isDark && accent === 'recipe';
-  const measure = getIngredientMeasure(ingredient);
+  const displayItems = getDietPortionDisplayItems(ingredient.portion);
 
   return (
     <View style={styles.portionRow}>
-      <PortionChip
-        label="Unidad casera"
-        value={ingredient.portion.householdLabel || '--'}
-        isDarkRecipe={isDarkRecipe}
-        styles={styles}
-        theme={theme}
-      />
-      <PortionChip
-        label="Medida"
-        value={measure}
-        isDarkRecipe={isDarkRecipe}
-        styles={styles}
-        theme={theme}
-      />
+      {displayItems.map((item) => (
+        <PortionChip
+          key={item.key}
+          label={item.label}
+          value={item.value}
+          isDarkRecipe={isDarkRecipe}
+          styles={styles}
+          theme={theme}
+        />
+      ))}
     </View>
   );
 };

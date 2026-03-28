@@ -4,9 +4,11 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
+  View,
   ViewStyle,
 } from 'react-native';
-import { borderRadius, spacing, fontSize } from '../../constants/colors';
+import { LinearGradient } from 'expo-linear-gradient';
+import { borderRadius, brandColors, spacing, fontSize } from '../../constants/colors';
 import { useAppTheme, useThemedStyles } from '../../theme';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -37,6 +39,51 @@ export const Button: React.FC<ButtonProps> = ({
   const styles = useThemedStyles(createStyles);
   const isDisabled = disabled || isLoading;
 
+  const content = isLoading ? (
+    <ActivityIndicator
+      color={variant === 'primary' || variant === 'danger' ? '#ffffff' : theme.colors.primary}
+      size="small"
+    />
+  ) : (
+    <>
+      {icon}
+      <Text
+        style={[
+          styles.text,
+          styles[`text_${variant}`],
+          styles[`text_${size}`],
+          icon ? { marginLeft: spacing.sm } : undefined,
+        ]}
+      >
+        {title}
+      </Text>
+    </>
+  );
+
+  if (variant === 'primary') {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={isDisabled}
+        activeOpacity={0.8}
+        style={[isDisabled ? styles.disabled : null, style]}
+      >
+        <LinearGradient
+          colors={[brandColors.navy, brandColors.sky]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[
+            styles.base,
+            styles[`size_${size}`],
+            styles.gradientContainer,
+          ]}
+        >
+          {content}
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  }
+
   return (
     <TouchableOpacity
       style={[
@@ -50,26 +97,7 @@ export const Button: React.FC<ButtonProps> = ({
       disabled={isDisabled}
       activeOpacity={0.7}
     >
-      {isLoading ? (
-        <ActivityIndicator
-          color={variant === 'primary' || variant === 'danger' ? '#ffffff' : theme.colors.primary}
-          size="small"
-        />
-      ) : (
-        <>
-          {icon}
-          <Text
-            style={[
-              styles.text,
-              styles[`text_${variant}`],
-              styles[`text_${size}`],
-              icon ? { marginLeft: spacing.sm } : undefined,
-            ]}
-          >
-            {title}
-          </Text>
-        </>
-      )}
+      {content}
     </TouchableOpacity>
   );
 };
@@ -81,8 +109,17 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: borderRadius.lg,
+      overflow: 'hidden',
+    },
+    gradientContainer: {
+      shadowColor: brandColors.navy,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.25,
+      shadowRadius: 6,
+      elevation: 4,
     },
     primary: {
+      // Unused now — gradient handles primary
       backgroundColor: theme.colors.primary,
     },
     secondary: {

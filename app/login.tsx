@@ -8,6 +8,7 @@ import {
   ScrollView,
   Dimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../src/store/authStore';
@@ -89,12 +90,16 @@ export default function LoginScreen() {
 
         {error ? (
           <View style={styles.errorContainer}>
+            <View style={styles.errorHeader}>
+              <Ionicons name="alert-circle" size={20} color={styles.errorIcon.color} />
+              <Text style={styles.errorTitle}>No se pudo iniciar sesión</Text>
+            </View>
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
 
         <Input
-          label="Correo electronico"
+          label="Correo electrónico"
           placeholder="tu@email.com"
           value={email}
           onChangeText={setEmail}
@@ -105,7 +110,7 @@ export default function LoginScreen() {
         />
 
         <Input
-          label="Contrasena"
+          label="Contraseña"
           placeholder="••••••••"
           value={password}
           onChangeText={setPassword}
@@ -115,17 +120,26 @@ export default function LoginScreen() {
         />
 
         <Button
-          title="Iniciar sesion"
+          title="Iniciar sesión"
           onPress={handleLogin}
           isLoading={isLoading}
           disabled={!email.trim() || !password.trim()}
           style={styles.loginButton}
         />
 
-        <Text style={styles.clientNote}>
-          Esta aplicacion es exclusiva para clientes.{'\n'}
-          Los entrenadores deben usar la aplicacion web.
-        </Text>
+        <View style={styles.infoCard}>
+          <View style={styles.infoCardHeader}>
+            <Ionicons name="information-circle-outline" size={20} color={brandColors.sky} />
+            <Text style={styles.infoCardTitle}>¿No tienes cuenta?</Text>
+          </View>
+          <Text style={styles.infoCardText}>
+            Esta aplicación es exclusiva para clientes. Tu entrenador o nutriólogo debe
+            darte de alta para que puedas acceder.
+          </Text>
+          <Text style={styles.infoCardTextSecondary}>
+            Los profesionales deben usar la aplicación web.
+          </Text>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -189,25 +203,64 @@ const createStyles = (theme: AppTheme) =>
       marginBottom: spacing.xl,
     },
     errorContainer: {
-      backgroundColor: `${theme.colors.error}15`,
+      backgroundColor: `${theme.colors.error}12`,
       borderRadius: borderRadius.md,
       padding: spacing.md,
       marginBottom: spacing.md,
       borderLeftWidth: 4,
       borderLeftColor: theme.colors.error,
     },
+    errorHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 6,
+    },
+    errorIcon: {
+      color: theme.colors.error,
+    },
+    errorTitle: {
+      color: theme.colors.error,
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+    },
     errorText: {
       color: theme.colors.error,
       fontSize: fontSize.sm,
+      lineHeight: 20,
     },
     loginButton: {
       marginTop: spacing.md,
     },
-    clientNote: {
+    infoCard: {
       marginTop: spacing.xl,
-      textAlign: 'center',
+      backgroundColor: theme.isDark ? 'rgba(103, 181, 222, 0.08)' : 'rgba(103, 181, 222, 0.08)',
+      borderRadius: borderRadius.lg,
+      padding: spacing.md,
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(103, 181, 222, 0.2)' : 'rgba(103, 181, 222, 0.15)',
+    },
+    infoCardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 6,
+    },
+    infoCardTitle: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: brandColors.sky,
+    },
+    infoCardText: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textSecondary,
+      lineHeight: 18,
+    },
+    infoCardTextSecondary: {
       fontSize: fontSize.xs,
       color: theme.colors.textMuted,
       lineHeight: 18,
+      marginTop: 4,
+      fontStyle: 'italic',
     },
   });

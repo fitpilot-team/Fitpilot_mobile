@@ -164,9 +164,31 @@ export const useAuthStore = create<AuthState>((set, get) => {
           console.warn('[Auth] login error', error?.message || error);
         }
 
+        let userMessage: string;
+        const status = error.status as number | undefined;
+        const rawMessage = (error.message as string) || '';
+
+        if (status === 401) {
+          userMessage =
+            'Correo o contraseña incorrectos. Verifica tus datos e intenta de nuevo.\n\n' +
+            'Si aún no tienes cuenta, solicita a tu entrenador o nutriólogo que te dé de alta.';
+        } else if (status === 404) {
+          userMessage =
+            'No se encontró una cuenta con ese correo.\n\n' +
+            'Pide a tu entrenador o nutriólogo que te registre en la plataforma.';
+        } else if (
+          rawMessage.toLowerCase().includes('network') ||
+          rawMessage.toLowerCase().includes('timeout')
+        ) {
+          userMessage =
+            'No se pudo conectar con el servidor. Verifica tu conexión a internet e intenta de nuevo.';
+        } else {
+          userMessage = rawMessage || 'Error al iniciar sesión. Intenta de nuevo más tarde.';
+        }
+
         set({
           isLoading: false,
-          error: error.message || 'Error al iniciar sesion',
+          error: userMessage,
         });
 
         return false;

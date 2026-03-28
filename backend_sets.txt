@@ -1,0 +1,121 @@
+﻿1340: @router.post("/{workout_log_id}/sets", response_model=ExerciseSetGroupResponse, status_code=status.HTTP_201_CREATED)
+1341: def log_exercise_set(
+1342:     workout_log_id: int,
+1343:     set_data: ExerciseSetLogCreate,
+1344:     response: Response,
+1345:     db: Session = Depends(get_db),
+1346:     current_user: User = Depends(get_current_user),
+1347: ):
+1348:     workout_log = verify_workout_log_access(db, workout_log_id, current_user)
+1349:     if get_effective_user_role(current_user) == "client":
+1350:         verify_workout_log_ownership(workout_log, current_user)
+1351: 
+1352:     if enum_value(workout_log.status) != WorkoutStatus.IN_PROGRESS.value:
+1353:         raise HTTPException(
+1354:             status_code=status.HTTP_409_CONFLICT,
+1355:             detail="Workout must be reopened before editing sets",
+1356:         )
+1357: 
+1358:     day_exercise_id = parse_int_id(set_data.day_exercise_id, "day_exercise_id")
+1359:     day_exercise = db.query(DayExercise).filter(DayExercise.id == day_exercise_id).first()
+1360:     if not day_exercise:
+1361:         raise HTTPException(
+1362:             status_code=status.HTTP_404_NOT_FOUND,
+1363:             detail=f"Day exercise with id {day_exercise_id} not found",
+1364:         )
+1365:     if int(day_exercise.training_day_id) != int(workout_log.training_day_id or 0):
+1366:         raise HTTPException(
+1367:             status_code=status.HTTP_400_BAD_REQUEST,
+1368:             detail="The exercise does not belong to the workout training day",
+1369:         )
+1370: 
+1371:     try:
+1372:         existing_sets = (
+1373:             db.query(ExerciseSetLog)
+1374:             .filter(
+1375:                 ExerciseSetLog.workout_log_id == workout_log.id,
+1376:                 ExerciseSetLog.day_exercise_id == day_exercise_id,
+1377:                 ExerciseSetLog.set_number == set_data.set_number,
+1378:             )
+1379:             .all()
+1380:         )
+1381:     except AssertionError:
+1382:         existing_sets = []
+1383: 
+1384:     if existing_sets:
+1385:         response.status_code = status.HTTP_200_OK
+1386:         for existing_set in existing_sets:
+1387:             db.delete(existing_set)
+1388:         flush = getattr(db, "flush", None)
+1389:         if callable(flush):
+1390:             flush()
+1391: 
+1392:     timestamp = utc_now()
+1393:     created_segments: list[ExerciseSetLog] = []
+1394:     for segment in resolve_set_segments_payload(set_data):
+1395:         set_log = ExerciseSetLog(
+1396:             workout_log_id=workout_log.id,
+1397:             exercise_id=day_exercise.exercise_id,
+1398:             day_exercise_id=day_exercise_id,
+1399:             set_number=set_data.set_number,
+1400:             segment_index=segment.segment_index,
+1401:             reps_completed=segment.reps_completed,
+1402:             weight_kg=segment.weight_kg,
+1403:             effort_value=segment.effort_value,
+1404:             completed_at=timestamp,
+1405:         )
+1406:         db.add(set_log)
+1407:         created_segments.append(set_log)
+1408: 
+1409:     db.commit()
+1410:     for created_segment in created_segments:
+1411:         db.refresh(created_segment)
+1412: 
+1413:     return build_set_group_response(created_segments)
+1414: 
+1415: 
+1416: @router.patch("/{workout_log_id}/sets/{set_log_id}", response_model=ExerciseSetLogResponse)
+1417: def update_exercise_set(
+1418:     workout_log_id: int,
+1419:     set_log_id: int,
+1420:     set_data: WorkoutSetLogUpdate,
+1421:     db: Session = Depends(get_db),
+1422:     current_user: User = Depends(get_current_user),
+1423: ):
+1424:     workout_log = verify_workout_log_access(db, workout_log_id, current_user)
+1425:     if get_effective_user_role(current_user) == "client":
+1426:         verify_workout_log_ownership(workout_log, current_user)
+1427: 
+1428:     if enum_value(workout_log.status) != WorkoutStatus.IN_PROGRESS.value:
+1429:         raise HTTPException(
+1430:             status_code=status.HTTP_409_CONFLICT,
+1431:             detail="Workout must be reopened before editing sets",
+1432:         )
+1433: 
+1434:     set_log = (
+1435:         db.query(ExerciseSetLog)
+1436:         .filter(
+1437:             ExerciseSetLog.id == set_log_id,
+1438:             ExerciseSetLog.workout_log_id == workout_log.id,
+1439:         )
+1440:         .first()
+1441:     )
+1442:     if not set_log:
+1443:         raise HTTPException(
+1444:             status_code=status.HTTP_404_NOT_FOUND,
+1445:             detail=f"Exercise set log with id {set_log_id} not found",
+1446:         )
+1447: 
+1448:     for field, value in set_data.model_dump(exclude_unset=True).items():
+1449:         setattr(set_log, field, value)
+1450:     set_log.completed_at = utc_now()
+1451: 
+1452:     db.commit()
+1453:     db.refresh(set_log)
+1454:     return serialize_set_log(set_log)
+1455: 
+1456: 
+1457: @router.delete("/{workout_log_id}/sets/{set_log_id}", status_code=status.HTTP_204_NO_CONTENT)
+1458: def delete_exercise_set(
+1459:     workout_log_id: int,
+1460:     set_log_id: int,
