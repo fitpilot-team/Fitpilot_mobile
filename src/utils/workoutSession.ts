@@ -1,9 +1,11 @@
+import { getWorkoutSetTypeDefinition, validateSegmentedWeightFlow } from '../constants/workoutSetTypes';
 import type {
   CurrentWorkoutState,
   DayExercise,
   ExerciseProgress,
-  ExerciseSetLog,
   TrainingDay,
+  WorkoutSetGroup,
+  WorkoutSetSegmentInput,
 } from '../types';
 import {
   clampEffortValue,
@@ -12,28 +14,36 @@ import {
   shouldShowStrengthEffort,
 } from './formatters';
 
+export type WorkoutSetSegmentDraft = {
+  segment_index: number;
+  reps_completed: number;
+  weight_kg: number;
+  effort_value: number | null;
+};
+
 export type WorkoutExerciseDraft = {
   currentExerciseIndex: number;
   currentSetNumber: number;
-  currentReps: number;
-  currentWeight: number;
-  currentEffortValue: number | null;
+  currentSegments: WorkoutSetSegmentDraft[];
   restSeconds: number;
 };
 
 type ExerciseDraftValues = {
-  reps: number;
-  weight: number;
-  effortValue: number | null;
+  segments: WorkoutSetSegmentDraft[];
   restSeconds: number;
+};
+
+const DEFAULT_SEGMENT_DRAFT: WorkoutSetSegmentDraft = {
+  segment_index: 1,
+  reps_completed: 12,
+  weight_kg: 0,
+  effort_value: null,
 };
 
 export const DEFAULT_WORKOUT_EXERCISE_DRAFT: WorkoutExerciseDraft = {
   currentExerciseIndex: 0,
   currentSetNumber: 1,
-  currentReps: 12,
-  currentWeight: 0,
-  currentEffortValue: null,
+  currentSegments: [DEFAULT_SEGMENT_DRAFT],
   restSeconds: 90,
 };
 
@@ -62,21 +72,86 @@ export const getExerciseTargetSetNumber = (
 ) =>
   targetSetNumber ?? Math.min((progress?.completed_sets ?? 0) + 1, dayExercise?.sets || 1);
 
+const cloneSegmentDraft = (segment: WorkoutSetSegmentDraft, segmentIndex: number): WorkoutSetSegmentDraft => ({
+  segment_index: segmentIndex,
+  reps_completed: segment.reps_completed,
+  weight_kg: segment.weight_kg,
+  effort_value: segment.effort_value,
+});
+
+const buildBaseSegmentDraft = (
+  dayExercise?: DayExercise,
+  sourceSegment?: {
+    reps_completed?: number | null;
+    weight_kg?: number | null;
+    effort_value?: number | null;
+  } | null,
+): WorkoutSetSegmentDraft => {
+  const isCardio = isCardioExercise(dayExercise);
+  return {
+    segment_index: 1,
+    reps_completed: sourceSegment?.reps_completed ?? (isCardio ? 1 : dayExercise?.reps_min ?? 12),
+    weight_kg: isCardio ? 0 : sourceSegment?.weight_kg ?? 0,
+    effort_value: sourceSegment?.effort_value ?? getExerciseEffortDefault(dayExercise),
+  };
+};
+
+const normalizeSegmentDrafts = (
+  dayExercise: DayExercise | undefined,
+  sourceSegments?: readonly {
+    segment_index?: number | null;
+    reps_completed?: number | null;
+    weight_kg?: number | null;
+    effort_value?: number | null;
+  }[] | null,
+): WorkoutSetSegmentDraft[] => {
+  const { captureMode, minimumSegments } = getWorkoutSetTypeDefinition(dayExercise?.set_type);
+  let normalizedSegments = (sourceSegments ?? [])
+    .slice()
+    .sort((left, right) => (left.segment_index ?? 1) - (right.segment_index ?? 1))
+    .map((segment, index) => ({
+      segment_index: index + 1,
+      reps_completed: segment.reps_completed ?? (dayExercise?.reps_min ?? 12),
+      weight_kg: isCardioExercise(dayExercise) ? 0 : segment.weight_kg ?? 0,
+      effort_value: segment.effort_value ?? getExerciseEffortDefault(dayExercise),
+    }));
+
+  if (!normalizedSegments.length) {
+    normalizedSegments = [buildBaseSegmentDraft(dayExercise)];
+  }
+
+  if (captureMode === 'single') {
+    return [cloneSegmentDraft(normalizedSegments[0], 1)];
+  }
+
+  while (normalizedSegments.length < minimumSegments) {
+    normalizedSegments.push(
+      cloneSegmentDraft(
+        normalizedSegments[normalizedSegments.length - 1] ?? buildBaseSegmentDraft(dayExercise),
+        normalizedSegments.length + 1,
+      ),
+    );
+  }
+
+  return normalizedSegments.map((segment, index) => cloneSegmentDraft(segment, index + 1));
+};
+
+const getLastLoggedSetGroup = (progress?: ExerciseProgress): WorkoutSetGroup | undefined =>
+  progress?.sets_data?.[progress.sets_data.length - 1];
+
 export const getExerciseDraftValues = (
   dayExercise?: DayExercise,
   progress?: ExerciseProgress,
   targetSetNumber?: number,
 ): ExerciseDraftValues => {
   const preferredSet = targetSetNumber
-    ? progress?.sets_data?.find((setLog) => setLog.set_number === targetSetNumber)
+    ? progress?.sets_data?.find((setGroup) => setGroup.set_number === targetSetNumber)
     : undefined;
-  const lastSet = preferredSet ?? progress?.sets_data?.[progress.sets_data.length - 1];
-  const isCardio = isCardioExercise(dayExercise);
+  const templateSet = preferredSet ?? getLastLoggedSetGroup(progress);
+  const templateSegments = preferredSet?.segments ?? templateSet?.segments ?? null;
 
   return {
-    reps: lastSet?.reps_completed ?? (isCardio ? 1 : dayExercise?.reps_min ?? 12),
-    weight: isCardio ? 0 : lastSet?.weight_kg ?? 0,
-    effortValue: lastSet?.effort_value ?? getExerciseEffortDefault(dayExercise),
+    segments: normalizeSegmentDrafts(dayExercise, templateSegments),
     restSeconds: dayExercise?.interval_rest_seconds || dayExercise?.rest_seconds || 90,
   };
 };
@@ -101,125 +176,48 @@ export const createWorkoutExerciseDraft = (
   return {
     currentExerciseIndex,
     currentSetNumber,
-    currentReps: defaults.reps,
-    currentWeight: defaults.weight,
-    currentEffortValue: defaults.effortValue,
+    currentSegments: defaults.segments,
     restSeconds: defaults.restSeconds,
   };
 };
 
-const sortSetLogs = (left: ExerciseSetLog, right: ExerciseSetLog) =>
-  left.set_number - right.set_number ||
-  left.completed_at.localeCompare(right.completed_at) ||
-  left.id.localeCompare(right.id);
+export const toWorkoutSetSegmentInputs = (
+  segments: WorkoutSetSegmentDraft[],
+): WorkoutSetSegmentInput[] =>
+  segments.map((segment, index) => ({
+    segment_index: index + 1,
+    reps_completed: Math.max(0, Math.round(segment.reps_completed)),
+    weight_kg: segment.weight_kg > 0 ? segment.weight_kg : 0,
+    effort_value: segment.effort_value ?? undefined,
+  }));
 
-const countContiguousCompletedSets = (setLogs: ExerciseSetLog[]) => {
-  const completedSetNumbers = new Set(setLogs.map((setLog) => setLog.set_number));
-  let completedSets = 0;
+export const createNextSegmentDraft = (
+  dayExercise: DayExercise | undefined,
+  currentSegments: WorkoutSetSegmentDraft[],
+): WorkoutSetSegmentDraft => {
+  const lastSegment = currentSegments[currentSegments.length - 1] ?? buildBaseSegmentDraft(dayExercise);
+  return cloneSegmentDraft(lastSegment, currentSegments.length + 1);
+};
 
-  while (completedSetNumbers.has(completedSets + 1)) {
-    completedSets += 1;
+export const normalizeWorkoutSetDraft = (
+  dayExercise: DayExercise | undefined,
+  segments: WorkoutSetSegmentDraft[],
+): WorkoutSetSegmentDraft[] => normalizeSegmentDrafts(dayExercise, segments);
+
+export const validateWorkoutSetDraft = (
+  dayExercise: DayExercise | undefined,
+  segments: WorkoutSetSegmentDraft[],
+): string | null => {
+  const definition = getWorkoutSetTypeDefinition(dayExercise?.set_type);
+  if (segments.length < definition.minimumSegments) {
+    return `Este tipo de serie requiere al menos ${definition.minimumSegments} segmentos.`;
   }
 
-  return completedSets;
+  return validateSegmentedWeightFlow(dayExercise?.set_type, toWorkoutSetSegmentInputs(segments));
 };
 
-const syncProgressWithSetLogs = (
-  progress: ExerciseProgress,
-  nextSetLogs: ExerciseSetLog[],
-): ExerciseProgress => {
-  const setsData = [...nextSetLogs].sort(sortSetLogs);
-  const completedSets = Math.min(countContiguousCompletedSets(setsData), progress.total_sets);
-
-  return {
-    ...progress,
-    sets_data: setsData,
-    completed_sets: completedSets,
-    is_completed: completedSets >= progress.total_sets,
-  };
-};
-
-const syncWorkoutSummary = (
-  workoutState: CurrentWorkoutState,
-  nextProgressList: ExerciseProgress[],
-): CurrentWorkoutState => ({
-  ...workoutState,
-  exercises_progress: nextProgressList,
-  completed_exercises: nextProgressList.filter((progress) => progress.is_completed).length,
-});
-
-export const upsertSetInWorkoutState = (
-  workoutState: CurrentWorkoutState,
-  setLog: ExerciseSetLog,
-): CurrentWorkoutState => {
-  const nextProgressList = workoutState.exercises_progress.map((progress) => {
-    if (progress.day_exercise_id !== setLog.day_exercise_id) {
-      return progress;
-    }
-
-    const nextSetLogs = [
-      ...progress.sets_data.filter(
-        (existingSetLog) =>
-          existingSetLog.id !== setLog.id &&
-          existingSetLog.set_number !== setLog.set_number,
-      ),
-      setLog,
-    ];
-
-    return syncProgressWithSetLogs(progress, nextSetLogs);
-  });
-
-  const nextWorkoutLogSetLogs = [
-    ...workoutState.workout_log.exercise_sets.filter(
-      (existingSetLog) =>
-        existingSetLog.id !== setLog.id ||
-        existingSetLog.day_exercise_id !== setLog.day_exercise_id,
-    ).filter(
-      (existingSetLog) =>
-        !(
-          existingSetLog.day_exercise_id === setLog.day_exercise_id &&
-          existingSetLog.set_number === setLog.set_number
-        ),
-    ),
-    setLog,
-  ].sort(sortSetLogs);
-
-  return {
-    ...syncWorkoutSummary(workoutState, nextProgressList),
-    workout_log: {
-      ...workoutState.workout_log,
-      exercise_sets: nextWorkoutLogSetLogs,
-    },
-  };
-};
-
-export const removeSetFromWorkoutState = (
-  workoutState: CurrentWorkoutState,
-  setLogId: string,
-): CurrentWorkoutState => {
-  const nextProgressList = workoutState.exercises_progress.map((progress) =>
-    syncProgressWithSetLogs(
-      progress,
-      progress.sets_data.filter((setLog) => setLog.id !== setLogId),
-    ),
-  );
-
-  return {
-    ...syncWorkoutSummary(workoutState, nextProgressList),
-    workout_log: {
-      ...workoutState.workout_log,
-      exercise_sets: workoutState.workout_log.exercise_sets
-        .filter((setLog) => setLog.id !== setLogId)
-        .sort(sortSetLogs),
-    },
-  };
-};
-
-export const reopenWorkoutState = (workoutState: CurrentWorkoutState): CurrentWorkoutState => ({
-  ...workoutState,
-  workout_log: {
-    ...workoutState.workout_log,
-    status: 'in_progress',
-    completed_at: null,
-  },
-});
+export const getSetGroupByNumber = (
+  progress: ExerciseProgress | undefined,
+  setNumber: number,
+): WorkoutSetGroup | undefined =>
+  progress?.sets_data.find((setGroup) => setGroup.set_number === setNumber);

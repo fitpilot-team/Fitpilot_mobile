@@ -3,17 +3,12 @@ import { trainingClient } from '../services/api';
 import type {
   AbandonReason,
   CurrentWorkoutState,
-  ExerciseSetLog,
   Macrocycle,
   MicrocycleProgress,
   MissedWorkout,
   WorkoutLog,
+  WorkoutSetSegmentInput,
 } from '../types';
-import {
-  removeSetFromWorkoutState,
-  reopenWorkoutState,
-  upsertSetInWorkoutState,
-} from '../utils/workoutSession';
 
 interface WorkoutState {
   activeMacrocycle: Macrocycle | null;
@@ -38,11 +33,9 @@ interface WorkoutState {
   saveSet: (data: {
     dayExerciseId: string;
     setNumber: number;
-    repsCompleted: number;
-    weightKg?: number;
-    effortValue?: number;
+    segments: WorkoutSetSegmentInput[];
   }) => Promise<boolean>;
-  deleteLoggedSet: (setLogId: string) => Promise<boolean>;
+  deleteSetGroup: (dayExerciseId: string, setNumber: number) => Promise<boolean>;
   closeWorkout: () => Promise<boolean>;
   abandonWorkout: (reason?: AbandonReason, notes?: string) => Promise<boolean>;
   dismissMissedWorkouts: () => void;
@@ -56,10 +49,29 @@ const CLOSED_WORKOUT_CLIENT_MESSAGE = 'El entrenamiento esta cerrado. Reabrelo p
 const fetchWorkoutState = async (workoutLogId: string) =>
   trainingClient.get<CurrentWorkoutState>(`/workout-logs/${workoutLogId}/state`);
 
+const reloadWorkoutState = async (workoutLogId: string) => fetchWorkoutState(workoutLogId);
+
 const isClosedWorkoutEditError = (error: { status?: number; message?: string } | null | undefined) =>
   error?.status === 409 &&
   typeof error.message === 'string' &&
   error.message.toLowerCase().includes(CLOSED_WORKOUT_EDIT_ERROR.toLowerCase());
+
+const saveWorkoutSet = async (
+  workoutLogId: string,
+  data: {
+    dayExerciseId: string;
+    setNumber: number;
+    segments: WorkoutSetSegmentInput[];
+  },
+) =>
+  trainingClient.post(
+    `/workout-logs/${workoutLogId}/sets`,
+    {
+      day_exercise_id: data.dayExerciseId,
+      set_number: data.setNumber,
+      segments: data.segments,
+    },
+  );
 
 export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   activeMacrocycle: null,
@@ -195,24 +207,13 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     try {
       await trainingClient.post<WorkoutLog>(`/workout-logs/${targetWorkoutLogId}/reopen`);
+      const state = await reloadWorkoutState(targetWorkoutLogId);
 
-      set((state) => {
-        const currentWorkout =
-          state.currentWorkout?.workout_log.id === targetWorkoutLogId && state.currentWorkout
-            ? reopenWorkoutState(state.currentWorkout)
-            : state.currentWorkout;
-
-        return {
-          currentWorkout,
-          isLoading: false,
-          workoutLogsVersion: state.workoutLogsVersion + 1,
-        };
-      });
-
-      if (get().currentWorkout?.workout_log.id !== targetWorkoutLogId) {
-        const state = await fetchWorkoutState(targetWorkoutLogId);
-        set({ currentWorkout: state });
-      }
+      set((previousState) => ({
+        currentWorkout: state,
+        isLoading: false,
+        workoutLogsVersion: previousState.workoutLogsVersion + 1,
+      }));
 
       return true;
     } catch (error: any) {
@@ -233,21 +234,11 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     set({ isSavingSet: true, error: null });
 
     try {
-      const savedSetLog = await trainingClient.post<ExerciseSetLog>(
-        `/workout-logs/${currentWorkout.workout_log.id}/sets`,
-        {
-          day_exercise_id: data.dayExerciseId,
-          set_number: data.setNumber,
-          reps_completed: data.repsCompleted,
-          weight_kg: data.weightKg,
-          effort_value: data.effortValue,
-        },
-      );
+      await saveWorkoutSet(currentWorkout.workout_log.id, data);
+      const nextWorkoutState = await reloadWorkoutState(currentWorkout.workout_log.id);
 
       set((state) => ({
-        currentWorkout: state.currentWorkout
-          ? upsertSetInWorkoutState(state.currentWorkout, savedSetLog)
-          : state.currentWorkout,
+        currentWorkout: nextWorkoutState,
         isSavingSet: false,
         workoutLogsVersion: state.workoutLogsVersion + 1,
       }));
@@ -282,7 +273,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     }
   },
 
-  deleteLoggedSet: async (setLogId: string) => {
+  deleteSetGroup: async (dayExerciseId: string, setNumber: number) => {
     const { currentWorkout } = get();
     if (!currentWorkout) {
       return false;
@@ -292,13 +283,12 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     try {
       await trainingClient.delete<void>(
-        `/workout-logs/${currentWorkout.workout_log.id}/sets/${setLogId}`,
+        `/workout-logs/${currentWorkout.workout_log.id}/day-exercises/${dayExerciseId}/sets/${setNumber}`,
       );
+      const nextWorkoutState = await reloadWorkoutState(currentWorkout.workout_log.id);
 
       set((state) => ({
-        currentWorkout: state.currentWorkout
-          ? removeSetFromWorkoutState(state.currentWorkout, setLogId)
-          : state.currentWorkout,
+        currentWorkout: nextWorkoutState,
         isSavingSet: false,
         workoutLogsVersion: state.workoutLogsVersion + 1,
       }));

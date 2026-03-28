@@ -114,7 +114,7 @@ export interface DayExercise {
   effort_type: EffortType;
   effort_value: number;
   tempo?: string | null;
-  set_type?: string | null;
+  set_type?: WorkoutSetType | null;
   duration_seconds?: number | null;
   intensity_zone?: number | null;
   distance_meters?: number | null;
@@ -176,16 +176,42 @@ export interface Macrocycle {
 export type WorkoutStatus = 'in_progress' | 'completed' | 'abandoned';
 export type WorkoutScreenMode = 'review' | 'live' | 'historicalEdit';
 export type AbandonReason = 'time' | 'injury' | 'fatigue' | 'motivation' | 'schedule' | 'other';
+export type WorkoutSetType =
+  | 'straight'
+  | 'rest_pause'
+  | 'drop_set'
+  | 'top_set'
+  | 'backoff'
+  | 'myo_reps'
+  | 'cluster';
 
 export interface ExerciseSetLog {
   id: string;
   workout_log_id: string;
   day_exercise_id: string;
   set_number: number;
+  segment_index: number;
   reps_completed: number;
   weight_kg?: number | null;
   effort_value?: number | null;
   completed_at: string;
+}
+
+export interface WorkoutSetGroup {
+  day_exercise_id: string;
+  set_number: number;
+  segment_count: number;
+  total_reps_completed: number;
+  best_weight_kg?: number | null;
+  completed_at?: string | null;
+  segments: ExerciseSetLog[];
+}
+
+export interface WorkoutSetSegmentInput {
+  segment_index: number;
+  reps_completed: number;
+  weight_kg?: number | null;
+  effort_value?: number | null;
 }
 
 export interface WorkoutLog {
@@ -223,7 +249,7 @@ export interface ExerciseProgress {
   total_sets: number;
   completed_sets: number;
   is_completed: boolean;
-  sets_data: ExerciseSetLog[];
+  sets_data: WorkoutSetGroup[];
 }
 
 export interface CurrentWorkoutState {

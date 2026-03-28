@@ -2,10 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   FlatList,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  type ViewToken,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,25 +34,28 @@ import type {
   WorkoutStatus,
 } from '../../src/types';
 import {
-  clampEffortValue,
   isCardioExercise,
   isEditableEffortType,
   shouldShowStrengthEffort,
 } from '../../src/utils/formatters';
 import { formatLocalShortWeekday, getLocalDayNumber } from '../../src/utils/date';
 import {
+  createNextSegmentDraft,
   createWorkoutExerciseDraft,
   DEFAULT_WORKOUT_EXERCISE_DRAFT,
   getDayExerciseByProgress,
   getExerciseDraftValues,
+  getSetGroupByNumber,
   getExerciseTargetSetNumber,
+  normalizeWorkoutSetDraft,
+  toWorkoutSetSegmentInputs,
+  validateWorkoutSetDraft,
   type WorkoutExerciseDraft,
+  type WorkoutSetSegmentDraft,
 } from '../../src/utils/workoutSession';
 
 type ExerciseDraftOverrides = Partial<{
-  reps: number;
-  weight: number;
-  effortValue: number | null;
+  segments: WorkoutSetSegmentDraft[];
   restSeconds: number;
 }>;
 
@@ -65,7 +72,15 @@ type ListItem =
       };
     };
 
+type ExerciseCardLayout = {
+  y: number;
+  height: number;
+};
+
 const PHASE_ORDER: Record<ExercisePhase, number> = { warmup: 0, main: 1, cooldown: 2 };
+
+const areExerciseIdListsEqual = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
 
 const getWorkoutScreenMode = (
   status: WorkoutStatus | undefined,
@@ -90,7 +105,7 @@ export default function WorkoutSessionScreen() {
     loadWorkoutState,
     reopenWorkout,
     saveSet,
-    deleteLoggedSet,
+    deleteSetGroup,
     closeWorkout,
     abandonWorkout,
     clearError,
@@ -104,14 +119,18 @@ export default function WorkoutSessionScreen() {
   const [setsInProgress, setSetsInProgress] = useState<Record<number, boolean>>({});
   const [toastVisible, setToastVisible] = useState(false);
   const [toastConfig, setToastConfig] = useState<ToastConfig | null>(null);
+  const [cardLayouts, setCardLayouts] = useState<Record<string, ExerciseCardLayout>>({});
+  const [visibleExerciseIds, setVisibleExerciseIds] = useState<string[]>([]);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [scrollOffsetY, setScrollOffsetY] = useState(0);
+  const [autoplayExerciseId, setAutoplayExerciseId] = useState<string | null>(null);
   const loadedWorkoutIdRef = useRef<string | null>(null);
   const syncDraftOptionsRef = useRef<{ exerciseIndex?: number; targetSetNumber?: number } | null>(null);
+  const viewabilityConfigRef = useRef({ itemVisiblePercentThreshold: 45 });
 
   const currentExerciseIndex = exerciseDraft.currentExerciseIndex;
   const currentSetNumber = exerciseDraft.currentSetNumber;
-  const currentReps = exerciseDraft.currentReps;
-  const currentWeight = exerciseDraft.currentWeight;
-  const currentEffortValue = exerciseDraft.currentEffortValue;
+  const currentSegments = exerciseDraft.currentSegments;
   const restSeconds = exerciseDraft.restSeconds;
 
   const screenMode = useMemo(
@@ -140,6 +159,11 @@ export default function WorkoutSessionScreen() {
     setShowRestTimer(false);
     setToastVisible(false);
     setToastConfig(null);
+    setCardLayouts({});
+    setVisibleExerciseIds([]);
+    setViewportHeight(0);
+    setScrollOffsetY(0);
+    setAutoplayExerciseId(null);
 
     if (workoutLogId) {
       void loadWorkoutState(workoutLogId);
@@ -242,17 +266,13 @@ export default function WorkoutSessionScreen() {
       return {
         context,
         targetSetNumber: resolvedSetNumber,
-        reps: isCurrentExercise ? currentReps : defaults.reps,
-        weight: isCurrentExercise ? currentWeight : defaults.weight,
-        effortValue: isCurrentExercise ? currentEffortValue ?? defaults.effortValue : defaults.effortValue,
+        segments: isCurrentExercise ? currentSegments : defaults.segments,
         restSeconds: isCurrentExercise ? restSeconds : defaults.restSeconds,
       };
     },
     [
-      currentEffortValue,
       currentExerciseIndex,
-      currentReps,
-      currentWeight,
+      currentSegments,
       getExerciseContext,
       restSeconds,
     ],
@@ -283,9 +303,10 @@ export default function WorkoutSessionScreen() {
       setExerciseDraft({
         currentExerciseIndex: exerciseIndex,
         currentSetNumber: resolvedSetNumber,
-        currentReps: overrides.reps ?? defaults.reps,
-        currentWeight: overrides.weight ?? defaults.weight,
-        currentEffortValue: overrides.effortValue ?? defaults.effortValue,
+        currentSegments: normalizeWorkoutSetDraft(
+          context.exercise,
+          overrides.segments ?? defaults.segments,
+        ),
         restSeconds: overrides.restSeconds ?? defaults.restSeconds,
       });
 
@@ -312,16 +333,10 @@ export default function WorkoutSessionScreen() {
       return;
     }
 
-    const selectedSet = context.progress.sets_data.find((setLog) => setLog.set_number === setNumber);
     const defaults = getExerciseDraftValues(context.exercise, context.progress, setNumber);
-
     applyExerciseDraft(
       exerciseIndex,
-      {
-        reps: selectedSet?.reps_completed ?? defaults.reps,
-        weight: isCardioExercise(context.exercise) ? 0 : selectedSet?.weight_kg ?? defaults.weight,
-        effortValue: selectedSet?.effort_value ?? defaults.effortValue,
-      },
+      { segments: defaults.segments },
       setNumber,
     );
     setSetsInProgress((previous) => ({ ...previous, [exerciseIndex]: false }));
@@ -333,7 +348,7 @@ export default function WorkoutSessionScreen() {
     }
 
     const progress = currentWorkout.exercises_progress[exerciseIndex];
-    const targetSet = progress?.sets_data.find((setLog) => setLog.set_number === setNumber);
+    const targetSet = getSetGroupByNumber(progress, setNumber);
     if (!targetSet) {
       return;
     }
@@ -352,7 +367,7 @@ export default function WorkoutSessionScreen() {
               targetSetNumber: setNumber,
             };
 
-            const didDeleteSet = await deleteLoggedSet(targetSet.id);
+            const didDeleteSet = await deleteSetGroup(targetSet.day_exercise_id, setNumber);
             if (!didDeleteSet) {
               syncDraftOptionsRef.current = null;
             }
@@ -360,9 +375,12 @@ export default function WorkoutSessionScreen() {
         },
       ],
     );
-  }, [currentWorkout, deleteLoggedSet, isHistoricalEditMode]);
+  }, [currentWorkout, deleteSetGroup, isHistoricalEditMode]);
 
-  const handleRepsChange = useCallback((delta: number, exerciseIndex: number) => {
+  const updateDraftSegments = useCallback((
+    exerciseIndex: number,
+    updater: (segments: WorkoutSetSegmentDraft[]) => WorkoutSetSegmentDraft[],
+  ) => {
     if (isReviewMode) {
       return;
     }
@@ -377,60 +395,38 @@ export default function WorkoutSessionScreen() {
 
     applyExerciseDraft(
       exerciseIndex,
-      { reps: Math.max(1, resolvedDraft.reps + delta) },
+      { segments: updater(resolvedDraft.segments) },
       resolvedDraft.targetSetNumber,
     );
   }, [applyExerciseDraft, currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft, isReviewMode]);
 
-  const handleWeightChange = useCallback((delta: number, exerciseIndex: number) => {
-    if (isReviewMode) {
-      return;
-    }
-
-    const resolvedDraft = getResolvedExerciseDraft(
-      exerciseIndex,
-      exerciseIndex === currentExerciseIndex ? currentSetNumber : undefined,
+  const handleSegmentRepsChange = useCallback((exerciseIndex: number, segmentIndex: number, delta: number) => {
+    updateDraftSegments(exerciseIndex, (segments) =>
+      segments.map((segment, index) =>
+        index === segmentIndex
+          ? {
+              ...segment,
+              reps_completed: Math.max(1, segment.reps_completed + delta),
+            }
+          : segment,
+      ),
     );
-    if (!resolvedDraft) {
-      return;
-    }
+  }, [updateDraftSegments]);
 
-    applyExerciseDraft(
-      exerciseIndex,
-      { weight: Math.max(0, resolvedDraft.weight + delta) },
-      resolvedDraft.targetSetNumber,
+  const handleSegmentWeightChange = useCallback((exerciseIndex: number, segmentIndex: number, delta: number) => {
+    updateDraftSegments(exerciseIndex, (segments) =>
+      segments.map((segment, index) =>
+        index === segmentIndex
+          ? {
+              ...segment,
+              weight_kg: Math.max(0, Number((segment.weight_kg + delta).toFixed(2))),
+            }
+          : segment,
+      ),
     );
-  }, [applyExerciseDraft, currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft, isReviewMode]);
+  }, [updateDraftSegments]);
 
-  const handleRepsCommit = useCallback((nextReps: number, exerciseIndex: number) => {
-    if (isReviewMode) {
-      return;
-    }
-
-    applyExerciseDraft(
-      exerciseIndex,
-      { reps: Math.max(1, Math.round(nextReps)) },
-      currentSetNumber,
-    );
-  }, [applyExerciseDraft, currentSetNumber, isReviewMode]);
-
-  const handleWeightCommit = useCallback((nextWeight: number, exerciseIndex: number) => {
-    if (isReviewMode) {
-      return;
-    }
-
-    applyExerciseDraft(
-      exerciseIndex,
-      { weight: Math.max(0, nextWeight) },
-      currentSetNumber,
-    );
-  }, [applyExerciseDraft, currentSetNumber, isReviewMode]);
-
-  const handleEffortChange = useCallback((delta: number, exerciseIndex: number) => {
-    if (isReviewMode) {
-      return;
-    }
-
+  const handleSegmentEffortChange = useCallback((exerciseIndex: number, segmentIndex: number, delta: number) => {
     const resolvedDraft = getResolvedExerciseDraft(
       exerciseIndex,
       exerciseIndex === currentExerciseIndex ? currentSetNumber : undefined,
@@ -443,12 +439,73 @@ export default function WorkoutSessionScreen() {
       return;
     }
 
+    updateDraftSegments(exerciseIndex, (segments) =>
+      segments.map((segment, index) =>
+        index === segmentIndex
+          ? {
+              ...segment,
+              effort_value: Math.min(10, Math.max(0, Number(((segment.effort_value ?? 0) + delta).toFixed(1)))),
+            }
+          : segment,
+      ),
+    );
+  }, [currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft, updateDraftSegments]);
+
+  const handleRepsChange = useCallback((delta: number, exerciseIndex: number) => {
+    handleSegmentRepsChange(exerciseIndex, 0, delta);
+  }, [handleSegmentRepsChange]);
+
+  const handleWeightChange = useCallback((delta: number, exerciseIndex: number) => {
+    handleSegmentWeightChange(exerciseIndex, 0, delta);
+  }, [handleSegmentWeightChange]);
+
+  const handleEffortChange = useCallback((delta: number, exerciseIndex: number) => {
+    handleSegmentEffortChange(exerciseIndex, 0, delta);
+  }, [handleSegmentEffortChange]);
+
+  const handleAddSegment = useCallback((exerciseIndex: number) => {
+    const resolvedDraft = getResolvedExerciseDraft(
+      exerciseIndex,
+      exerciseIndex === currentExerciseIndex ? currentSetNumber : undefined,
+    );
+    if (!resolvedDraft) {
+      return;
+    }
+
     applyExerciseDraft(
       exerciseIndex,
-      { effortValue: clampEffortValue((resolvedDraft.effortValue ?? 0) + delta) },
+      {
+        segments: [
+          ...resolvedDraft.segments,
+          createNextSegmentDraft(resolvedDraft.context.exercise, resolvedDraft.segments),
+        ],
+      },
       resolvedDraft.targetSetNumber,
     );
-  }, [applyExerciseDraft, currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft, isReviewMode]);
+  }, [applyExerciseDraft, currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft]);
+
+  const handleRemoveSegment = useCallback((exerciseIndex: number, segmentIndex: number) => {
+    const resolvedDraft = getResolvedExerciseDraft(
+      exerciseIndex,
+      exerciseIndex === currentExerciseIndex ? currentSetNumber : undefined,
+    );
+    if (!resolvedDraft) {
+      return;
+    }
+
+    const nextSegments = resolvedDraft.segments.filter((_, index) => index !== segmentIndex);
+    const validationMessage = validateWorkoutSetDraft(resolvedDraft.context.exercise, nextSegments);
+    if (validationMessage) {
+      Alert.alert('Segmentos insuficientes', validationMessage);
+      return;
+    }
+
+    applyExerciseDraft(
+      exerciseIndex,
+      { segments: nextSegments },
+      resolvedDraft.targetSetNumber,
+    );
+  }, [applyExerciseDraft, currentExerciseIndex, currentSetNumber, getResolvedExerciseDraft]);
 
   const saveResolvedSet = useCallback(
     async (
@@ -461,22 +518,24 @@ export default function WorkoutSessionScreen() {
         return false;
       }
 
+      const validationMessage = validateWorkoutSetDraft(
+        resolvedDraft.context.exercise,
+        resolvedDraft.segments,
+      );
+      if (validationMessage) {
+        Alert.alert('No se pudo guardar la serie', validationMessage);
+        return false;
+      }
+
       syncDraftOptionsRef.current = {
         exerciseIndex: options?.nextExerciseIndex ?? exerciseIndex,
         targetSetNumber: options?.nextSetNumber ?? targetSetNumber,
       };
 
-      const isCardio = isCardioExercise(resolvedDraft.context.exercise);
       const didSaveSet = await saveSet({
         dayExerciseId: resolvedDraft.context.progress.day_exercise_id,
         setNumber: targetSetNumber,
-        repsCompleted: isCardio ? 1 : resolvedDraft.reps,
-        weightKg: isCardio ? undefined : resolvedDraft.weight > 0 ? resolvedDraft.weight : undefined,
-        effortValue:
-          shouldShowStrengthEffort(resolvedDraft.context.exercise) &&
-          isEditableEffortType(resolvedDraft.context.exercise.effort_type)
-            ? resolvedDraft.effortValue ?? 0
-            : undefined,
+        segments: toWorkoutSetSegmentInputs(resolvedDraft.segments),
       });
 
       if (!didSaveSet) {
@@ -531,9 +590,7 @@ export default function WorkoutSessionScreen() {
       applyExerciseDraft(
         exerciseIndex,
         {
-          reps: resolvedDraft.reps,
-          weight: resolvedDraft.weight,
-          effortValue: resolvedDraft.effortValue,
+          segments: resolvedDraft.segments,
           restSeconds: resolvedDraft.restSeconds,
         },
         setNumber,
@@ -573,7 +630,11 @@ export default function WorkoutSessionScreen() {
       return;
     }
 
-    if (setNumber >= totalSets) {
+    const latestWorkout = useWorkoutStore.getState().currentWorkout;
+    const refreshedProgress = latestWorkout?.exercises_progress[exerciseIndex];
+    const isExerciseCompleted = refreshedProgress?.is_completed ?? false;
+
+    if (isExerciseCompleted) {
       showToast({
         message: 'Ejercicio completado',
         subtitle: 'Excelente trabajo',
@@ -752,6 +813,98 @@ export default function WorkoutSessionScreen() {
     return result;
   }, [currentWorkout, workoutTrainingDay]);
 
+  const recalculateAutoplayExercise = useCallback((
+    nextVisibleExerciseIds: string[] = visibleExerciseIds,
+    nextCardLayouts: Record<string, ExerciseCardLayout> = cardLayouts,
+    nextViewportHeight: number = viewportHeight,
+    nextScrollOffsetY: number = scrollOffsetY,
+  ) => {
+    if (!nextVisibleExerciseIds.length || nextViewportHeight <= 0) {
+      setAutoplayExerciseId(null);
+      return;
+    }
+
+    const viewportCenter = nextScrollOffsetY + nextViewportHeight / 2;
+    let bestExerciseId: string | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    nextVisibleExerciseIds.forEach((exerciseId) => {
+      const layout = nextCardLayouts[exerciseId];
+      if (!layout) {
+        return;
+      }
+
+      const cardCenter = layout.y + layout.height / 2;
+      const distance = Math.abs(cardCenter - viewportCenter);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestExerciseId = exerciseId;
+      }
+    });
+
+    setAutoplayExerciseId((previous) => (previous === bestExerciseId ? previous : bestExerciseId));
+  }, [cardLayouts, scrollOffsetY, viewportHeight, visibleExerciseIds]);
+
+  useEffect(() => {
+    recalculateAutoplayExercise();
+  }, [recalculateAutoplayExercise]);
+
+  useEffect(() => {
+    const validExerciseIds = new Set(
+      groupedExercises
+        .filter((item): item is Extract<ListItem, { type: 'exercise' }> => item.type === 'exercise')
+        .map((item) => item.data.exercise.id),
+    );
+
+    setVisibleExerciseIds((previous) => {
+      const next = previous.filter((exerciseId) => validExerciseIds.has(exerciseId));
+      return areExerciseIdListsEqual(previous, next) ? previous : next;
+    });
+    setAutoplayExerciseId((previous) => (previous && validExerciseIds.has(previous) ? previous : null));
+    setCardLayouts((previous) => {
+      const nextEntries = Object.entries(previous).filter(([exerciseId]) => validExerciseIds.has(exerciseId));
+      if (nextEntries.length === Object.keys(previous).length) {
+        return previous;
+      }
+
+      return Object.fromEntries(nextEntries);
+    });
+  }, [groupedExercises]);
+
+  const handleExerciseCardLayout = useCallback((exerciseId: string, y: number, height: number) => {
+    setCardLayouts((previous) => {
+      const currentLayout = previous[exerciseId];
+      if (currentLayout && currentLayout.y === y && currentLayout.height === height) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [exerciseId]: { y, height },
+      };
+    });
+  }, []);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const nextOffset = event.nativeEvent.contentOffset.y;
+    setScrollOffsetY((previous) => (Math.abs(previous - nextOffset) < 1 ? previous : nextOffset));
+  }, []);
+
+  const handleListLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = event.nativeEvent.layout.height;
+    setViewportHeight((previous) => (Math.abs(previous - nextHeight) < 1 ? previous : nextHeight));
+  }, []);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<ListItem>[] }) => {
+    const nextVisibleExerciseIds = viewableItems.flatMap((viewableItem) =>
+      viewableItem.item?.type === 'exercise' ? [viewableItem.item.data.exercise.id] : [],
+    );
+
+    setVisibleExerciseIds((previous) =>
+      areExerciseIdListsEqual(previous, nextVisibleExerciseIds) ? previous : nextVisibleExerciseIds,
+    );
+  });
+
   const phaseCompletionStatus = useMemo(() => {
     const status: Record<ExercisePhase, boolean> = {
       warmup: true,
@@ -894,6 +1047,11 @@ export default function WorkoutSessionScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        onLayout={handleListLayout}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        onViewableItemsChanged={onViewableItemsChanged.current}
+        viewabilityConfig={viewabilityConfigRef.current}
         keyExtractor={(item) =>
           item.type === 'separator' ? `separator-${item.data.phase}` : `exercise-${item.data.exercise.id}`
         }
@@ -929,42 +1087,59 @@ export default function WorkoutSessionScreen() {
             ? currentSetNumber
             : getExerciseTargetSetNumber(exercise, progress);
           const defaults = getExerciseDraftValues(exercise, progress, displaySetNumber);
+          const displaySegments = isActive ? currentSegments : defaults.segments;
+          const primarySegment = displaySegments[0] ?? null;
 
           return (
-            <ExerciseCard
-              mode={screenMode}
-              dayExercise={exercise}
-              progress={progress}
-              currentSetNumber={displaySetNumber}
-              currentReps={isActive ? currentReps : defaults.reps}
-              currentWeight={isActive ? currentWeight : defaults.weight}
-              currentEffortValue={isActive ? currentEffortValue : defaults.effortValue}
-              isActive={isActive}
-              exerciseNumber={indexInPhase}
-              totalExercises={totalInPhase}
-              setInProgress={setsInProgress[originalIndex] || false}
-              isSavingSet={isSavingSet}
-              onActivateExercise={isReviewMode ? undefined : () => handleActivateExercise(originalIndex)}
-              onRepsChange={(delta) => handleRepsChange(delta, originalIndex)}
-              onRepsCommit={(value) => handleRepsCommit(value, originalIndex)}
-              onWeightChange={(delta) => handleWeightChange(delta, originalIndex)}
-              onWeightCommit={(value) => handleWeightCommit(value, originalIndex)}
-              onEffortChange={(delta) => handleEffortChange(delta, originalIndex)}
-              onAdvanceSet={
-                isLiveMode
-                  ? () => void handleLiveSetAction(originalIndex, displaySetNumber, exercise.sets)
-                  : undefined
+            <View
+              onLayout={(event) =>
+                handleExerciseCardLayout(
+                  exercise.id,
+                  event.nativeEvent.layout.y,
+                  event.nativeEvent.layout.height,
+                )
               }
-              onSaveSet={
-                isHistoricalEditMode
-                  ? () => void handleHistoricalSaveSet(originalIndex, displaySetNumber)
-                  : undefined
-              }
-              onSelectSet={isReviewMode ? undefined : (setNumber) => handleSelectSet(originalIndex, setNumber)}
-              onDeleteSet={
-                isHistoricalEditMode ? (setNumber) => handleDeleteSet(originalIndex, setNumber) : undefined
-              }
-            />
+            >
+              <ExerciseCard
+                mode={screenMode}
+                dayExercise={exercise}
+                progress={progress}
+                currentSetNumber={displaySetNumber}
+                currentReps={primarySegment?.reps_completed ?? (isCardioExercise(exercise) ? 1 : exercise.reps_min ?? 12)}
+                currentWeight={primarySegment?.weight_kg ?? 0}
+                currentEffortValue={primarySegment?.effort_value ?? exercise.effort_value}
+                currentSegments={displaySegments}
+                isActive={isActive}
+                exerciseNumber={indexInPhase}
+                totalExercises={totalInPhase}
+                setInProgress={setsInProgress[originalIndex] || false}
+                isSavingSet={isSavingSet}
+                shouldAutoplayPreview={exercise.id === autoplayExerciseId}
+                onActivateExercise={isReviewMode ? undefined : () => handleActivateExercise(originalIndex)}
+                onRepsChange={(delta) => handleRepsChange(delta, originalIndex)}
+                onWeightChange={(delta) => handleWeightChange(delta, originalIndex)}
+                onEffortChange={(delta) => handleEffortChange(delta, originalIndex)}
+                onSegmentRepsChange={(segmentIndex, delta) => handleSegmentRepsChange(originalIndex, segmentIndex, delta)}
+                onSegmentWeightChange={(segmentIndex, delta) => handleSegmentWeightChange(originalIndex, segmentIndex, delta)}
+                onSegmentEffortChange={(segmentIndex, delta) => handleSegmentEffortChange(originalIndex, segmentIndex, delta)}
+                onAddSegment={() => handleAddSegment(originalIndex)}
+                onRemoveSegment={(segmentIndex) => handleRemoveSegment(originalIndex, segmentIndex)}
+                onAdvanceSet={
+                  isLiveMode
+                    ? () => void handleLiveSetAction(originalIndex, displaySetNumber, exercise.sets)
+                    : undefined
+                }
+                onSaveSet={
+                  isHistoricalEditMode
+                    ? () => void handleHistoricalSaveSet(originalIndex, displaySetNumber)
+                    : undefined
+                }
+                onSelectSet={isReviewMode ? undefined : (setNumber) => handleSelectSet(originalIndex, setNumber)}
+                onDeleteSet={
+                  isHistoricalEditMode ? (setNumber) => handleDeleteSet(originalIndex, setNumber) : undefined
+                }
+              />
+            </View>
           );
         }}
       />

@@ -124,6 +124,16 @@ const getWorkoutStatus = (status: WorkoutLog['status'] | ActualSessionStatus | u
 const getTrainingDayTotalSets = (trainingDay: TrainingDay) =>
   trainingDay.exercises.reduce((sum, exercise) => sum + (exercise.sets || 0), 0);
 
+const getCompletedWorkoutSetCount = (workoutLog: WorkoutLog) => {
+  const completedSetIds = new Set<string>();
+
+  workoutLog.exercise_sets.forEach((setLog) => {
+    completedSetIds.add(`${setLog.day_exercise_id}:${setLog.set_number}`);
+  });
+
+  return completedSetIds.size;
+};
+
 const roundPercentage = (value: number) => {
   if (!Number.isFinite(value)) {
     return 0;
@@ -149,7 +159,7 @@ const calculateSessionCompletionPercentage = (
     return 0;
   }
 
-  return roundPercentage((workoutLog.exercise_sets.length / totalSets) * 100);
+  return roundPercentage((getCompletedWorkoutSetCount(workoutLog) / totalSets) * 100);
 };
 
 const resolvePlannedStatus = (
