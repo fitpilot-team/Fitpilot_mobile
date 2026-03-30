@@ -269,7 +269,6 @@ export default function HomeScreen() {
   );
 
   if (!user) {
-    router.replace('/login');
     return null;
   }
 

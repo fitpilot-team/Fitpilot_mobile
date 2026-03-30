@@ -23,7 +23,6 @@ import { getAssetUrl, getVideoThumbnailUrl } from '../../services/api';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { DayExercise, ExerciseProgress, WorkoutScreenMode } from '../../types';
 import {
-  formatDurationSeconds,
   formatEffortValue,
   getCardioEffectiveSets,
   getCardioIntensityLabel,

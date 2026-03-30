@@ -17,6 +17,7 @@ import {
   useBottomTabBarVisibility,
 } from '../../src/hooks/useBottomTabBarVisibility';
 import { isTabletLayout } from '../../src/utils/layout';
+import { ProtectedRoute } from '../../src/components/common';
 
 const TABLET_EXPANDED_WIDTH = 164;
 const TABLET_COLLAPSED_WIDTH = 84;
@@ -298,120 +299,122 @@ export default function TabLayout() {
   }, [isTablet]);
 
   return (
-    <BottomTabBarVisibilityProvider>
-      <Tabs
-        tabBar={(props) =>
-          isTablet ? (
-            <TabletTabBar
-              props={props}
-              isExpanded={isRailExpanded}
-              onHoverIn={isHoverEnabled ? () => setIsRailHovered(true) : undefined}
-              onHoverOut={isHoverEnabled ? () => setIsRailHovered(false) : undefined}
-              onToggle={() => setIsRailPinnedExpanded((currentValue) => !currentValue)}
-            />
-          ) : (
-            <PhoneTabBar props={props} />
-          )
-        }
-        screenOptions={{
-          animation: 'none',
-          sceneStyle: {
-            backgroundColor: theme.colors.background,
-          },
-          tabBarPosition: isTablet ? 'left' : 'bottom',
-          tabBarVariant: isTablet ? 'material' : 'uikit',
-          tabBarActiveTintColor: theme.colors.tabBarActiveTint,
-          tabBarInactiveTintColor: theme.colors.tabBarInactiveTint,
-          tabBarActiveBackgroundColor: isTablet
-            ? theme.colors.tabBarActiveBg
-            : theme.colors.tabBarBackground,
-          tabBarInactiveBackgroundColor: theme.colors.tabBarBackground,
-          tabBarShowLabel: !isTablet || isRailExpanded,
-          tabBarHideOnKeyboard: !isTablet,
-          tabBarStyle: isTablet
-            ? [
-                styles.tabletTabBar,
-                isRailExpanded ? styles.tabletTabBarExpanded : styles.tabletTabBarCollapsed,
-              ]
-            : styles.phoneTabBar,
-          tabBarItemStyle: isTablet
-            ? [
-                styles.tabletTabBarItem,
-                isRailExpanded ? styles.tabletTabBarItemExpanded : styles.tabletTabBarItemCollapsed,
-              ]
-            : styles.phoneTabBarItem,
-          tabBarLabelStyle: isTablet ? styles.tabletTabBarLabel : styles.phoneTabBarLabel,
-          tabBarIconStyle: isTablet ? styles.tabletTabBarIcon : undefined,
-          headerShown: false,
-        }}
-      >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: 'Inicio',
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons
-                name={focused ? 'home' : 'home-outline'}
-                size={size}
-                color={color}
+    <ProtectedRoute>
+      <BottomTabBarVisibilityProvider>
+        <Tabs
+          tabBar={(props) =>
+            isTablet ? (
+              <TabletTabBar
+                props={props}
+                isExpanded={isRailExpanded}
+                onHoverIn={isHoverEnabled ? () => setIsRailHovered(true) : undefined}
+                onHoverOut={isHoverEnabled ? () => setIsRailHovered(false) : undefined}
+                onToggle={() => setIsRailPinnedExpanded((currentValue) => !currentValue)}
               />
-            ),
+            ) : (
+              <PhoneTabBar props={props} />
+            )
+          }
+          screenOptions={{
+            animation: 'none',
+            sceneStyle: {
+              backgroundColor: theme.colors.background,
+            },
+            tabBarPosition: isTablet ? 'left' : 'bottom',
+            tabBarVariant: isTablet ? 'material' : 'uikit',
+            tabBarActiveTintColor: theme.colors.tabBarActiveTint,
+            tabBarInactiveTintColor: theme.colors.tabBarInactiveTint,
+            tabBarActiveBackgroundColor: isTablet
+              ? theme.colors.tabBarActiveBg
+              : theme.colors.tabBarBackground,
+            tabBarInactiveBackgroundColor: theme.colors.tabBarBackground,
+            tabBarShowLabel: !isTablet || isRailExpanded,
+            tabBarHideOnKeyboard: !isTablet,
+            tabBarStyle: isTablet
+              ? [
+                  styles.tabletTabBar,
+                  isRailExpanded ? styles.tabletTabBarExpanded : styles.tabletTabBarCollapsed,
+                ]
+              : styles.phoneTabBar,
+            tabBarItemStyle: isTablet
+              ? [
+                  styles.tabletTabBarItem,
+                  isRailExpanded ? styles.tabletTabBarItemExpanded : styles.tabletTabBarItemCollapsed,
+                ]
+              : styles.phoneTabBarItem,
+            tabBarLabelStyle: isTablet ? styles.tabletTabBarLabel : styles.phoneTabBarLabel,
+            tabBarIconStyle: isTablet ? styles.tabletTabBarIcon : undefined,
+            headerShown: false,
           }}
-        />
-        <Tabs.Screen
-          name="diet"
-          options={{
-            title: 'Dieta',
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons
-                name={focused ? 'restaurant' : 'restaurant-outline'}
-                size={size}
-                color={color}
-              />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="workouts"
-          options={{
-            title: isTablet ? 'Entreno' : 'Entrenamientos',
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons
-                name={focused ? 'barbell' : 'barbell-outline'}
-                size={size}
-                color={color}
-              />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="measurements"
-          options={{
-            title: 'Medidas',
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons
-                name={focused ? 'body' : 'body-outline'}
-                size={size}
-                color={color}
-              />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: 'Perfil',
-            tabBarIcon: ({ color, size, focused }) => (
-              <Ionicons
-                name={focused ? 'person' : 'person-outline'}
-                size={size}
-                color={color}
-              />
-            ),
-          }}
-        />
-      </Tabs>
-    </BottomTabBarVisibilityProvider>
+        >
+          <Tabs.Screen
+            name="index"
+            options={{
+              title: 'Inicio',
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons
+                  name={focused ? 'home' : 'home-outline'}
+                  size={size}
+                  color={color}
+                />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="diet"
+            options={{
+              title: 'Dieta',
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons
+                  name={focused ? 'restaurant' : 'restaurant-outline'}
+                  size={size}
+                  color={color}
+                />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="workouts"
+            options={{
+              title: isTablet ? 'Entreno' : 'Entrenamientos',
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons
+                  name={focused ? 'barbell' : 'barbell-outline'}
+                  size={size}
+                  color={color}
+                />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="measurements"
+            options={{
+              title: 'Medidas',
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons
+                  name={focused ? 'body' : 'body-outline'}
+                  size={size}
+                  color={color}
+                />
+              ),
+            }}
+          />
+          <Tabs.Screen
+            name="profile"
+            options={{
+              title: 'Perfil',
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons
+                  name={focused ? 'person' : 'person-outline'}
+                  size={size}
+                  color={color}
+                />
+              ),
+            }}
+          />
+        </Tabs>
+      </BottomTabBarVisibilityProvider>
+    </ProtectedRoute>
   );
 }
 

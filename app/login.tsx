@@ -32,11 +32,21 @@ export default function LoginScreen() {
     }
   }, [isAuthenticated]);
 
-  useEffect(() => {
+  const handleChangeEmail = (value: string) => {
     if (error) {
       clearError();
     }
-  }, [email, password, error, clearError]);
+
+    setEmail(value);
+  };
+
+  const handleChangePassword = (value: string) => {
+    if (error) {
+      clearError();
+    }
+
+    setPassword(value);
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -102,7 +112,7 @@ export default function LoginScreen() {
           label="Correo electrónico"
           placeholder="tu@email.com"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={handleChangeEmail}
           keyboardType="email-address"
           autoCapitalize="none"
           autoComplete="email"
@@ -113,7 +123,7 @@ export default function LoginScreen() {
           label="Contraseña"
           placeholder="••••••••"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={handleChangePassword}
           secureTextEntry
           autoComplete="password"
           icon="lock-closed-outline"

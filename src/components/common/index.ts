@@ -10,3 +10,4 @@ export { StartupBrandIntro } from './StartupBrandIntro';
 export { GlassCard } from './GlassCard';
 export { Skeleton, WorkoutCardSkeleton, ChartSkeleton, StatCardSkeleton, ListItemSkeleton } from './Skeleton';
 export { TabScreenWrapper } from './TabScreenWrapper';
+export { ProtectedRoute } from './ProtectedRoute';

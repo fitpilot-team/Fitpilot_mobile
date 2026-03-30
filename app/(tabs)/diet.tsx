@@ -12,7 +12,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { Button, Card, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
 import {
   DietHero,
@@ -613,7 +612,6 @@ export default function DietScreen() {
   }, [applyUpdatedMenu, applyUpdatedRecipeDetail, selectedDate, selectedIngredient, selectedSwapTarget]);
 
   if (!user) {
-    router.replace('/login');
     return null;
   }
 

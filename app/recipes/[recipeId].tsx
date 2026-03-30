@@ -242,7 +242,6 @@ export default function RecipeDetailScreen() {
     }
 
     if (!user) {
-      router.replace('/login');
       return;
     }
 
