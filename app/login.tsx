@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,10 @@ import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../src/store/authStore';
 import { Button, Input, Logo } from '../src/components/common';
+import { TurnstileChallengeModal } from '../src/components/auth/TurnstileChallengeModal';
 import { brandColors, spacing, fontSize, borderRadius } from '../src/constants/colors';
 import { useThemedStyles, type AppTheme } from '../src/theme';
+import type { LoginCredentials } from '../src/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isSmallScreen = SCREEN_WIDTH < 400;
@@ -23,6 +25,9 @@ const isVerySmallScreen = SCREEN_WIDTH < 375;
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isCaptchaVisible, setIsCaptchaVisible] = useState(false);
+  const [captchaSessionKey, setCaptchaSessionKey] = useState(0);
+  const [pendingCredentials, setPendingCredentials] = useState<LoginCredentials | null>(null);
   const { login, isLoading, error, clearError, isAuthenticated } = useAuthStore();
   const styles = useThemedStyles(createStyles);
 
@@ -48,15 +53,54 @@ export default function LoginScreen() {
     setPassword(value);
   };
 
+  const submitLogin = async (credentials: LoginCredentials) => {
+    const normalizedCredentials = {
+      email: credentials.email.trim(),
+      password: credentials.password,
+      captchaToken: credentials.captchaToken,
+    };
+    const result = await login(normalizedCredentials);
+
+    if (result.status === 'success') {
+      setPendingCredentials(null);
+      setIsCaptchaVisible(false);
+      router.replace('/(tabs)');
+      return;
+    }
+
+    if (result.status === 'captcha_required') {
+      setPendingCredentials({
+        email: normalizedCredentials.email,
+        password: normalizedCredentials.password,
+      });
+      setCaptchaSessionKey((current) => current + 1);
+      setIsCaptchaVisible(true);
+      return;
+    }
+
+    setPendingCredentials(null);
+    setIsCaptchaVisible(false);
+  };
+
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
       return;
     }
 
-    const success = await login({ email: email.trim(), password });
-    if (success) {
-      router.replace('/(tabs)');
+    await submitLogin({ email, password });
+  };
+
+  const handleCaptchaToken = async (token: string) => {
+    if (!pendingCredentials) {
+      setIsCaptchaVisible(false);
+      return;
     }
+
+    setIsCaptchaVisible(false);
+    await submitLogin({
+      ...pendingCredentials,
+      captchaToken: token,
+    });
   };
 
   return (
@@ -102,14 +146,14 @@ export default function LoginScreen() {
           <View style={styles.errorContainer}>
             <View style={styles.errorHeader}>
               <Ionicons name="alert-circle" size={20} color={styles.errorIcon.color} />
-              <Text style={styles.errorTitle}>No se pudo iniciar sesión</Text>
+              <Text style={styles.errorTitle}>No se pudo iniciar sesion</Text>
             </View>
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
 
         <Input
-          label="Correo electrónico"
+          label="Correo electronico"
           placeholder="tu@email.com"
           value={email}
           onChangeText={handleChangeEmail}
@@ -120,8 +164,8 @@ export default function LoginScreen() {
         />
 
         <Input
-          label="Contraseña"
-          placeholder="••••••••"
+          label="Contrasena"
+          placeholder="********"
           value={password}
           onChangeText={handleChangePassword}
           secureTextEntry
@@ -130,7 +174,7 @@ export default function LoginScreen() {
         />
 
         <Button
-          title="Iniciar sesión"
+          title="Iniciar sesion"
           onPress={handleLogin}
           isLoading={isLoading}
           disabled={!email.trim() || !password.trim()}
@@ -140,17 +184,24 @@ export default function LoginScreen() {
         <View style={styles.infoCard}>
           <View style={styles.infoCardHeader}>
             <Ionicons name="information-circle-outline" size={20} color={brandColors.sky} />
-            <Text style={styles.infoCardTitle}>¿No tienes cuenta?</Text>
+            <Text style={styles.infoCardTitle}>No tienes cuenta?</Text>
           </View>
           <Text style={styles.infoCardText}>
-            Esta aplicación es exclusiva para clientes. Tu entrenador o nutriólogo debe
+            Esta aplicacion es exclusiva para clientes. Tu entrenador o nutriologo debe
             darte de alta para que puedas acceder.
           </Text>
           <Text style={styles.infoCardTextSecondary}>
-            Los profesionales deben usar la aplicación web.
+            Los profesionales deben usar la aplicacion web.
           </Text>
         </View>
       </ScrollView>
+
+      <TurnstileChallengeModal
+        key={captchaSessionKey}
+        visible={isCaptchaVisible}
+        onClose={() => setIsCaptchaVisible(false)}
+        onToken={handleCaptchaToken}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -244,7 +295,7 @@ const createStyles = (theme: AppTheme) =>
     },
     infoCard: {
       marginTop: spacing.xl,
-      backgroundColor: theme.isDark ? 'rgba(103, 181, 222, 0.08)' : 'rgba(103, 181, 222, 0.08)',
+      backgroundColor: 'rgba(103, 181, 222, 0.08)',
       borderRadius: borderRadius.lg,
       padding: spacing.md,
       borderWidth: 1,

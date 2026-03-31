@@ -14,11 +14,15 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
 import {
+  CalendarDatePickerModal,
+  HistoricalNavigator,
+  type SharedWeeklyCalendarDay,
+} from '../../src/components/calendar';
+import {
   DietHero,
   DietMealCard,
   DietMenuSelectorModal,
   RecipeIngredientSwapModal,
-  DietWeekCalendar,
 } from '../../src/components/diet';
 import { borderRadius, brandColors, fontSize, spacing, nutritionTheme } from '../../src/constants/colors';
 import { useAuthStore } from '../../src/store/authStore';
@@ -34,14 +38,24 @@ import {
   swapDietStandaloneFood,
   getTodayDietDateKey,
 } from '../../src/services/diet';
-import { getDashboardContentWidth } from '../../src/utils/layout';
+import {
+  getDashboardContentWidth,
+  getPrimaryScreenHorizontalPadding,
+  isTabletLayout,
+} from '../../src/utils/layout';
 import {
   mergeDietMenuOptionsByDate,
   resolvePrimaryDietMenu,
   resolvePrimaryDietMenuId,
   resolveVisibleDietMenu,
 } from '../../src/utils/dietMenuSelection';
-import { formatLocalDate, getLocalWeekKey } from '../../src/utils/date';
+import {
+  addDaysToDateKey,
+  formatLocalDate,
+  formatLocalShortWeekday,
+  getLocalDayNumber,
+  toLocalDateKey,
+} from '../../src/utils/date';
 import type {
   ApiError,
   ClientDietFoodRow,
@@ -176,15 +190,23 @@ const applyUpdatedMenuToWeekDays = (
 
 const buildDietMenuLabel = (index: number) => `Menu ${index + 1}`;
 
+type LoadDietOptions = {
+  mode?: 'initial' | 'refresh';
+  anchorDate: string;
+  selectedDate?: string;
+};
+
 export default function DietScreen() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const contentWidth = getDashboardContentWidth(width);
+  const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset();
   const { user } = useAuthStore();
   const [dietDays, setDietDays] = useState<ClientDietWeekDay[]>([]);
+  const [anchorDate, setAnchorDate] = useState(getTodayDietDateKey());
   const [selectedDate, setSelectedDate] = useState(getTodayDietDateKey());
   const [previewMenuIdByDate, setPreviewMenuIdByDate] = useState<Record<string, number>>({});
   const [menuOptionsHydratedByDate, setMenuOptionsHydratedByDate] = useState<Record<string, boolean>>({});
@@ -202,14 +224,22 @@ export default function DietScreen() {
   const [swapFoodsLoading, setSwapFoodsLoading] = useState(false);
   const [swapFoodsError, setSwapFoodsError] = useState<string | null>(null);
   const [isSavingSwap, setIsSavingSwap] = useState(false);
+  const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
+  const isTablet = isTabletLayout(width, height);
 
   const selectedIngredient = selectedSwapTarget?.ingredient ?? null;
 
   const loadDiet = useCallback(
-    async (mode: 'initial' | 'refresh' = 'initial') => {
+    async ({
+      mode = 'initial',
+      anchorDate: requestedAnchorDate,
+      selectedDate: requestedSelectedDate,
+    }: LoadDietOptions) => {
       if (!user) {
         return;
       }
+
+      const resolvedAnchorDate = requestedAnchorDate || getTodayDietDateKey();
 
       if (mode === 'refresh') {
         setRefreshing(true);
@@ -218,31 +248,29 @@ export default function DietScreen() {
       }
 
       try {
-        const days = await getClientDietCalendar(user.id);
-        const today = getTodayDietDateKey();
+        const days = await getClientDietCalendar(user.id, resolvedAnchorDate);
+        const preferredSelectedDate = requestedSelectedDate ?? resolvedAnchorDate;
 
         setDietDays(days);
+        setAnchorDate(resolvedAnchorDate);
         setMenuOptionsHydratedByDate({});
         setMenuOptionsLoadingByDate({});
         setMenuOptionsErrorByDate({});
         setPreviewMenuIdByDate({});
         setError(null);
         setIsMenuSelectorVisible(false);
+        setIsDatePickerVisible(false);
         setIsSwapModalVisible(false);
         setSelectedSwapTarget(null);
         setSwapFoods([]);
         setSwapFoodsError(null);
         setRenderVersion((currentValue) => currentValue + 1);
-        setSelectedDate((currentDate) => {
-          if (
-            getLocalWeekKey(currentDate) === getLocalWeekKey(today) &&
-            days.some((day) => day.assignedDate === currentDate)
-          ) {
-            return currentDate;
-          }
-
-          return days.find((day) => day.assignedDate === today)?.assignedDate || today;
-        });
+        setSelectedDate(
+          days.find((day) => day.assignedDate === preferredSelectedDate)?.assignedDate ||
+          days.find((day) => day.assignedDate === resolvedAnchorDate)?.assignedDate ||
+          days[0]?.assignedDate ||
+          preferredSelectedDate,
+        );
       } catch (loadError: any) {
         setDietDays([]);
         setMenuOptionsHydratedByDate({});
@@ -250,6 +278,7 @@ export default function DietScreen() {
         setMenuOptionsErrorByDate({});
         setPreviewMenuIdByDate({});
         setError(loadError?.message || 'No se pudo cargar tu dieta.');
+        setIsDatePickerVisible(false);
         setIsSwapModalVisible(false);
         setSelectedSwapTarget(null);
       } finally {
@@ -313,8 +342,13 @@ export default function DietScreen() {
   );
 
   useEffect(() => {
-    loadDiet();
-  }, [loadDiet]);
+    if (!user) {
+      return;
+    }
+
+    const todayDate = getTodayDietDateKey();
+    void loadDiet({ anchorDate: todayDate, selectedDate: todayDate });
+  }, [loadDiet, user]);
 
   const showInitialLoadingState = isLoading && !refreshing;
   const shouldAnimateEntry = !hasPlayedEntryAnimation && !showInitialLoadingState;
@@ -383,16 +417,93 @@ export default function DietScreen() {
   const selectorSubtitle = !selectedDay
     ? 'No hay menus disponibles para esta fecha.'
     : isPreviewMenu
-      ? 'Vista previa local activa. No guarda cambios.'
+      ? 'Vista previa local.'
       : menuOptionsErrorByDate[selectedDate]
-        ? menuOptionsErrorByDate[selectedDate] || 'No se pudieron cargar los menus visibles.'
+        ? menuOptionsErrorByDate[selectedDate] || 'No se pudieron cargar los menus.'
         : menuOptionsLoadingByDate[selectedDate]
-          ? 'Cargando menus visibles para esta fecha.'
+          ? 'Cargando menus visibles.'
           : hasHydratedOptionsForSelectedDate
             ? selectorMenus.length > 0
-              ? `${selectorMenus.length} menu${selectorMenus.length === 1 ? '' : 's'} visibles para esta fecha.`
-              : 'No hay menus visibles para esta fecha.'
-            : 'Cargando menus visibles para esta fecha.';
+              ? `${selectorMenus.length} menu${selectorMenus.length === 1 ? '' : 's'} visible${selectorMenus.length === 1 ? '' : 's'}`
+              : 'Sin menus visibles para este dia.'
+            : 'Cargando menus visibles.';
+  const navigatorDays = useMemo<SharedWeeklyCalendarDay[]>(
+    () =>
+      dietDays.map((day) => ({
+        id: day.id,
+        dateKey: day.assignedDate,
+        dayLabel: formatLocalShortWeekday(day.assignedDate),
+        dateNumber: getLocalDayNumber(day.assignedDate),
+        isSelected: day.assignedDate === selectedDate,
+        isToday: day.isToday,
+        isDisabled: false,
+        statusText: day.isToday ? 'Hoy' : '',
+        variant: 'diet',
+        onPress: () => setSelectedDate(day.assignedDate),
+      })),
+    [dietDays, selectedDate],
+  );
+  const currentWeekLabel = useMemo(() => {
+    const firstDate = dietDays[0]?.assignedDate;
+    const lastDate = dietDays[dietDays.length - 1]?.assignedDate;
+
+    if (!firstDate || !lastDate) {
+      return null;
+    }
+
+    return `${formatLocalDate(firstDate, { month: 'short', day: 'numeric' })} - ${formatLocalDate(
+      lastDate,
+      { month: 'short', day: 'numeric' },
+    )}`;
+  }, [dietDays]);
+  const selectedDateLabel = useMemo(
+    () => (
+      selectedDay
+        ? formatLocalDate(selectedDay.assignedDate, {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'short',
+          })
+        : 'Semana visible'
+    ),
+    [selectedDay],
+  );
+
+  const handleShiftWeek = useCallback((direction: -1 | 1) => {
+    const nextAnchorDate = addDaysToDateKey(anchorDate, direction * 7);
+    const nextSelectedDate = addDaysToDateKey(selectedDate, direction * 7) ?? nextAnchorDate;
+
+    if (!nextAnchorDate) {
+      return;
+    }
+
+    void loadDiet({
+      anchorDate: nextAnchorDate,
+      selectedDate: nextSelectedDate ?? nextAnchorDate,
+    });
+  }, [anchorDate, loadDiet, selectedDate]);
+
+  const handleOpenDatePicker = useCallback(() => {
+    setIsDatePickerVisible(true);
+  }, []);
+
+  const handleCloseDatePicker = useCallback(() => {
+    setIsDatePickerVisible(false);
+  }, []);
+
+  const handleSelectAnchorDate = useCallback((date: Date) => {
+    const nextDateKey = toLocalDateKey(date);
+
+    if (!nextDateKey) {
+      return;
+    }
+
+    setIsDatePickerVisible(false);
+    void loadDiet({
+      anchorDate: nextDateKey,
+      selectedDate: nextDateKey,
+    });
+  }, [loadDiet]);
 
   const handleOpenMenuSelector = useCallback(async () => {
     if (!selectedDay) {
@@ -630,34 +741,53 @@ export default function DietScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => loadDiet('refresh')}
+              onRefresh={() => void loadDiet({
+                mode: 'refresh',
+                anchorDate,
+                selectedDate,
+              })}
               tintColor={brandColors.navy}
             />
           }
           scrollEventThrottle={tabBarScroll.scrollEventThrottle}
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View entering={getEntryAnimation(0)} style={styles.header}>
+          <Animated.View
+            entering={getEntryAnimation(0)}
+            style={[styles.header, { paddingHorizontal: horizontalPadding }]}
+          >
             <Text style={styles.eyebrow}>Nutricion</Text>
             <Text style={styles.title}>Dieta</Text>
             <Text style={styles.subtitle}>
-              Consulta tu plan alimenticio del dia y las recetas asignadas.
+              Revisa tu menu del dia y las recetas asignadas.
             </Text>
           </Animated.View>
 
           {selectedDay ? (
             <>
-              <Animated.View entering={getEntryAnimation(80)}>
-                <DietWeekCalendar
-                  days={dietDays}
-                  selectedDate={selectedDate}
-                  onSelect={setSelectedDate}
+              <Animated.View
+                entering={getEntryAnimation(80)}
+                style={{ paddingHorizontal: horizontalPadding }}
+              >
+                <HistoricalNavigator
+                  title="Historial semanal"
+                  subtitle={selectedDateLabel}
+                  weekLabel={currentWeekLabel}
+                  days={navigatorDays}
                   contentWidth={contentWidth}
+                  showWeekButtons={isTablet}
+                  accentColor={nutritionTheme.accentStrong}
+                  datePickerLabel="Fecha"
+                  onShiftWeek={handleShiftWeek}
+                  onOpenDatePicker={handleOpenDatePicker}
                 />
               </Animated.View>
 
               {visibleMenu ? (
-                <Animated.View entering={getEntryAnimation(140)} style={styles.heroSection}>
+                <Animated.View
+                  entering={getEntryAnimation(140)}
+                  style={[styles.heroSection, { paddingHorizontal: horizontalPadding }]}
+                >
                   <DietHero
                     menu={visibleMenu}
                     menuLabel={visibleMenuLabel}
@@ -668,7 +798,10 @@ export default function DietScreen() {
                 </Animated.View>
               ) : null}
 
-              <Animated.View entering={getEntryAnimation(180)} style={styles.selectorSection}>
+              <Animated.View
+                entering={getEntryAnimation(180)}
+                style={[styles.selectorSection, { paddingHorizontal: horizontalPadding }]}
+              >
                 <TouchableOpacity
                   style={[
                     styles.selectorCard,
@@ -683,7 +816,7 @@ export default function DietScreen() {
                     <Text style={styles.selectorTitle}>
                       {visibleMenuLabel}
                     </Text>
-                    <Text style={styles.selectorSubtitle}>{selectorSubtitle}</Text>
+                    <Text numberOfLines={2} style={styles.selectorSubtitle}>{selectorSubtitle}</Text>
                   </View>
 
                   <View style={styles.selectorAction}>
@@ -701,7 +834,7 @@ export default function DietScreen() {
               </Animated.View>
 
               <Animated.View entering={getEntryAnimation(220)} style={styles.mealsSection}>
-                <View style={styles.sectionHeader}>
+                <View style={[styles.sectionHeader, { paddingHorizontal: horizontalPadding }]}>
                   <View>
                     <Text style={styles.sectionTitle}>Comidas del dia</Text>
                     <Text style={styles.sectionSubtitle}>
@@ -712,7 +845,7 @@ export default function DietScreen() {
                   </View>
                 </View>
 
-                <View style={styles.mealList}>
+                <View style={[styles.mealList, { paddingHorizontal: horizontalPadding }]}>
                   {visibleMenu ? (
                     visibleMenu.meals.length > 0 ? (
                       visibleMenu.meals.map((meal, index) => (
@@ -751,7 +884,10 @@ export default function DietScreen() {
               </Animated.View>
             </>
           ) : (
-            <Animated.View entering={getEntryAnimation(80)} style={styles.emptyStateWrapper}>
+            <Animated.View
+              entering={getEntryAnimation(80)}
+              style={[styles.emptyStateWrapper, { paddingHorizontal: horizontalPadding }]}
+            >
               <Card style={styles.emptyCard}>
                 <View style={styles.emptyIcon}>
                   <Ionicons name={error ? 'alert-circle-outline' : 'restaurant-outline'} size={30} color={nutritionTheme.accentStrong} />
@@ -766,7 +902,10 @@ export default function DietScreen() {
                 </Text>
                 <Button
                   title="Reintentar"
-                  onPress={() => loadDiet()}
+                  onPress={() => void loadDiet({
+                    anchorDate,
+                    selectedDate,
+                  })}
                   variant="primary"
                   style={styles.retryButton}
                 />
@@ -774,6 +913,15 @@ export default function DietScreen() {
             </Animated.View>
           )}
         </ScrollView>
+
+        <CalendarDatePickerModal
+          visible={isDatePickerVisible}
+          title="Ir a fecha"
+          subtitle="Salta a cualquier dia para revisar semanas anteriores o futuras."
+          selectedDate={selectedDate}
+          onClose={handleCloseDatePicker}
+          onSelect={handleSelectAnchorDate}
+        />
 
         <DietMenuSelectorModal
           visible={isMenuSelectorVisible && Boolean(selectedDay)}
@@ -821,7 +969,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       paddingBottom: spacing.xxl,
     },
     header: {
-      paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
     },
     eyebrow: {
@@ -844,11 +991,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       lineHeight: 22,
     },
     heroSection: {
-      marginTop: spacing.md,
-      paddingHorizontal: spacing.lg,
+      marginTop: spacing.lg,
     },
     sectionHeader: {
-      paddingHorizontal: spacing.lg,
       marginTop: spacing.lg,
       marginBottom: spacing.md,
     },
@@ -863,18 +1008,18 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       fontSize: fontSize.sm,
     },
     selectorSection: {
-      paddingHorizontal: spacing.lg,
-      marginTop: spacing.sm,
+      marginTop: spacing.md,
     },
     selectorCard: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      borderRadius: borderRadius.lg,
+      borderRadius: borderRadius.md,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-      padding: spacing.md,
+      backgroundColor: theme.colors.surfaceAlt,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
     },
     selectorCardDisabled: {
       opacity: 0.65,
@@ -886,40 +1031,40 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     selectorEyebrow: {
       color: nutritionTheme.accentStrong,
       fontSize: fontSize.xs,
-      fontWeight: '800',
+      fontWeight: '700',
       textTransform: 'uppercase',
-      letterSpacing: 0.8,
+      letterSpacing: 0.6,
     },
     selectorTitle: {
-      marginTop: spacing.xs,
+      marginTop: 4,
       color: theme.colors.textPrimary,
-      fontSize: fontSize.base,
-      fontWeight: '800',
+      fontSize: fontSize.sm,
+      fontWeight: '700',
     },
     selectorSubtitle: {
-      marginTop: spacing.xs,
+      marginTop: 4,
       color: theme.colors.textMuted,
-      fontSize: fontSize.sm,
-      lineHeight: 20,
+      fontSize: fontSize.xs,
+      lineHeight: 18,
     },
     selectorAction: {
-      width: 34,
-      height: 34,
+      width: 30,
+      height: 30,
       borderRadius: borderRadius.full,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: nutritionTheme.accentSoft,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
     mealsSection: {
       marginTop: spacing.lg,
     },
     mealList: {
-      paddingHorizontal: spacing.lg,
       gap: spacing.md,
     },
     emptyStateWrapper: {
       flex: 1,
-      paddingHorizontal: spacing.lg,
       paddingTop: spacing.xxl,
     },
     emptyCard: {

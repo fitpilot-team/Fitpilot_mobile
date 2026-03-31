@@ -3,6 +3,7 @@ import { ConfigContext, ExpoConfig } from '@expo/config';
 type PublicExtra = {
   nutritionApiUrl?: string;
   trainingApiUrl?: string;
+  turnstileBridgeUrl?: string;
   termsUrl?: string;
   privacyUrl?: string;
 };
@@ -51,6 +52,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const privacyUrl = resolveOptionalValue(
     process.env.EXPO_PUBLIC_PRIVACY_URL,
     extra.privacyUrl,
+  );
+  const turnstileBridgeUrl = resolveOptionalValue(
+    process.env.EXPO_PUBLIC_TURNSTILE_BRIDGE_URL,
+    extra.turnstileBridgeUrl,
   );
   const isProd = appEnv === 'production';
 
@@ -114,6 +119,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ...config.extra,
       nutritionApiUrl,
       trainingApiUrl,
+      turnstileBridgeUrl,
       termsUrl,
       privacyUrl,
       appEnv,

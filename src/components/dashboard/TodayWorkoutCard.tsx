@@ -17,7 +17,6 @@ import type { ProgramTimelineCardState } from '../../utils/programTimeline';
 
 const workoutImage = require('../../../assets/mock-image-workout.jpg');
 
-const CARD_MARGIN = spacing.lg;
 const CARD_HEIGHT = 240;
 const CORNER_RADIUS = borderRadius.xl;
 
@@ -98,6 +97,7 @@ interface TodayWorkoutCardProps {
   onOpenSessions?: () => void;
   isLoading?: boolean;
   contentWidth?: number;
+  horizontalPadding?: number;
 }
 
 const getEmptyIconName = (
@@ -124,11 +124,12 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   onOpenSessions,
   isLoading,
   contentWidth,
+  horizontalPadding = spacing.md,
 }) => {
   const scale = useSharedValue(1);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
-  const availableWidth = Math.max(320, (contentWidth ?? 0) - CARD_MARGIN * 2);
+  const availableWidth = Math.max(320, (contentWidth ?? 0) - horizontalPadding * 2);
   const cardWidth = availableWidth;
   const chamferHorizontal = getChamferHorizontal(cardWidth);
 
@@ -146,7 +147,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
 
   if (isLoading) {
     return (
-      <View style={styles.skeletonWrapper}>
+      <View style={[styles.skeletonWrapper, { marginHorizontal: horizontalPadding }]}>
         <WorkoutCardSkeleton />
       </View>
     );
@@ -154,7 +155,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
 
   if (cardState.kind === 'empty') {
     return (
-      <View style={styles.emptyContainer}>
+      <View style={[styles.emptyContainer, { marginHorizontal: horizontalPadding }]}>
         <Ionicons name={getEmptyIconName(cardState.reason)} size={48} color={colors.gray[300]} />
         {cardState.dateLabel ? (
           <View style={styles.emptyDatePill}>
@@ -178,7 +179,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
 
   return (
     <AnimatedPressable
-      style={[styles.container, animatedStyle]}
+      style={[styles.container, { marginHorizontal: horizontalPadding }, animatedStyle]}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onPress={onStartPress}
@@ -271,13 +272,11 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
-      marginHorizontal: CARD_MARGIN,
       marginVertical: spacing.md,
       position: 'relative',
       height: CARD_HEIGHT,
     },
     skeletonWrapper: {
-      marginHorizontal: CARD_MARGIN,
       marginVertical: spacing.md,
     },
     durationContainer: {
@@ -456,7 +455,6 @@ const createStyles = (theme: AppTheme) =>
       textTransform: 'lowercase',
     },
     emptyContainer: {
-      marginHorizontal: CARD_MARGIN,
       marginVertical: spacing.md,
       padding: spacing.xl,
       backgroundColor: theme.colors.card,

@@ -8,10 +8,14 @@ import { useAuthStore } from '../../src/store/authStore';
 import { useWorkoutStore } from '../../src/store/workoutStore';
 import { LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
 import {
+  CalendarDatePickerModal,
+  HistoricalNavigator,
+  type SharedWeeklyCalendarDay,
+} from '../../src/components/calendar';
+import {
   ActivityChart,
   MetricsSummary,
   MicrocycleStats,
-  MicrocycleTimeline,
   ScienceTips,
   SessionPickerModal,
   TodayWorkoutCard,
@@ -27,11 +31,16 @@ import type {
   MicrocycleSessionProgress,
   MuscleVolumeResponse,
 } from '../../src/types';
-import { formatLocalDate } from '../../src/utils/date';
-import { getDashboardContentWidth, isTabletLayout } from '../../src/utils/layout';
+import { formatLocalDate, toLocalDateKey } from '../../src/utils/date';
+import {
+  getDashboardContentWidth,
+  getPrimaryScreenHorizontalPadding,
+  isTabletLayout,
+} from '../../src/utils/layout';
 import {
   buildProgramTimelineModel,
   buildProgramTimelineView,
+  getProgramTimelineCalendarDayLabel,
   getProgramTimelineWeekLabel,
   shiftProgramTimelineFocusByWeek,
 } from '../../src/utils/programTimeline';
@@ -40,6 +49,7 @@ export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
   const isTablet = isTabletLayout(width, height);
   const contentWidth = getDashboardContentWidth(width);
+  const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
@@ -67,6 +77,7 @@ export default function HomeScreen() {
   const [microcycleMode, setMicrocycleMode] = useState<MicrocycleMode>('planned');
   const [focusedDateKey, setFocusedDateKey] = useState<string | null>(null);
   const [isSessionPickerVisible, setIsSessionPickerVisible] = useState(false);
+  const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [hasPlayedEntryAnimation, setHasPlayedEntryAnimation] = useState(false);
   const lastLoadedWorkoutLogsVersionRef = useRef<number | null>(null);
 
@@ -81,6 +92,45 @@ export default function HomeScreen() {
   const currentWeekLabel = useMemo(
     () => getProgramTimelineWeekLabel(programTimelineView.currentWeekStartDateKey),
     [programTimelineView.currentWeekStartDateKey],
+  );
+  const focusedDateLabel = useMemo(
+    () => (
+      programTimelineView.effectiveFocusedDateKey
+        ? formatLocalDate(programTimelineView.effectiveFocusedDateKey, {
+            weekday: 'long',
+            month: 'short',
+            day: 'numeric',
+          })
+        : 'Semana visible'
+    ),
+    [programTimelineView.effectiveFocusedDateKey],
+  );
+  const navigatorDays = useMemo<SharedWeeklyCalendarDay[]>(
+    () =>
+      programTimelineView.days.map((day) => {
+        const { dayLabel, dateNumber } = getProgramTimelineCalendarDayLabel(day.dateKey);
+
+        return {
+          id: `${day.dateKey}-${microcycleMode}`,
+          dateKey: day.dateKey,
+          dayLabel,
+          dateNumber,
+          isSelected: day.isSelected,
+          isToday: day.isToday,
+          isDisabled: false,
+          statusText: day.statusText,
+          variant: day.variant,
+          showHero: day.showHero,
+          onPress: () => {
+            setFocusedDateKey(day.dateKey);
+            setIsSessionPickerVisible(false);
+          },
+        };
+      }),
+    [microcycleMode, programTimelineView.days],
+  );
+  const canOpenDatePicker = Boolean(
+    programTimelineModel.calendarStartDateKey && programTimelineModel.calendarEndDateKey,
   );
   const showInitialLoadingState = isLoading && !refreshing && dashboardDataVersion === 0;
   const shouldAnimateEntry = !hasPlayedEntryAnimation && !showInitialLoadingState;
@@ -133,6 +183,7 @@ export default function HomeScreen() {
   useEffect(() => {
     setFocusedDateKey(programTimelineModel.initialFocusedDateKey);
     setIsSessionPickerVisible(false);
+    setIsDatePickerVisible(false);
   }, [dashboardDataVersion, programTimelineModel.initialFocusedDateKey]);
 
   useEffect(() => {
@@ -236,6 +287,30 @@ export default function HomeScreen() {
     }
   }, [programTimelineView.focusedDay?.sessions.length]);
 
+  const handleOpenDatePicker = useCallback(() => {
+    if (!canOpenDatePicker) {
+      return;
+    }
+
+    setIsDatePickerVisible(true);
+  }, [canOpenDatePicker]);
+
+  const handleCloseDatePicker = useCallback(() => {
+    setIsDatePickerVisible(false);
+  }, []);
+
+  const handleSelectDate = useCallback((date: Date) => {
+    const nextDateKey = toLocalDateKey(date);
+
+    if (!nextDateKey) {
+      return;
+    }
+
+    setFocusedDateKey(nextDateKey);
+    setIsDatePickerVisible(false);
+    setIsSessionPickerVisible(false);
+  }, []);
+
   const sessionPickerTitle = useMemo(() => {
     if (!programTimelineView.focusedDay) {
       return 'Sesiones del dia';
@@ -303,21 +378,26 @@ export default function HomeScreen() {
                 user={user}
                 macrocycle={activeMacrocycle}
                 contentWidth={contentWidth}
+                horizontalPadding={horizontalPadding}
               />
             </Animated.View>
 
             <Animated.View entering={getEntryAnimation(100)}>
-              <MicrocycleTimeline
-                title={microcycleProgress?.microcycle_name || activeMacrocycle?.name || 'Programa activo'}
-                subtitle={currentWeekLabel}
-                days={programTimelineView.days}
-                mode={microcycleMode}
-                canGoToPreviousWeek={programTimelineView.canGoToPreviousWeek}
-                canGoToNextWeek={programTimelineView.canGoToNextWeek}
-                onFocusDate={handleFocusDate}
-                onShiftWeek={handleShiftWeek}
-                contentWidth={contentWidth}
-              />
+              <View style={{ paddingHorizontal: horizontalPadding }}>
+                <HistoricalNavigator
+                  eyebrow="Entrenamiento"
+                  title={microcycleProgress?.microcycle_name || activeMacrocycle?.name || 'Programa activo'}
+                  subtitle={focusedDateLabel}
+                  weekLabel={currentWeekLabel}
+                  days={navigatorDays}
+                  contentWidth={contentWidth}
+                  canGoToPreviousWeek={programTimelineView.canGoToPreviousWeek}
+                  canGoToNextWeek={programTimelineView.canGoToNextWeek}
+                  showWeekButtons={isTablet}
+                  onShiftWeek={handleShiftWeek}
+                  onOpenDatePicker={canOpenDatePicker ? handleOpenDatePicker : undefined}
+                />
+              </View>
             </Animated.View>
 
             <Animated.View entering={getEntryAnimation(180)}>
@@ -327,6 +407,7 @@ export default function HomeScreen() {
                 mode={microcycleMode}
                 onModeChange={setMicrocycleMode}
                 isLoading={isLoading && !refreshing}
+                horizontalPadding={horizontalPadding}
               />
             </Animated.View>
 
@@ -337,6 +418,7 @@ export default function HomeScreen() {
                 onOpenSessions={handleOpenSessions}
                 isLoading={isStartingWorkout || (isLoading && !refreshing)}
                 contentWidth={contentWidth}
+                horizontalPadding={horizontalPadding}
               />
             </Animated.View>
 
@@ -347,15 +429,20 @@ export default function HomeScreen() {
                 countSecondaryMuscles={countSecondaryMuscles}
                 onToggleSecondary={setCountSecondaryMuscles}
                 contentWidth={contentWidth}
+                horizontalPadding={horizontalPadding}
               />
             </Animated.View>
 
             <Animated.View entering={getEntryAnimation(420)}>
-              <ScienceTips context={tipContext} contentWidth={contentWidth} />
+              <ScienceTips
+                context={tipContext}
+                contentWidth={contentWidth}
+                horizontalPadding={horizontalPadding}
+              />
             </Animated.View>
 
             <Animated.View entering={getEntryAnimation(500)}>
-              <MetricsSummary contentWidth={contentWidth} />
+              <MetricsSummary contentWidth={contentWidth} horizontalPadding={horizontalPadding} />
             </Animated.View>
           </View>
         </ScrollView>
@@ -376,6 +463,17 @@ export default function HomeScreen() {
             setIsSessionPickerVisible(false);
             await openWorkoutSession(session);
           }}
+        />
+
+        <CalendarDatePickerModal
+          visible={isDatePickerVisible}
+          title="Ir a fecha"
+          subtitle="Revisa cualquier semana de tu programa sin recorrer toda la vista."
+          selectedDate={programTimelineView.effectiveFocusedDateKey ?? programTimelineModel.initialFocusedDateKey}
+          minDate={programTimelineModel.calendarStartDateKey}
+          maxDate={programTimelineModel.calendarEndDateKey}
+          onClose={handleCloseDatePicker}
+          onSelect={handleSelectDate}
         />
       </SafeAreaView>
     </TabScreenWrapper>

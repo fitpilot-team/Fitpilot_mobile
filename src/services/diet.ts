@@ -545,6 +545,10 @@ const mapDietMenu = (
   const meals = (menu.menu_meals ?? []).map((meal) => mapDietMeal(meal, recipeSummaryMap));
   const totalItems = meals.reduce((count, meal) => count + meal.totalEntries, 0);
   const totalRecipes = meals.reduce((count, meal) => count + meal.recipes.length, 0);
+  const mealsWithEntries = meals.filter((meal) => meal.totalEntries > 0);
+  const totalCalories = mealsWithEntries.every((meal) => meal.totalCalories !== null)
+    ? mealsWithEntries.reduce((sum, meal) => sum + (meal.totalCalories ?? 0), 0)
+    : null;
 
   return {
     id: `${menu.id}-${assignedDate}`,
@@ -554,6 +558,7 @@ const mapDietMenu = (
     description: menu.description_?.trim() || null,
     meals,
     totalMeals: meals.length,
+    totalCalories,
     totalItems,
     totalRecipes,
   };

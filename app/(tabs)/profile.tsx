@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Linking, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,7 @@ import {
 } from '../../src/store/measurementPreferenceStore';
 import { borderRadius, brandColors, fontSize, shadows, spacing } from '../../src/constants/colors';
 import { TabScreenWrapper } from '../../src/components/common';
+import { getPrimaryScreenHorizontalPadding } from '../../src/utils/layout';
 
 type MenuItemProps = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -50,6 +51,8 @@ const MenuItem = ({ icon, label, value, onPress, showChevron = true, danger = fa
 };
 
 export default function ProfileScreen() {
+  const { width, height } = useWindowDimensions();
+  const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
   const { user, logout, uploadAvatar, isLoading } = useAuthStore();
   const { preference, theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -147,13 +150,16 @@ export default function ProfileScreen() {
   return (
     <TabScreenWrapper>
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
           <Text style={styles.title}>Perfil</Text>
         </View>
 
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingHorizontal: horizontalPadding, paddingBottom: contentInsetBottom },
+          ]}
           onScroll={tabBarScroll.onScroll}
           scrollEventThrottle={tabBarScroll.scrollEventThrottle}
           showsVerticalScrollIndicator={false}
@@ -280,7 +286,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       backgroundColor: theme.colors.background,
     },
     header: {
-      paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
       paddingBottom: spacing.sm,
     },
@@ -293,7 +298,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       flex: 1,
     },
     scrollContent: {
-      paddingHorizontal: spacing.lg,
       paddingBottom: spacing.xxl,
     },
     userCard: {

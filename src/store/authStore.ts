@@ -10,12 +10,11 @@ import {
   setUnauthorizedHandler,
 } from '../services/api';
 import { useWorkoutStore } from './workoutStore';
-import type {
-  LoginCredentials,
-  LoginResponse,
-  User,
-} from '../types';
-import { registerForPushNotificationsAsync, sendPushTokenToBackend } from '../services/notifications';
+import type { ApiError, LoginCredentials, LoginResponse, LoginResult, User } from '../types';
+import {
+  registerForPushNotificationsAsync,
+  sendPushTokenToBackend,
+} from '../services/notifications';
 
 interface AuthState {
   user: User | null;
@@ -23,9 +22,8 @@ interface AuthState {
   isLoading: boolean;
   isInitialized: boolean;
   error: string | null;
-
   initialize: () => Promise<void>;
-  login: (credentials: LoginCredentials) => Promise<boolean>;
+  login: (credentials: LoginCredentials) => Promise<LoginResult>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<User | null>;
   uploadAvatar: (uri: string) => Promise<void>;
@@ -54,6 +52,34 @@ export const useAuthStore = create<AuthState>((set, get) => {
     }
 
     return user;
+  };
+
+  const buildLoginErrorMessage = (error: ApiError) => {
+    const status = error.status;
+    const rawMessage = error.message || '';
+
+    if (status === 401) {
+      return (
+        'Correo o contrasena incorrectos. Verifica tus datos e intenta de nuevo.\n\n' +
+        'Si aun no tienes cuenta, solicita a tu entrenador o nutriologo que te de de alta.'
+      );
+    }
+
+    if (status === 404) {
+      return (
+        'No se encontro una cuenta con ese correo.\n\n' +
+        'Pide a tu entrenador o nutriologo que te registre en la plataforma.'
+      );
+    }
+
+    if (
+      rawMessage.toLowerCase().includes('network') ||
+      rawMessage.toLowerCase().includes('timeout')
+    ) {
+      return 'No se pudo conectar con el servidor. Verifica tu conexion a internet e intenta de nuevo.';
+    }
+
+    return rawMessage || 'Error al iniciar sesion. Intenta de nuevo mas tarde.';
   };
 
   const authStore: AuthState = {
@@ -97,9 +123,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
           error: null,
         });
 
-        // Register push token silently if possible
         registerForPushNotificationsAsync().then((token) => {
-          if (token) sendPushTokenToBackend(token);
+          if (token) {
+            sendPushTokenToBackend(token);
+          }
         });
       } catch (error) {
         if (__DEV__) {
@@ -124,6 +151,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
             identifier: credentials.email.trim(),
             password: credentials.password,
             app_type: 'CLIENT_APP',
+            captcha_token: credentials.captchaToken,
           },
           {
             skipAuth: true,
@@ -138,7 +166,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
         const user = await ensureClientUser(await getCurrentUser());
         if (!user) {
-          return false;
+          return { status: 'failure' };
         }
 
         set({
@@ -153,45 +181,35 @@ export const useAuthStore = create<AuthState>((set, get) => {
           console.log('[Auth] login success', user.email);
         }
 
-        // Generate and register push token
         registerForPushNotificationsAsync().then((token) => {
-          if (token) sendPushTokenToBackend(token);
+          if (token) {
+            sendPushTokenToBackend(token);
+          }
         });
 
-        return true;
-      } catch (error: any) {
+        return { status: 'success' };
+      } catch (error) {
+        const apiError = error as ApiError;
+
         if (__DEV__) {
-          console.warn('[Auth] login error', error?.message || error);
+          console.warn('[Auth] login error', apiError?.message || apiError);
         }
 
-        let userMessage: string;
-        const status = error.status as number | undefined;
-        const rawMessage = (error.message as string) || '';
+        if (apiError.code === 'captcha_required') {
+          set({
+            isLoading: false,
+            error: null,
+          });
 
-        if (status === 401) {
-          userMessage =
-            'Correo o contraseña incorrectos. Verifica tus datos e intenta de nuevo.\n\n' +
-            'Si aún no tienes cuenta, solicita a tu entrenador o nutriólogo que te dé de alta.';
-        } else if (status === 404) {
-          userMessage =
-            'No se encontró una cuenta con ese correo.\n\n' +
-            'Pide a tu entrenador o nutriólogo que te registre en la plataforma.';
-        } else if (
-          rawMessage.toLowerCase().includes('network') ||
-          rawMessage.toLowerCase().includes('timeout')
-        ) {
-          userMessage =
-            'No se pudo conectar con el servidor. Verifica tu conexión a internet e intenta de nuevo.';
-        } else {
-          userMessage = rawMessage || 'Error al iniciar sesión. Intenta de nuevo más tarde.';
+          return { status: 'captcha_required' };
         }
 
         set({
           isLoading: false,
-          error: userMessage,
+          error: buildLoginErrorMessage(apiError),
         });
 
-        return false;
+        return { status: 'failure' };
       }
     },
 

@@ -39,12 +39,18 @@ export interface NutritionAuthUserResponse {
 export interface LoginCredentials {
   email: string;
   password: string;
+  captchaToken?: string;
 }
 
 export interface LoginResponse {
   access_token: string;
   refresh_token: string;
 }
+
+export type LoginResult =
+  | { status: 'success' }
+  | { status: 'captcha_required' }
+  | { status: 'failure' };
 
 export interface UpdateCurrentUserPayload {
   name?: string;
@@ -343,6 +349,7 @@ export interface MicrocycleProgress {
 export type WorkoutAnalyticsRange = '4w' | '8w' | '12w' | '24w' | 'all';
 export type WorkoutAnalyticsColorToken = 'navy' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet';
 export type WorkoutAnalyticsHistoryStatusFilter = 'all' | WorkoutStatus;
+export type WorkoutAnalyticsCalendarWeekStatus = 'none' | WorkoutStatus;
 
 export interface RepRangeBucket {
   id: string;
@@ -389,8 +396,16 @@ export interface RecentWorkoutHistoryItem {
   status: WorkoutStatus;
 }
 
+export interface WorkoutAnalyticsCalendarDay {
+  date: string;
+  status: WorkoutAnalyticsCalendarWeekStatus;
+  sessions_count: number;
+  is_today: boolean;
+}
+
 export interface WorkoutAnalyticsDashboard {
   summary: WorkoutAnalyticsSummary;
+  calendar_week: WorkoutAnalyticsCalendarDay[];
   rep_range_chart: RepRangeChartPoint[];
   exercise_summaries: ExerciseTrendSummary[];
   recent_history: RecentWorkoutHistoryItem[];
@@ -524,6 +539,7 @@ export interface ClientDietMenu {
   description: string | null;
   meals: ClientDietMeal[];
   totalMeals: number;
+  totalCalories: number | null;
   totalItems: number;
   totalRecipes: number;
 }
@@ -542,6 +558,8 @@ export interface ClientDietWeekDay {
 export interface ApiError {
   message: string;
   status?: number;
+  code?: string;
 }
 
+export * from './healthMetrics';
 export * from './measurements';

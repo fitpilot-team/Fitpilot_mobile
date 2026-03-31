@@ -29,6 +29,11 @@ export const DietHero: React.FC<DietHeroProps> = ({
   const subtitle = menu.description || `Plan activo para ${dateLabel}`;
   const badgeLabel = isPreview ? 'Vista previa' : isToday ? 'Hoy' : 'Plan del dia';
   const badgeIcon = isPreview ? 'eye-outline' : isToday ? 'sparkles' : 'calendar-outline';
+  const stats = [
+    { label: 'Comidas', value: menu.totalMeals },
+    { label: 'Kcal', value: menu.totalCalories !== null ? Math.round(menu.totalCalories) : 'ND' },
+    { label: 'Recetas', value: menu.totalRecipes },
+  ];
 
   return (
     <LinearGradient
@@ -39,27 +44,24 @@ export const DietHero: React.FC<DietHeroProps> = ({
     >
       <View style={styles.topRow}>
         <View style={styles.badge}>
-          <Ionicons name={badgeIcon} size={14} color={colors.white} />
+          <Ionicons name={badgeIcon} size={12} color={colors.white} />
           <Text style={styles.badgeText}>{badgeLabel}</Text>
         </View>
       </View>
 
-      <Text style={styles.title}>{menuLabel}</Text>
-      <Text style={styles.subtitle}>{subtitle}</Text>
+      <Text numberOfLines={1} style={styles.title}>{menuLabel}</Text>
+      <Text numberOfLines={2} style={styles.subtitle}>{subtitle}</Text>
 
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{menu.totalMeals}</Text>
-          <Text style={styles.statLabel}>Comidas</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{menu.totalItems}</Text>
-          <Text style={styles.statLabel}>Items</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{menu.totalRecipes}</Text>
-          <Text style={styles.statLabel}>Recetas</Text>
-        </View>
+      <View style={styles.statsRail}>
+        {stats.map((stat, index) => (
+          <React.Fragment key={stat.label}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </View>
+            {index < stats.length - 1 ? <View style={styles.statDivider} /> : null}
+          </React.Fragment>
+        ))}
       </View>
     </LinearGradient>
   );
@@ -78,18 +80,18 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: borderRadius.full,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
   badgeText: {
     color: colors.white,
-    fontSize: fontSize.xs,
+    fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
   },
   title: {
     marginTop: spacing.sm,
@@ -98,31 +100,37 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   subtitle: {
-    marginTop: spacing.sm,
-    color: 'rgba(255,255,255,0.84)',
+    marginTop: 10,
+    color: 'rgba(255,255,255,0.8)',
     fontSize: fontSize.sm,
     lineHeight: 20,
   },
-  statsRow: {
+  statsRail: {
     flexDirection: 'row',
-    gap: spacing.sm,
     marginTop: spacing.lg,
-  },
-  statCard: {
-    flex: 1,
     borderRadius: borderRadius.lg,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+  },
+  statItem: {
+    flex: 1,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
   statValue: {
     color: colors.white,
-    fontSize: fontSize.xl,
+    fontSize: fontSize.lg,
     fontWeight: '800',
   },
   statLabel: {
-    marginTop: spacing.xs,
-    color: 'rgba(255,255,255,0.72)',
+    marginTop: 2,
+    color: 'rgba(255,255,255,0.68)',
     fontSize: fontSize.xs,
     fontWeight: '600',
     textTransform: 'uppercase',

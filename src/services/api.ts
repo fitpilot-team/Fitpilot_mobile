@@ -15,6 +15,7 @@ type ValidationDetail = {
 };
 
 type ApiErrorPayload = {
+  code?: string;
   detail?: string | ValidationDetail[];
   message?: string | string[];
   error?: string;
@@ -96,6 +97,7 @@ const createApiError = (
 ) => {
   if (!isAxiosError<ApiErrorPayload>(error)) {
     const apiError = new Error(error.message || fallbackMessage) as ApiError;
+    apiError.code = undefined;
     return apiError;
   }
 
@@ -126,6 +128,7 @@ const createApiError = (
 
   const apiError = new Error(errorMessage) as ApiError;
   apiError.status = error.response?.status;
+  apiError.code = error.response?.data?.code;
   return apiError;
 };
 

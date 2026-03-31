@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -36,11 +37,13 @@ import {
   getMyMeasurementDetail,
   listMyMeasurements,
 } from '../../src/services/measurements';
+import { listMyGlucoseRecords } from '../../src/services/healthMetrics';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
   CreateOwnMeasurementPayload,
+  GlucoseRecord,
   MeasurementDetail,
   MeasurementHistoryItem,
   MeasurementPagination,
@@ -52,11 +55,17 @@ import {
   getMeasurementDisplayDate,
   parseMeasurementNumber,
 } from '../../src/utils/measurements';
+import { GLUCOSE_CONTEXT_LABELS } from '../../src/constants/healthMetrics';
+import {
+  formatGlucoseRecordedAt,
+  hasAdditionalHealthMetrics,
+} from '../../src/utils/healthMetrics';
 import { convertMeasurementUnitValue } from '../../src/utils/measurementUnits';
 import {
   MEASUREMENT_PREFERENCE_LABELS,
   useMeasurementPreferenceStore,
 } from '../../src/store/measurementPreferenceStore';
+import { getPrimaryScreenHorizontalPadding } from '../../src/utils/layout';
 
 const HISTORY_PAGE_SIZE = 20;
 
@@ -82,6 +91,8 @@ const getChangeAppearance = (
 };
 
 export default function MeasurementsScreen() {
+  const { width, height } = useWindowDimensions();
+  const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
   const isFocused = useIsFocused();
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -103,6 +114,9 @@ export default function MeasurementsScreen() {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [latestGlucoseRecord, setLatestGlucoseRecord] = useState<GlucoseRecord | null>(null);
+  const [isLoadingLatestGlucose, setIsLoadingLatestGlucose] = useState(true);
+  const [glucoseError, setGlucoseError] = useState<string | null>(null);
 
   const latestMeasurement = measurements[0] ?? null;
   const latestMeasurementDetail = latestMeasurement
@@ -111,6 +125,22 @@ export default function MeasurementsScreen() {
   const selectedMeasurementDetail = selectedMeasurementId
     ? detailCache[selectedMeasurementId] ?? null
     : null;
+
+  const loadLatestGlucose = useCallback(async () => {
+    setIsLoadingLatestGlucose(true);
+
+    try {
+      const response = await listMyGlucoseRecords(1, 1);
+      setLatestGlucoseRecord(response.data[0] ?? null);
+      setGlucoseError(null);
+    } catch (loadError) {
+      const apiError = loadError as ApiError;
+      setLatestGlucoseRecord(null);
+      setGlucoseError(apiError.message || 'No fue posible cargar la glucosa mas reciente.');
+    } finally {
+      setIsLoadingLatestGlucose(false);
+    }
+  }, []);
 
   const loadMeasurements = useCallback(
     async ({ page = 1, append = false }: { page?: number; append?: boolean } = {}) => {
@@ -171,11 +201,13 @@ export default function MeasurementsScreen() {
     const didRegainFocus = !wasFocusedRef.current;
     wasFocusedRef.current = true;
 
+    void loadLatestGlucose();
+
     if (didRegainFocus && ((!hasLoadedMeasurements && !isLoading) || error)) {
       setIsLoading(true);
       void loadMeasurements();
     }
-  }, [error, hasLoadedMeasurements, isFocused, isLoading, loadMeasurements]);
+  }, [error, hasLoadedMeasurements, isFocused, isLoading, loadLatestGlucose, loadMeasurements]);
 
   const summaryMetrics = useMemo(() => {
     if (!latestMeasurement) {
@@ -256,8 +288,8 @@ export default function MeasurementsScreen() {
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await loadMeasurements();
-  }, [loadMeasurements]);
+    await Promise.all([loadMeasurements(), loadLatestGlucose()]);
+  }, [loadLatestGlucose, loadMeasurements]);
 
   const handleLoadMore = useCallback(async () => {
     if (!pagination || measurements.length >= pagination.total || isLoadingMore) {
@@ -327,6 +359,11 @@ export default function MeasurementsScreen() {
     [loadMeasurements],
   );
 
+  const latestGlucoseContextLabel = latestGlucoseRecord?.glucose_context
+    ? GLUCOSE_CONTEXT_LABELS[latestGlucoseRecord.glucose_context]
+    : null;
+  const latestGlucoseIsMixed = hasAdditionalHealthMetrics(latestGlucoseRecord);
+
   if (isLoading) {
     return <LoadingSpinner fullScreen text="Cargando tus medidas..." />;
   }
@@ -334,7 +371,7 @@ export default function MeasurementsScreen() {
   return (
     <TabScreenWrapper>
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
           <View style={styles.headerCopy}>
             <Text style={styles.title}>Medidas</Text>
             <Text style={styles.subtitle}>Control antropometrico con datos reales</Text>
@@ -346,7 +383,10 @@ export default function MeasurementsScreen() {
 
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: contentInsetBottom }]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingHorizontal: horizontalPadding, paddingBottom: contentInsetBottom },
+          ]}
           onScroll={tabBarScroll.onScroll}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -365,6 +405,64 @@ export default function MeasurementsScreen() {
               <Button title="Reintentar" onPress={() => void loadMeasurements()} />
             </Card>
           ) : null}
+
+          <TouchableOpacity
+            style={[styles.glucoseEntryCard, styles.metricCardInteractive]}
+            activeOpacity={0.9}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir historial de glucosa"
+            onPress={() => router.push('/measurements/glucose')}
+          >
+            <View style={styles.glucoseEntryHeader}>
+              <View style={styles.summaryIcon}>
+                <Ionicons
+                  name="water-outline"
+                  size={20}
+                  color={theme.colors.primary}
+                />
+              </View>
+              <View style={styles.metricActionPill}>
+                <Ionicons
+                  name="chevron-forward-outline"
+                  size={12}
+                  color={theme.colors.primary}
+                />
+                <Text style={styles.metricActionText}>Ver historial</Text>
+              </View>
+            </View>
+            <Text style={styles.glucoseEntryLabel}>Seguimiento glucemico</Text>
+            {isLoadingLatestGlucose ? (
+              <Text style={styles.glucoseEntryValue}>Cargando...</Text>
+            ) : latestGlucoseRecord ? (
+              <>
+                <Text style={styles.glucoseEntryValue}>
+                  {formatMeasurementNumber(latestGlucoseRecord.glucose_mg_dl, 0)}
+                  <Text style={styles.glucoseEntryUnit}> mg/dL</Text>
+                </Text>
+                <Text style={styles.glucoseEntryMeta}>
+                  {latestGlucoseContextLabel ?? 'Sin contexto'} - {formatGlucoseRecordedAt(
+                    latestGlucoseRecord.recorded_at,
+                    'short',
+                  )}
+                </Text>
+                <Text style={styles.glucoseEntryHint}>
+                  {latestGlucoseIsMixed
+                    ? 'Incluye otras metricas clinicas y ya esta disponible para tu nutriologo.'
+                    : 'Tu lectura mas reciente ya esta lista para seguimiento nutricional.'}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.glucoseEntryValue}>Registrar glucosa</Text>
+                <Text style={styles.glucoseEntryMeta}>
+                  {glucoseError ?? 'Guarda lecturas con fecha, hora y contexto clinico.'}
+                </Text>
+                <Text style={styles.glucoseEntryHint}>
+                  Toca aqui para abrir tu historial y registrar una nueva lectura.
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
 
           {!error && !latestMeasurement ? (
             <Card style={styles.emptyCard}>
@@ -745,7 +843,6 @@ const createStyles = (theme: AppTheme) =>
     },
     header: {
       flexDirection: 'row',
-      paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
       paddingBottom: spacing.sm,
       backgroundColor: theme.colors.background,
@@ -773,11 +870,52 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.background,
     },
     scrollContent: {
-      paddingHorizontal: spacing.lg,
       paddingBottom: spacing.xxl,
     },
     errorCard: {
       marginBottom: spacing.md,
+    },
+    glucoseEntryCard: {
+      marginBottom: spacing.md,
+      backgroundColor: theme.colors.primarySoft,
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+      padding: spacing.md,
+      ...shadows.md,
+    },
+    glucoseEntryHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    glucoseEntryLabel: {
+      marginTop: spacing.md,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+    },
+    glucoseEntryValue: {
+      marginTop: spacing.xs,
+      fontSize: 28,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    glucoseEntryUnit: {
+      fontSize: fontSize.base,
+      fontWeight: '500',
+      color: theme.colors.textMuted,
+    },
+    glucoseEntryMeta: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.sm,
+      color: theme.colors.textSecondary,
+    },
+    glucoseEntryHint: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.xs,
+      lineHeight: 18,
+      color: theme.colors.textMuted,
     },
     errorTitle: {
       fontSize: fontSize.lg,

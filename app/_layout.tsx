@@ -97,6 +97,7 @@ export default function RootLayout() {
           <Stack.Screen name="profile/contact-support" />
           <Stack.Screen name="profile/legal/[document]" />
           <Stack.Screen name="profile/theme-settings" />
+          <Stack.Screen name="measurements/glucose" />
           <Stack.Screen name="measurements/weight-progress" />
           <Stack.Screen name="measurements/progress/[metric]" />
           <Stack.Screen

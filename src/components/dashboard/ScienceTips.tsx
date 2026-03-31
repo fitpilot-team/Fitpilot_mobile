@@ -22,6 +22,7 @@ interface ScienceTipsProps {
   autoScroll?: boolean;
   autoScrollInterval?: number;
   contentWidth?: number;
+  horizontalPadding?: number;
 }
 
 export const ScienceTips: React.FC<ScienceTipsProps> = ({
@@ -30,6 +31,7 @@ export const ScienceTips: React.FC<ScienceTipsProps> = ({
   autoScroll = false,
   autoScrollInterval = 5000,
   contentWidth = 390,
+  horizontalPadding = spacing.md,
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -55,12 +57,12 @@ export const ScienceTips: React.FC<ScienceTipsProps> = ({
   }, [context, tipsCount]);
 
   const cardMetrics = useMemo(() => {
-    const availableWidth = Math.max(320, contentWidth - spacing.lg * 2);
+    const availableWidth = Math.max(320, contentWidth - horizontalPadding * 2);
     const cardWidth = Math.min(availableWidth - spacing.md * 2, 420);
     const snapInterval = cardWidth + spacing.sm * 2;
 
     return { cardWidth, snapInterval };
-  }, [contentWidth]);
+  }, [contentWidth, horizontalPadding]);
 
   useEffect(() => {
     if (!autoScroll || tips.length === 0) return;
@@ -87,7 +89,7 @@ export const ScienceTips: React.FC<ScienceTipsProps> = ({
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
         <View style={styles.headerLeft}>
           <Ionicons name="bulb" size={20} color={theme.colors.primary} />
           <Text style={styles.title}>Recomendaciones</Text>
@@ -105,7 +107,7 @@ export const ScienceTips: React.FC<ScienceTipsProps> = ({
         pagingEnabled={false}
         snapToInterval={cardMetrics.snapInterval}
         decelerationRate="fast"
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingHorizontal: horizontalPadding }]}
         onScroll={handleScroll}
         scrollEventThrottle={16}
       >
@@ -195,13 +197,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     marginVertical: spacing.md,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: spacing.md,
+    },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -222,9 +223,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.colors.primary,
     fontWeight: '500',
   },
-  scrollContent: {
-    paddingHorizontal: spacing.lg,
-  },
+    scrollContent: {
+    },
   cardWrapper: {
     marginHorizontal: spacing.sm,
   },

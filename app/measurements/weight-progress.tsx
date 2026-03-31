@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 import { Card, LoadingSpinner } from '../../src/components/common';
+import { CalendarDatePickerModal } from '../../src/components/calendar';
 import { borderRadius, fontSize, spacing } from '../../src/constants/colors';
 import { getMeasurementProgressMetricConfig } from '../../src/constants/measurements';
 import { listMyMeasurements } from '../../src/services/measurements';
@@ -63,10 +64,6 @@ const rangeDateFormatter = new Intl.DateTimeFormat('es-MX', {
   month: 'short',
   year: 'numeric',
 });
-const calendarMonthFormatter = new Intl.DateTimeFormat('es-MX', {
-  month: 'long',
-  year: 'numeric',
-});
 
 const recordDateTimeFormatter = new Intl.DateTimeFormat('es-MX', {
   day: 'numeric',
@@ -82,7 +79,6 @@ const RANGE_OPTIONS: { key: RangePreset; label: string }[] = [
   { key: '90d', label: '3 meses' },
   { key: 'custom', label: 'Fechas' },
 ];
-const WEEKDAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
 
 const parseMeasurementDateTime = (value?: string | null) => {
   if (!value) {
@@ -130,42 +126,6 @@ const subtractDays = (value: Date, days: number) => {
   nextDate.setDate(nextDate.getDate() - days);
   return nextDate;
 };
-
-const startOfMonth = (value: Date) => {
-  const nextDate = new Date(value);
-  nextDate.setDate(1);
-  nextDate.setHours(0, 0, 0, 0);
-  return nextDate;
-};
-
-const endOfMonth = (value: Date) => {
-  const nextDate = new Date(value);
-  nextDate.setMonth(nextDate.getMonth() + 1, 0);
-  nextDate.setHours(23, 59, 59, 999);
-  return nextDate;
-};
-
-const addMonths = (value: Date, months: number) => {
-  const nextDate = new Date(value);
-  nextDate.setMonth(nextDate.getMonth() + months, 1);
-  nextDate.setHours(0, 0, 0, 0);
-  return nextDate;
-};
-
-const isSameDay = (left: Date | null | undefined, right: Date | null | undefined) => {
-  if (!left || !right) {
-    return false;
-  }
-
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  );
-};
-
-const isBeforeDay = (left: Date, right: Date) => startOfDay(left).getTime() < startOfDay(right).getTime();
-const isAfterDay = (left: Date, right: Date) => startOfDay(left).getTime() > startOfDay(right).getTime();
 
 const buildLinePath = (points: ChartPoint[]) => {
   if (points.length === 0) {
@@ -223,7 +183,6 @@ export function MeasurementProgressScreen({
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
   const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>(null);
-  const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
 
   const loadMeasurements = useCallback(async (options?: { refresh?: boolean }) => {
     const isRefresh = options?.refresh ?? false;
@@ -415,14 +374,8 @@ export function MeasurementProgressScreen({
     if (!target) {
       return;
     }
-
-    const selectedBaseDate = target === 'start'
-      ? customStartDate ?? customEndDate ?? new Date()
-      : customEndDate ?? customStartDate ?? new Date();
-
-    setCalendarMonth(startOfMonth(selectedBaseDate));
     setPickerTarget(target);
-  }, [customEndDate, customStartDate]);
+  }, []);
 
   const handleCalendarSelect = useCallback((selectedDate: Date) => {
     if (!pickerTarget) {
@@ -548,40 +501,6 @@ export function MeasurementProgressScreen({
     : '--';
 
   const listRecords = useMemo(() => filteredRecords.slice().reverse(), [filteredRecords]);
-  const calendarMinDate = pickerTarget === 'end'
-    ? customStartDate
-    : null;
-  const calendarMaxDate = pickerTarget === 'start'
-    ? customEndDate
-    : null;
-  const calendarDays = useMemo(() => {
-    const monthStart = startOfMonth(calendarMonth);
-    const monthEnd = endOfMonth(calendarMonth);
-    const gridStart = subtractDays(monthStart, monthStart.getDay());
-    const gridEnd = new Date(monthEnd);
-    gridEnd.setDate(monthEnd.getDate() + (6 - monthEnd.getDay()));
-    const totalDays = Math.round(
-      (startOfDay(gridEnd).getTime() - startOfDay(gridStart).getTime()) / (24 * 60 * 60 * 1000),
-    ) + 1;
-
-    return Array.from({ length: totalDays }, (_, index) => {
-      const date = new Date(gridStart);
-      date.setDate(gridStart.getDate() + index);
-
-      const disabled = Boolean(
-        (calendarMinDate && isBeforeDay(date, calendarMinDate)) ||
-        (calendarMaxDate && isAfterDay(date, calendarMaxDate)),
-      );
-
-      return {
-        key: date.toISOString(),
-        date,
-        label: `${date.getDate()}`,
-        inCurrentMonth: date.getMonth() === monthStart.getMonth(),
-        disabled,
-      };
-    });
-  }, [calendarMaxDate, calendarMinDate, calendarMonth]);
 
   const metricsCards = (
     <>
@@ -997,124 +916,16 @@ export function MeasurementProgressScreen({
         )}
       </ScrollView>
 
-      {pickerTarget && rangePreset === 'custom' ? (
-        <View style={styles.calendarModalOverlay} pointerEvents="box-none">
-          <Pressable style={styles.calendarBackdrop} onPress={() => setPickerTarget(null)} />
-
-          <View style={styles.calendarModalCard}>
-            <View style={styles.calendarModalHeader}>
-              <View style={styles.calendarModalHeaderText}>
-                <Text style={styles.calendarModalTitle}>
-                  {pickerTarget === 'start' ? 'Selecciona fecha inicial' : 'Selecciona fecha final'}
-                </Text>
-                <Text style={styles.calendarModalSubtitle}>
-                  Elige el dia que quieres usar para este rango.
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() => setPickerTarget(null)}
-                style={({ pressed }) => [
-                  styles.calendarModalCloseButton,
-                  pressed ? styles.pressed : null,
-                ]}
-              >
-                <Ionicons name="close-outline" size={22} color={theme.colors.textSecondary} />
-              </Pressable>
-            </View>
-
-            <View style={styles.calendarMonthHeader}>
-              <Pressable
-                onPress={() => setCalendarMonth((currentDate) => addMonths(currentDate, -1))}
-                style={({ pressed }) => [
-                  styles.calendarMonthNav,
-                  pressed ? styles.pressed : null,
-                ]}
-              >
-                <Ionicons name="chevron-back-outline" size={20} color={theme.colors.textSecondary} />
-              </Pressable>
-
-              <Text style={styles.calendarMonthTitle}>
-                {calendarMonthFormatter.format(calendarMonth)}
-              </Text>
-
-              <Pressable
-                onPress={() => setCalendarMonth((currentDate) => addMonths(currentDate, 1))}
-                style={({ pressed }) => [
-                  styles.calendarMonthNav,
-                  pressed ? styles.pressed : null,
-                ]}
-              >
-                <Ionicons name="chevron-forward-outline" size={20} color={theme.colors.textSecondary} />
-              </Pressable>
-            </View>
-
-            <View style={styles.calendarBody}>
-              <View style={styles.calendarWeekdaysRow}>
-                {WEEKDAY_LABELS.map((weekday) => (
-                  <Text key={weekday} style={styles.calendarWeekday}>
-                    {weekday}
-                  </Text>
-                ))}
-              </View>
-
-              <View style={styles.calendarGrid}>
-                {calendarDays.map((day) => {
-                  const isSelected = (
-                    pickerTarget === 'start'
-                      ? isSameDay(customStartDate, day.date)
-                      : isSameDay(customEndDate, day.date)
-                  );
-
-                  return (
-                    <Pressable
-                      key={day.key}
-                      disabled={day.disabled}
-                      onPress={() => handleCalendarSelect(day.date)}
-                      style={({ pressed }) => [
-                        styles.calendarDay,
-                        day.disabled ? styles.calendarDayDisabled : null,
-                        pressed && !day.disabled ? styles.pressed : null,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.calendarDayInner,
-                          !day.inCurrentMonth ? styles.calendarDayOutsideMonth : null,
-                          isSelected ? styles.calendarDaySelected : null,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.calendarDayText,
-                            !day.inCurrentMonth ? styles.calendarDayTextOutsideMonth : null,
-                            day.disabled ? styles.calendarDayTextDisabled : null,
-                            isSelected ? styles.calendarDayTextSelected : null,
-                          ]}
-                        >
-                          {day.label}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            <View style={styles.calendarModalFooter}>
-              <Pressable
-                onPress={() => setPickerTarget(null)}
-                style={({ pressed }) => [
-                  styles.calendarModalDoneButton,
-                  pressed ? styles.pressed : null,
-                ]}
-              >
-                <Text style={styles.calendarModalDoneText}>Cerrar</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      ) : null}
+      <CalendarDatePickerModal
+        visible={Boolean(pickerTarget && rangePreset === 'custom')}
+        title={pickerTarget === 'start' ? 'Selecciona fecha inicial' : 'Selecciona fecha final'}
+        subtitle="Elige el dia que quieres usar para este rango."
+        selectedDate={pickerTarget === 'start' ? customStartDate : customEndDate}
+        minDate={pickerTarget === 'end' ? customStartDate : null}
+        maxDate={pickerTarget === 'start' ? customEndDate : null}
+        onClose={() => setPickerTarget(null)}
+        onSelect={handleCalendarSelect}
+      />
     </SafeAreaView>
   );
 }
@@ -1489,152 +1300,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   recordsEmpty: {
     marginTop: spacing.md,
-  },
-  calendarModalOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    backgroundColor: theme.colors.overlay,
-    zIndex: 20,
-  },
-  calendarBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  calendarModalCard: {
-    width: '100%',
-    maxWidth: 420,
-    maxHeight: '82%',
-    minHeight: 500,
-    alignSelf: 'center',
-    backgroundColor: theme.colors.surface,
-    borderRadius: borderRadius.xl,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  calendarModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  calendarModalHeaderText: {
-    flex: 1,
-  },
-  calendarModalTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-  },
-  calendarModalSubtitle: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    color: theme.colors.textMuted,
-  },
-  calendarMonthHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  calendarMonthNav: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  calendarMonthTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: fontSize.base,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
-    textTransform: 'capitalize',
-  },
-  calendarWeekdaysRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  calendarBody: {
-    flexGrow: 1,
-    justifyContent: 'space-between',
-  },
-  calendarWeekday: {
-    width: '14.2857%',
-    textAlign: 'center',
-    fontSize: fontSize.xs,
-    fontWeight: '700',
-    color: theme.colors.iconMuted,
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    flexGrow: 1,
-    alignContent: 'space-between',
-  },
-  calendarDay: {
-    width: '14.2857%',
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarDayInner: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarDayOutsideMonth: {
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  calendarDayDisabled: {
-    opacity: 0.32,
-  },
-  calendarDaySelected: {
-    backgroundColor: theme.colors.primary,
-  },
-  calendarDayText: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-  },
-  calendarDayTextOutsideMonth: {
-    color: theme.colors.iconMuted,
-  },
-  calendarDayTextDisabled: {
-    color: theme.colors.iconMuted,
-  },
-  calendarDayTextSelected: {
-    color: theme.colors.surface,
-  },
-  calendarModalCloseButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  calendarModalFooter: {
-    marginTop: spacing.md,
-    alignItems: 'flex-end',
-  },
-  calendarModalDoneButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
-    backgroundColor: theme.colors.primary,
-  },
-  calendarModalDoneText: {
-    fontSize: fontSize.sm,
-    fontWeight: '700',
-    color: theme.colors.surface,
   },
   pressed: {
     opacity: 0.88,

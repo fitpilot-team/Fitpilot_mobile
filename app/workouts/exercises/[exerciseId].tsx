@@ -32,9 +32,10 @@ import {
 } from '../../../src/utils/workoutAnalytics';
 
 export default function ExerciseTrendDetailScreen() {
-  const { exerciseId, range: rangeParam } = useLocalSearchParams<{
+  const { exerciseId, range: rangeParam, anchorDate } = useLocalSearchParams<{
     exerciseId: string;
     range?: string;
+    anchorDate?: string;
   }>();
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -65,7 +66,7 @@ export default function ExerciseTrendDetailScreen() {
       }
 
       try {
-        const response = await getWorkoutAnalyticsExerciseDetail(exerciseId, range);
+        const response = await getWorkoutAnalyticsExerciseDetail(exerciseId, range, anchorDate);
         setDetail(response);
         setError(null);
       } catch (loadError) {
@@ -76,7 +77,7 @@ export default function ExerciseTrendDetailScreen() {
         setIsRefreshing(false);
       }
     },
-    [exerciseId, range],
+    [anchorDate, exerciseId, range],
   );
 
   useEffect(() => {

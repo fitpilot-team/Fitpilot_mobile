@@ -35,6 +35,7 @@ interface ActivityChartProps {
   countSecondaryMuscles: boolean;
   onToggleSecondary: (value: boolean) => void;
   contentWidth?: number;
+  horizontalPadding?: number;
 }
 
 export const ActivityChart: React.FC<ActivityChartProps> = ({
@@ -43,9 +44,11 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
   countSecondaryMuscles,
   onToggleSecondary,
   contentWidth = 390,
+  horizontalPadding = spacing.md,
 }) => {
   const animationProgress = useSharedValue(0);
-  const chartWidth = Math.max(280, contentWidth - spacing.lg * 2);
+  const containerWidth = Math.max(320, contentWidth - horizontalPadding * 2);
+  const chartWidth = Math.max(220, containerWidth - spacing.lg * 2);
   const labelWidth = chartWidth >= 720 ? 128 : chartWidth >= 560 ? 112 : 96;
   const valueWidth = 48;
   const barAreaWidth = Math.max(80, chartWidth - labelWidth - valueWidth - spacing.md);
@@ -67,7 +70,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
 
   if (isLoading) {
     return (
-      <View style={styles.skeletonWrapper}>
+      <View style={[styles.skeletonWrapper, { width: containerWidth, alignSelf: 'center' }]}>
         <ChartSkeleton />
       </View>
     );
@@ -77,7 +80,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
 
   if (!muscleVolume || muscles.length === 0) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { width: containerWidth, alignSelf: 'center' }]}>
         <ExpoGradient
           colors={[brandColors.navy, brandColors.sky]}
           start={{ x: 0, y: 0 }}
@@ -93,7 +96,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { width: containerWidth, alignSelf: 'center' }]}>
       <ExpoGradient
         colors={[brandColors.navy, brandColors.sky]}
         start={{ x: 0, y: 0 }}
@@ -194,7 +197,6 @@ const MuscleBar: React.FC<MuscleBarProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    marginHorizontal: spacing.lg,
     marginVertical: spacing.md,
     borderRadius: borderRadius.xl,
     padding: spacing.lg,
@@ -202,7 +204,6 @@ const styles = StyleSheet.create({
     ...shadows.lg,
   },
   skeletonWrapper: {
-    marginHorizontal: spacing.lg,
     marginVertical: spacing.md,
   },
   header: {

@@ -12,6 +12,7 @@ interface MicrocycleStatsProps {
   mode: MicrocycleMode;
   onModeChange: (mode: MicrocycleMode) => void;
   isLoading?: boolean;
+  horizontalPadding?: number;
 }
 
 type StatCard = {
@@ -28,6 +29,7 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
   mode,
   onModeChange,
   isLoading = false,
+  horizontalPadding = spacing.md,
 }) => {
   const styles = useThemedStyles(createStyles);
   const plannedMetrics = microcycleProgress?.planned_metrics;
@@ -87,7 +89,7 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
   const stats = mode === 'planned' ? plannedStats : actualStats;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingHorizontal: horizontalPadding }]}>
       <View style={styles.toggleWrap}>
         <Pressable
           onPress={() => onModeChange('planned')}
@@ -125,7 +127,6 @@ export const MicrocycleStats: React.FC<MicrocycleStatsProps> = ({
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
-      paddingHorizontal: spacing.lg,
       marginTop: spacing.sm,
     },
     toggleWrap: {

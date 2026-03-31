@@ -1,4 +1,4 @@
-import React, { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  CalendarDatePickerModal,
+  HistoricalNavigator,
+  type SharedWeeklyCalendarDay,
+} from '../../src/components/calendar';
 import { Button, Card, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
 import { AnalyticsRangeSelector } from '../../src/components/workout-analytics/AnalyticsRangeSelector';
 import { ExerciseSparkline } from '../../src/components/workout-analytics/ExerciseSparkline';
@@ -24,7 +29,7 @@ import { RepRangeVolumeChart } from '../../src/components/workout-analytics/RepR
 import { WorkoutAnalyticsHero } from '../../src/components/workout-analytics/WorkoutAnalyticsHero';
 import { WorkoutAnalyticsPillSelector } from '../../src/components/workout-analytics/WorkoutAnalyticsPillSelector';
 import { DEFAULT_WORKOUT_ANALYTICS_RANGE, WORKOUT_ANALYTICS_RANGE_OPTIONS } from '../../src/constants/workoutAnalytics';
-import { borderRadius, fontSize, shadows, spacing } from '../../src/constants/colors';
+import { borderRadius, fontSize, spacing } from '../../src/constants/colors';
 import {
   getWorkoutAnalyticsDashboard,
   getWorkoutAnalyticsHistory,
@@ -43,9 +48,21 @@ import type {
   WorkoutAnalyticsHistoryStatusFilter,
   WorkoutAnalyticsRange,
 } from '../../src/types';
-import { formatLocalDate } from '../../src/utils/date';
+import {
+  addDaysToDateKey,
+  compareDateKeys,
+  formatLocalDate,
+  formatLocalShortWeekday,
+  getLocalDayNumber,
+  getTodayDateKey,
+  toLocalDateKey,
+} from '../../src/utils/date';
 import { formatDuration } from '../../src/utils/formatters';
-import { getDashboardContentWidth, isTabletLayout } from '../../src/utils/layout';
+import {
+  getDashboardContentWidth,
+  getPrimaryScreenHorizontalPadding,
+  isTabletLayout,
+} from '../../src/utils/layout';
 import { formatDeltaKg, formatVolumeKg, formatWeightKg } from '../../src/utils/workoutAnalytics';
 
 type WorkoutAnalyticsTab = 'overview' | 'exercises' | 'history';
@@ -108,6 +125,45 @@ const normalizeSearchValue = (value: string) =>
 
 const getRangeLabel = (range: WorkoutAnalyticsRange) =>
   WORKOUT_ANALYTICS_RANGE_OPTIONS.find((option) => option.value === range)?.label ?? range;
+
+const mapCalendarStatusToVariant = (
+  status: WorkoutAnalyticsDashboard['calendar_week'][number]['status'],
+): SharedWeeklyCalendarDay['variant'] => {
+  switch (status) {
+    case 'completed':
+      return 'complete';
+    case 'in_progress':
+      return 'partial';
+    case 'abandoned':
+      return 'missed';
+    default:
+      return 'default';
+  }
+};
+
+const getCalendarStatusText = (
+  day: WorkoutAnalyticsDashboard['calendar_week'][number],
+) => {
+  if (day.sessions_count > 0) {
+    return `${day.sessions_count}x`;
+  }
+
+  return day.is_today ? 'Hoy' : '';
+};
+
+const getCalendarWeekLabel = (calendarWeek: WorkoutAnalyticsDashboard['calendar_week']) => {
+  const firstDate = calendarWeek[0]?.date;
+  const lastDate = calendarWeek[calendarWeek.length - 1]?.date;
+
+  if (!firstDate || !lastDate) {
+    return null;
+  }
+
+  return `${formatLocalDate(firstDate, { month: 'short', day: 'numeric' })} - ${formatLocalDate(
+    lastDate,
+    { month: 'short', day: 'numeric' },
+  )}`;
+};
 
 const compareExercisesBySort = (
   left: ExerciseTrendSummary,
@@ -409,7 +465,8 @@ const HistoryCard = ({
 export default function WorkoutsScreen() {
   const { width, height } = useWindowDimensions();
   const contentWidth = getDashboardContentWidth(width);
-  const chartWidth = Math.max(contentWidth - spacing.lg * 2, 280);
+  const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
+  const chartWidth = Math.max(contentWidth - horizontalPadding * 2, 280);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
@@ -417,6 +474,7 @@ export default function WorkoutsScreen() {
   const isFocused = useIsFocused();
   const { workoutLogsVersion } = useWorkoutStore();
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
+  const [anchorDate, setAnchorDate] = useState(getTodayDateKey());
   const [dashboard, setDashboard] = useState<WorkoutAnalyticsDashboard | null>(null);
   const [activeTab, setActiveTab] = useState<WorkoutAnalyticsTab>('overview');
   const [exerciseSort, setExerciseSort] = useState<ExerciseSortOption>('recent');
@@ -432,8 +490,9 @@ export default function WorkoutsScreen() {
   const [isRangeEditorVisible, setIsRangeEditorVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const deferredExerciseSearch = useDeferredValue(exerciseSearchQuery);
-  const lastLoadedWorkoutLogsVersionRef = useRef<number | null>(null);
+  const todayDateKey = getTodayDateKey();
 
   const hasAnyHistory = (dashboard?.summary.total_sessions ?? 0) > 0;
   const hasRangeData = (dashboard?.summary.sessions_in_range ?? 0) > 0;
@@ -450,7 +509,7 @@ export default function WorkoutsScreen() {
       }
 
       try {
-        const nextDashboard = await getWorkoutAnalyticsDashboard(range);
+        const nextDashboard = await getWorkoutAnalyticsDashboard(range, anchorDate);
         setDashboard(nextDashboard);
         setError(null);
       } catch (loadError) {
@@ -461,7 +520,7 @@ export default function WorkoutsScreen() {
         setIsRefreshing(false);
       }
     },
-    [range],
+    [anchorDate, range],
   );
 
   const loadHistoryPage = useCallback(
@@ -488,6 +547,7 @@ export default function WorkoutsScreen() {
           status: historyStatus,
           skip,
           limit: HISTORY_PAGE_SIZE,
+          anchorDate,
         });
         setHistoryPage((currentPage) => (reset ? nextPage : mergeHistoryPages(currentPage, nextPage)));
         setHistoryError(null);
@@ -500,7 +560,7 @@ export default function WorkoutsScreen() {
         setIsHistoryLoadingMore(false);
       }
     },
-    [historyStatus, range],
+    [anchorDate, historyStatus, range],
   );
 
   useEffect(() => {
@@ -508,26 +568,16 @@ export default function WorkoutsScreen() {
       return;
     }
 
-    if (dashboard && lastLoadedWorkoutLogsVersionRef.current === workoutLogsVersion) {
-      return;
-    }
-
-    void (async () => {
-      await loadDashboard();
-      if (activeTab === 'history') {
-        await loadHistoryPage({ reset: true });
-      }
-      lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
-    })();
-  }, [activeTab, dashboard, isFocused, loadDashboard, loadHistoryPage, workoutLogsVersion]);
+    void loadDashboard();
+  }, [isFocused, loadDashboard, workoutLogsVersion]);
 
   useEffect(() => {
-    if (activeTab !== 'history') {
+    if (!isFocused || activeTab !== 'history') {
       return;
     }
 
     void loadHistoryPage({ reset: true });
-  }, [activeTab, loadHistoryPage]);
+  }, [activeTab, isFocused, loadHistoryPage, workoutLogsVersion]);
 
   const handleRefresh = useCallback(async () => {
     if (activeTab === 'history') {
@@ -535,13 +585,11 @@ export default function WorkoutsScreen() {
         loadDashboard({ refresh: true }),
         loadHistoryPage({ reset: true, refresh: true }),
       ]);
-      lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
       return;
     }
 
     await loadDashboard({ refresh: true });
-    lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
-  }, [activeTab, loadDashboard, loadHistoryPage, workoutLogsVersion]);
+  }, [activeTab, loadDashboard, loadHistoryPage]);
 
   const handleSaveRepRanges = useCallback(async (nextRepRanges: RepRangeBucket[]) => {
     setIsSavingRanges(true);
@@ -550,38 +598,102 @@ export default function WorkoutsScreen() {
       await updateWorkoutAnalyticsPreferences({ rep_ranges: nextRepRanges });
       setIsRangeEditorVisible(false);
       await loadDashboard();
-      lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
     } catch (saveError) {
       const apiError = saveError as ApiError;
       Alert.alert('Error', apiError.message || 'No fue posible guardar tus rangos.');
     } finally {
       setIsSavingRanges(false);
     }
-  }, [loadDashboard, workoutLogsVersion]);
+  }, [loadDashboard]);
 
   const heroMetrics = useMemo(() => {
     const summary = dashboard?.summary;
 
     return [
       { label: 'Sesiones', value: `${summary?.total_sessions ?? 0}`, icon: 'barbell-outline' as const },
+      { label: 'Volumen', value: formatVolumeKg(summary?.total_volume_kg ?? 0), icon: 'trending-up-outline' as const },
       { label: 'En rango', value: `${summary?.sessions_in_range ?? 0}`, icon: 'calendar-outline' as const },
       { label: 'Dias activos', value: `${summary?.active_days ?? 0}`, icon: 'flash-outline' as const },
-      {
-        label: 'Duracion media',
-        value:
-          summary && summary.avg_duration_minutes > 0
-            ? formatDuration(Math.max(1, Math.round(summary.avg_duration_minutes)))
-            : '--',
-        icon: 'time-outline' as const,
-      },
     ];
   }, [dashboard?.summary]);
+  const anchorDateLabel = useMemo(
+    () => formatLocalDate(anchorDate, { day: 'numeric', month: 'short', year: 'numeric' }),
+    [anchorDate],
+  );
+  const navigatorDays = useMemo<SharedWeeklyCalendarDay[]>(
+    () => (dashboard?.calendar_week ?? []).map((day) => ({
+      id: day.date,
+      dateKey: day.date,
+      dayLabel: formatLocalShortWeekday(day.date),
+      dateNumber: getLocalDayNumber(day.date),
+      isSelected: day.date === anchorDate,
+      isToday: day.is_today,
+      isDisabled: compareDateKeys(day.date, todayDateKey) > 0,
+      statusText: getCalendarStatusText(day),
+      variant: mapCalendarStatusToVariant(day.status),
+      onPress: () => {
+        if (compareDateKeys(day.date, todayDateKey) > 0) {
+          return;
+        }
+
+        setAnchorDate(day.date);
+      },
+    })),
+    [anchorDate, dashboard?.calendar_week, todayDateKey],
+  );
+  const navigatorWeekLabel = useMemo(
+    () => getCalendarWeekLabel(dashboard?.calendar_week ?? []),
+    [dashboard?.calendar_week],
+  );
+  const canGoToPreviousWeek = true;
+  const canGoToNextWeek = useMemo(() => {
+    const nextAnchorDate = addDaysToDateKey(anchorDate, 7);
+
+    if (!nextAnchorDate) {
+      return false;
+    }
+
+    return compareDateKeys(nextAnchorDate, todayDateKey) <= 0;
+  }, [anchorDate, todayDateKey]);
+
+  const handleShiftWeek = useCallback((direction: -1 | 1) => {
+    const nextAnchorDate = addDaysToDateKey(anchorDate, direction * 7);
+
+    if (!nextAnchorDate) {
+      return;
+    }
+
+    if (compareDateKeys(nextAnchorDate, todayDateKey) > 0) {
+      return;
+    }
+
+    setAnchorDate(nextAnchorDate);
+  }, [anchorDate, todayDateKey]);
+
+  const handleOpenDatePicker = useCallback(() => {
+    setIsDatePickerVisible(true);
+  }, []);
+
+  const handleCloseDatePicker = useCallback(() => {
+    setIsDatePickerVisible(false);
+  }, []);
+
+  const handleSelectAnchorDate = useCallback((date: Date) => {
+    const nextDateKey = toLocalDateKey(date);
+
+    if (!nextDateKey || compareDateKeys(nextDateKey, todayDateKey) > 0) {
+      return;
+    }
+
+    setIsDatePickerVisible(false);
+    setAnchorDate(nextDateKey);
+  }, [todayDateKey]);
 
   const quickAction = useMemo(() => {
     const inProgressWorkout = dashboard?.recent_history.find((workout) => workout.status === 'in_progress');
     if (inProgressWorkout) {
       return {
-        label: 'Continuar entrenamiento',
+        label: 'Continuar',
         hint: inProgressWorkout.training_day_name,
         icon: 'play' as const,
         onPress: () => router.push(`/workout/${inProgressWorkout.workout_log_id}`),
@@ -591,7 +703,7 @@ export default function WorkoutsScreen() {
     const latestWorkout = dashboard?.recent_history[0];
     if (latestWorkout) {
       return {
-        label: 'Ver ultimo registro',
+        label: 'Ultimo registro',
         hint: `${latestWorkout.training_day_name} · ${formatLocalDate(latestWorkout.performed_on_date, {
           day: 'numeric',
           month: 'short',
@@ -699,7 +811,7 @@ export default function WorkoutsScreen() {
     return (
       <TabScreenWrapper>
         <SafeAreaView style={styles.container} edges={['top']}>
-          <View style={styles.fullStateShell}>
+          <View style={[styles.fullStateShell, { paddingHorizontal: horizontalPadding }]}>
             <EmptyStateCard
               icon="cloud-offline-outline"
               title="No fue posible cargar los datos"
@@ -718,14 +830,30 @@ export default function WorkoutsScreen() {
       <View
         style={[
           styles.pageHeader,
-          { maxWidth: contentWidth },
+          { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
           isTablet ? styles.pageHeaderTablet : null,
         ]}
       >
+        <HistoricalNavigator
+          eyebrow="Entrenamientos"
+          title="Historial semanal"
+          subtitle={`Vista anclada al ${anchorDateLabel}`}
+          weekLabel={navigatorWeekLabel}
+          days={navigatorDays}
+          contentWidth={contentWidth}
+          canGoToPreviousWeek={canGoToPreviousWeek}
+          canGoToNextWeek={canGoToNextWeek}
+          showWeekButtons={isTablet}
+          datePickerLabel="Fecha"
+          onShiftWeek={handleShiftWeek}
+          onOpenDatePicker={handleOpenDatePicker}
+        />
+
         <WorkoutAnalyticsHero
-          title="Todo tu progreso, mejor ordenado"
-          subtitle="Resumen ejecutivo arriba, listas completas solo cuando las necesitas."
+          title="Resumen del progreso"
+          subtitle="Volumen, sesiones clave y acceso rapido del periodo actual."
           rangeLabel={getRangeLabel(range)}
+          anchorLabel={anchorDateLabel}
           actionLabel={quickAction.label}
           actionHint={quickAction.hint}
           actionIcon={quickAction.icon}
@@ -733,7 +861,7 @@ export default function WorkoutsScreen() {
           onActionPress={quickAction.onPress}
         />
 
-        <Card style={styles.controlsCard}>
+        <Card padding="sm" style={styles.controlsCard}>
           <AnalyticsRangeSelector value={range} onChange={setRange} />
           <WorkoutAnalyticsPillSelector
             items={TAB_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
@@ -808,7 +936,10 @@ export default function WorkoutsScreen() {
               />
             )}
             renderItem={({ item }) => {
-              const shellStyle = [styles.sectionShell, { maxWidth: contentWidth }];
+              const shellStyle = [
+                styles.sectionShell,
+                { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+              ];
 
                   if (item === 'chart') {
                     return (
@@ -867,7 +998,7 @@ export default function WorkoutsScreen() {
                                 onPress={() =>
                                   router.push({
                                     pathname: '/workouts/exercises/[exerciseId]',
-                                    params: { exerciseId: exercise.exercise_id, range },
+                                    params: { exerciseId: exercise.exercise_id, range, anchorDate },
                                   })
                                 }
                               />
@@ -934,7 +1065,13 @@ export default function WorkoutsScreen() {
             ListHeaderComponent={(
               <>
                 {pageHeader}
-                <View style={[styles.listMetaRow, styles.sectionShell, { maxWidth: contentWidth }]}>
+                <View
+                  style={[
+                    styles.listMetaRow,
+                    styles.sectionShell,
+                    { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+                  ]}
+                >
                     <Text style={styles.listMetaTitle}>Lista completa</Text>
                     <Text style={styles.listMetaText}>
                       {filteredExercises.length} de {dashboard.exercise_summaries.length} ejercicios visibles
@@ -953,20 +1090,31 @@ export default function WorkoutsScreen() {
               />
             )}
             renderItem={({ item }) => (
-              <View style={[styles.sectionShell, { maxWidth: contentWidth }]}>
+              <View
+                style={[
+                  styles.sectionShell,
+                  { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+                ]}
+              >
                 <ExerciseCard
                   exercise={item}
                   onPress={() =>
                     router.push({
                       pathname: '/workouts/exercises/[exerciseId]',
-                      params: { exerciseId: item.exercise_id, range },
+                      params: { exerciseId: item.exercise_id, range, anchorDate },
                     })
                   }
                 />
               </View>
             )}
             ListEmptyComponent={(
-              <View style={[styles.emptyListWrap, styles.sectionShell, { maxWidth: contentWidth }]}>
+              <View
+                style={[
+                  styles.emptyListWrap,
+                  styles.sectionShell,
+                  { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+                ]}
+              >
                     {!hasAnyHistory ? (
                       <EmptyStateCard
                         icon="analytics-outline"
@@ -1007,7 +1155,13 @@ export default function WorkoutsScreen() {
             ListHeaderComponent={(
               <>
                 {pageHeader}
-                <View style={[styles.listMetaRow, styles.sectionShell, { maxWidth: contentWidth }]}>
+                <View
+                  style={[
+                    styles.listMetaRow,
+                    styles.sectionShell,
+                    { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+                  ]}
+                >
                   <Text style={styles.listMetaTitle}>Historial completo</Text>
                   <Text style={styles.listMetaText}>
                     {historyPage?.total ?? 0} sesiones en la consulta actual
@@ -1029,12 +1183,23 @@ export default function WorkoutsScreen() {
             onEndReached={handleHistoryLoadMore}
             onEndReachedThreshold={0.35}
             renderSectionHeader={({ section }) => (
-              <View style={[styles.monthHeader, styles.sectionShell, { maxWidth: contentWidth }]}>
+              <View
+                style={[
+                  styles.monthHeader,
+                  styles.sectionShell,
+                  { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+                ]}
+              >
                     <Text style={styles.monthHeaderText}>{section.title}</Text>
                   </View>
             )}
             renderItem={({ item }) => (
-              <View style={[styles.sectionShell, { maxWidth: contentWidth }]}>
+              <View
+                style={[
+                  styles.sectionShell,
+                  { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+                ]}
+              >
                 <HistoryCard
                   workout={item}
                   onPress={() => router.push(`/workout/${item.workout_log_id}`)}
@@ -1042,7 +1207,13 @@ export default function WorkoutsScreen() {
               </View>
             )}
             ListEmptyComponent={(
-              <View style={[styles.emptyListWrap, styles.sectionShell, { maxWidth: contentWidth }]}>
+              <View
+                style={[
+                  styles.emptyListWrap,
+                  styles.sectionShell,
+                  { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+                ]}
+              >
                     {showFullHistorySpinner ? (
                       <View style={styles.loadingHistoryWrap}>
                         <ActivityIndicator size="small" color={theme.colors.primary} />
@@ -1068,7 +1239,13 @@ export default function WorkoutsScreen() {
               </View>
             )}
             ListFooterComponent={(
-              <View style={[styles.historyFooter, styles.sectionShell, { maxWidth: contentWidth }]}>
+              <View
+                style={[
+                  styles.historyFooter,
+                  styles.sectionShell,
+                  { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+                ]}
+              >
                     {isHistoryLoadingMore ? (
                       <ActivityIndicator size="small" color={theme.colors.primary} />
                     ) : null}
@@ -1093,6 +1270,16 @@ export default function WorkoutsScreen() {
           onClose={() => setIsRangeEditorVisible(false)}
           onSave={handleSaveRepRanges}
         />
+
+        <CalendarDatePickerModal
+          visible={isDatePickerVisible}
+          title="Ir a fecha"
+          subtitle="Reancla el resumen y el historial a cualquier dia anterior."
+          selectedDate={anchorDate}
+          maxDate={todayDateKey}
+          onClose={handleCloseDatePicker}
+          onSelect={handleSelectAnchorDate}
+        />
       </SafeAreaView>
     </TabScreenWrapper>
   );
@@ -1110,20 +1297,23 @@ const createStyles = (theme: AppTheme) =>
     },
     pageHeader: {
       width: '100%',
-      paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
       paddingBottom: spacing.lg,
-      gap: spacing.md,
+      gap: spacing.lg,
     },
     pageHeaderTablet: {
       paddingTop: spacing.lg,
     },
     controlsCard: {
-      gap: spacing.md,
-      borderRadius: borderRadius.xl,
-      backgroundColor: theme.colors.surface,
+      gap: spacing.sm,
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surfaceAlt,
       borderColor: theme.colors.border,
-      ...shadows.sm,
+      shadowColor: 'transparent',
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 0,
     },
     controlStack: {
       gap: spacing.md,
@@ -1178,7 +1368,6 @@ const createStyles = (theme: AppTheme) =>
     sectionShell: {
       width: '100%',
       alignSelf: 'center',
-      paddingHorizontal: spacing.lg,
     },
     sectionBlock: {
       gap: spacing.md,
@@ -1222,6 +1411,11 @@ const createStyles = (theme: AppTheme) =>
     },
     featureCard: {
       gap: spacing.md,
+      shadowColor: 'transparent',
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 0,
     },
     featureCardHeader: {
       flexDirection: 'row',
@@ -1250,7 +1444,6 @@ const createStyles = (theme: AppTheme) =>
       borderColor: theme.colors.border,
       padding: spacing.md,
       gap: spacing.md,
-      ...shadows.sm,
     },
     exerciseTopRow: {
       flexDirection: 'row',
@@ -1316,7 +1509,6 @@ const createStyles = (theme: AppTheme) =>
       borderColor: theme.colors.border,
       padding: spacing.md,
       gap: spacing.md,
-      ...shadows.sm,
     },
     historyTopRow: {
       flexDirection: 'row',
@@ -1456,6 +1648,5 @@ const createStyles = (theme: AppTheme) =>
     fullStateShell: {
       flex: 1,
       justifyContent: 'center',
-      paddingHorizontal: spacing.lg,
     },
   });

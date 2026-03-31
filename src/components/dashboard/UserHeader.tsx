@@ -11,6 +11,7 @@ interface UserHeaderProps {
   macrocycle?: Macrocycle | null;
   onMenuPress?: () => void;
   contentWidth?: number;
+  horizontalPadding?: number;
 }
 
 const objectiveLabels: Record<string, string> = {
@@ -27,6 +28,7 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
   macrocycle,
   onMenuPress,
   contentWidth,
+  horizontalPadding = spacing.md,
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -42,7 +44,13 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
     : null;
 
   return (
-    <View style={[styles.container, contentWidth && contentWidth >= 720 ? styles.containerTablet : null]}>
+    <View
+      style={[
+        styles.container,
+        { paddingHorizontal: horizontalPadding },
+        contentWidth && contentWidth >= 720 ? styles.containerTablet : null,
+      ]}
+    >
       <View style={styles.userInfo}>
         <View style={styles.avatar}>
           {user.profilePictureUrl ? (
@@ -83,7 +91,6 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: spacing.lg,
       paddingVertical: spacing.md,
     },
     containerTablet: {

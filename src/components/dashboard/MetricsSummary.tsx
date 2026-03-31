@@ -18,6 +18,7 @@ import { formatMeasurementNumber } from '../../utils/measurements';
 interface MetricsSummaryProps {
   onPress?: () => void;
   contentWidth?: number;
+  horizontalPadding?: number;
 }
 
 const metricConfig: Record<
@@ -33,7 +34,11 @@ const metricConfig: Record<
   thighs: { icon: 'walk', label: 'Piernas', color: '#06B6D4' },
 };
 
-export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress, contentWidth = 390 }) => {
+export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
+  onPress,
+  contentWidth = 390,
+  horizontalPadding = spacing.md,
+}) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const [metrics, setMetrics] = useState<MetricSummary[]>([]);
@@ -71,7 +76,7 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress, content
 
   if (isLoading) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingHorizontal: horizontalPadding }]}>
         <View style={styles.header}>
           <Text style={styles.title}>Mis metricas</Text>
         </View>
@@ -91,7 +96,10 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({ onPress, content
   const displayMetrics = metrics.slice(0, 4);
 
   return (
-    <Animated.View entering={FadeInUp.duration(500)} style={styles.container}>
+    <Animated.View
+      entering={FadeInUp.duration(500)}
+      style={[styles.container, { paddingHorizontal: horizontalPadding }]}
+    >
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Ionicons name="analytics" size={20} color={theme.colors.primary} />
@@ -212,7 +220,6 @@ const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     container: {
       marginVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
     },
     header: {
       flexDirection: 'row',
