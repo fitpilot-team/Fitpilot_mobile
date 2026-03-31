@@ -35,6 +35,10 @@ const resolveOptionalValue = (
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appEnv = process.env.APP_ENV || 'development';
   const extra = (config.extra ?? {}) as PublicExtra;
+  const googleServicesFile = resolveOptionalValue(
+    process.env.GOOGLE_SERVICES_JSON,
+    process.env.EXPO_ANDROID_GOOGLE_SERVICES_FILE ?? config.android?.googleServicesFile,
+  );
   const nutritionApiUrl = resolveRequiredUrl(
     process.env.EXPO_PUBLIC_NUTRITION_API_URL,
     extra.nutritionApiUrl,
@@ -90,7 +94,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#3b82f6',
       },
+      googleServicesFile,
       package: 'com.fitpilot.mobile',
+      userInterfaceStyle: 'automatic',
     },
     web: {
       bundler: 'metro',
@@ -102,6 +108,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       'expo-secure-store',
       'expo-asset',
       'expo-font',
+      'expo-system-ui',
+      [
+        'expo-notifications',
+        {
+          color: '#10b981',
+          defaultChannel: 'default',
+        },
+      ],
       [
         'expo-image-picker',
         {
