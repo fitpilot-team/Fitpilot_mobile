@@ -106,6 +106,13 @@ export default function RootLayout() {
               animation: 'slide_from_right',
             }}
           />
+          <Stack.Screen
+            name="recommendations/[tipId]"
+            options={{
+              presentation: 'card',
+              animation: 'slide_from_right',
+            }}
+          />
 
           {/* Workout session as modal over tabs */}
           <Stack.Screen
