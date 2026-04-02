@@ -12,10 +12,10 @@ export type WorkoutAnalyticsHeroMetric = {
 };
 
 interface WorkoutAnalyticsHeroProps {
+  eyebrow?: string | null;
   title: string;
   subtitle: string;
   rangeLabel: string;
-  anchorLabel?: string | null;
   actionLabel: string;
   actionHint: string;
   actionIcon: keyof typeof Ionicons.glyphMap;
@@ -24,10 +24,10 @@ interface WorkoutAnalyticsHeroProps {
 }
 
 export const WorkoutAnalyticsHero: React.FC<WorkoutAnalyticsHeroProps> = ({
+  eyebrow,
   title,
   subtitle,
   rangeLabel,
-  anchorLabel,
   actionLabel,
   actionHint,
   actionIcon,
@@ -37,6 +37,7 @@ export const WorkoutAnalyticsHero: React.FC<WorkoutAnalyticsHeroProps> = ({
   const styles = useThemedStyles(createStyles);
   const primaryMetrics = metrics.slice(0, 2);
   const secondaryMetrics = metrics.slice(2);
+  const showEyebrow = Boolean(eyebrow);
 
   return (
     <LinearGradient
@@ -46,7 +47,7 @@ export const WorkoutAnalyticsHero: React.FC<WorkoutAnalyticsHeroProps> = ({
       style={styles.container}
     >
       <View style={styles.copy}>
-        <Text style={styles.eyebrow}>Entrenamientos</Text>
+        {showEyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
         <Text numberOfLines={2} style={styles.title}>{title}</Text>
         <Text numberOfLines={2} style={styles.subtitle}>{subtitle}</Text>
       </View>
@@ -57,12 +58,6 @@ export const WorkoutAnalyticsHero: React.FC<WorkoutAnalyticsHeroProps> = ({
             <Ionicons name="pulse-outline" size={14} color="#ffffff" />
             <Text style={styles.rangeText}>{rangeLabel}</Text>
           </View>
-          {anchorLabel ? (
-            <View style={styles.rangePill}>
-              <Ionicons name="calendar-outline" size={14} color="#ffffff" />
-              <Text style={styles.rangeText}>{anchorLabel}</Text>
-            </View>
-          ) : null}
         </View>
       </View>
 
@@ -108,8 +103,8 @@ const createStyles = (_theme: AppTheme) =>
   StyleSheet.create({
     container: {
       borderRadius: borderRadius.xl,
-      padding: spacing.lg,
-      gap: spacing.md,
+      padding: spacing.md,
+      gap: spacing.sm,
       ...shadows.lg,
     },
     metaRow: {
@@ -127,13 +122,13 @@ const createStyles = (_theme: AppTheme) =>
       letterSpacing: 0.8,
     },
     title: {
-      fontSize: fontSize['3xl'],
+      fontSize: fontSize['2xl'],
       fontWeight: '800',
       color: '#ffffff',
     },
     subtitle: {
       fontSize: fontSize.sm,
-      lineHeight: 21,
+      lineHeight: 20,
       color: 'rgba(255,255,255,0.74)',
     },
     metaPills: {
@@ -163,12 +158,12 @@ const createStyles = (_theme: AppTheme) =>
     },
     primaryMetricCard: {
       width: '48%',
-      minHeight: 86,
+      minHeight: 74,
       borderRadius: borderRadius.lg,
       backgroundColor: 'rgba(255,255,255,0.08)',
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.1)',
-      padding: spacing.md,
+      padding: spacing.sm,
       gap: spacing.xs,
     },
     primaryMetricIcon: {
@@ -180,7 +175,7 @@ const createStyles = (_theme: AppTheme) =>
       justifyContent: 'center',
     },
     primaryMetricValue: {
-      fontSize: fontSize.xl,
+      fontSize: fontSize.lg,
       fontWeight: '800',
       color: '#ffffff',
     },
@@ -225,7 +220,7 @@ const createStyles = (_theme: AppTheme) =>
       borderWidth: 1,
       borderColor: 'rgba(255,255,255,0.1)',
       paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
+      paddingVertical: 10,
     },
     actionCopy: {
       flex: 1,

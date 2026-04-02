@@ -44,6 +44,7 @@ import {
   isTabletLayout,
 } from '../../src/utils/layout';
 import {
+  getDietMenuRotationOrder,
   mergeDietMenuOptionsByDate,
   resolvePrimaryDietMenu,
   resolvePrimaryDietMenuId,
@@ -385,7 +386,7 @@ export default function DietScreen() {
   }, [loadMenuCalendar, selectedDate, selectedDay]);
 
   const selectorMenus = useMemo(
-    () => selectedDay?.menuOptions ?? [],
+    () => getDietMenuRotationOrder(selectedDay),
     [selectedDay],
   );
 

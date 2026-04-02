@@ -17,11 +17,12 @@ import { router } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  CalendarDatePickerModal,
-  HistoricalNavigator,
-  type SharedWeeklyCalendarDay,
-} from '../../src/components/calendar';
-import { Button, Card, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
+  Button,
+  Card,
+  LoadingSpinner,
+  SegmentedControl,
+  TabScreenWrapper,
+} from '../../src/components/common';
 import { AnalyticsRangeSelector } from '../../src/components/workout-analytics/AnalyticsRangeSelector';
 import { ExerciseSparkline } from '../../src/components/workout-analytics/ExerciseSparkline';
 import { RepRangeEditorModal } from '../../src/components/workout-analytics/RepRangeEditorModal';
@@ -48,15 +49,7 @@ import type {
   WorkoutAnalyticsHistoryStatusFilter,
   WorkoutAnalyticsRange,
 } from '../../src/types';
-import {
-  addDaysToDateKey,
-  compareDateKeys,
-  formatLocalDate,
-  formatLocalShortWeekday,
-  getLocalDayNumber,
-  getTodayDateKey,
-  toLocalDateKey,
-} from '../../src/utils/date';
+import { formatLocalDate } from '../../src/utils/date';
 import { formatDuration } from '../../src/utils/formatters';
 import {
   getDashboardContentWidth,
@@ -125,45 +118,6 @@ const normalizeSearchValue = (value: string) =>
 
 const getRangeLabel = (range: WorkoutAnalyticsRange) =>
   WORKOUT_ANALYTICS_RANGE_OPTIONS.find((option) => option.value === range)?.label ?? range;
-
-const mapCalendarStatusToVariant = (
-  status: WorkoutAnalyticsDashboard['calendar_week'][number]['status'],
-): SharedWeeklyCalendarDay['variant'] => {
-  switch (status) {
-    case 'completed':
-      return 'complete';
-    case 'in_progress':
-      return 'partial';
-    case 'abandoned':
-      return 'missed';
-    default:
-      return 'default';
-  }
-};
-
-const getCalendarStatusText = (
-  day: WorkoutAnalyticsDashboard['calendar_week'][number],
-) => {
-  if (day.sessions_count > 0) {
-    return `${day.sessions_count}x`;
-  }
-
-  return day.is_today ? 'Hoy' : '';
-};
-
-const getCalendarWeekLabel = (calendarWeek: WorkoutAnalyticsDashboard['calendar_week']) => {
-  const firstDate = calendarWeek[0]?.date;
-  const lastDate = calendarWeek[calendarWeek.length - 1]?.date;
-
-  if (!firstDate || !lastDate) {
-    return null;
-  }
-
-  return `${formatLocalDate(firstDate, { month: 'short', day: 'numeric' })} - ${formatLocalDate(
-    lastDate,
-    { month: 'short', day: 'numeric' },
-  )}`;
-};
 
 const compareExercisesBySort = (
   left: ExerciseTrendSummary,
@@ -474,7 +428,6 @@ export default function WorkoutsScreen() {
   const isFocused = useIsFocused();
   const { workoutLogsVersion } = useWorkoutStore();
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
-  const [anchorDate, setAnchorDate] = useState(getTodayDateKey());
   const [dashboard, setDashboard] = useState<WorkoutAnalyticsDashboard | null>(null);
   const [activeTab, setActiveTab] = useState<WorkoutAnalyticsTab>('overview');
   const [exerciseSort, setExerciseSort] = useState<ExerciseSortOption>('recent');
@@ -490,9 +443,7 @@ export default function WorkoutsScreen() {
   const [isRangeEditorVisible, setIsRangeEditorVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const deferredExerciseSearch = useDeferredValue(exerciseSearchQuery);
-  const todayDateKey = getTodayDateKey();
 
   const hasAnyHistory = (dashboard?.summary.total_sessions ?? 0) > 0;
   const hasRangeData = (dashboard?.summary.sessions_in_range ?? 0) > 0;
@@ -509,7 +460,7 @@ export default function WorkoutsScreen() {
       }
 
       try {
-        const nextDashboard = await getWorkoutAnalyticsDashboard(range, anchorDate);
+        const nextDashboard = await getWorkoutAnalyticsDashboard(range);
         setDashboard(nextDashboard);
         setError(null);
       } catch (loadError) {
@@ -520,7 +471,7 @@ export default function WorkoutsScreen() {
         setIsRefreshing(false);
       }
     },
-    [anchorDate, range],
+    [range],
   );
 
   const loadHistoryPage = useCallback(
@@ -547,7 +498,6 @@ export default function WorkoutsScreen() {
           status: historyStatus,
           skip,
           limit: HISTORY_PAGE_SIZE,
-          anchorDate,
         });
         setHistoryPage((currentPage) => (reset ? nextPage : mergeHistoryPages(currentPage, nextPage)));
         setHistoryError(null);
@@ -560,7 +510,7 @@ export default function WorkoutsScreen() {
         setIsHistoryLoadingMore(false);
       }
     },
-    [anchorDate, historyStatus, range],
+    [historyStatus, range],
   );
 
   useEffect(() => {
@@ -616,78 +566,6 @@ export default function WorkoutsScreen() {
       { label: 'Dias activos', value: `${summary?.active_days ?? 0}`, icon: 'flash-outline' as const },
     ];
   }, [dashboard?.summary]);
-  const anchorDateLabel = useMemo(
-    () => formatLocalDate(anchorDate, { day: 'numeric', month: 'short', year: 'numeric' }),
-    [anchorDate],
-  );
-  const navigatorDays = useMemo<SharedWeeklyCalendarDay[]>(
-    () => (dashboard?.calendar_week ?? []).map((day) => ({
-      id: day.date,
-      dateKey: day.date,
-      dayLabel: formatLocalShortWeekday(day.date),
-      dateNumber: getLocalDayNumber(day.date),
-      isSelected: day.date === anchorDate,
-      isToday: day.is_today,
-      isDisabled: compareDateKeys(day.date, todayDateKey) > 0,
-      statusText: getCalendarStatusText(day),
-      variant: mapCalendarStatusToVariant(day.status),
-      onPress: () => {
-        if (compareDateKeys(day.date, todayDateKey) > 0) {
-          return;
-        }
-
-        setAnchorDate(day.date);
-      },
-    })),
-    [anchorDate, dashboard?.calendar_week, todayDateKey],
-  );
-  const navigatorWeekLabel = useMemo(
-    () => getCalendarWeekLabel(dashboard?.calendar_week ?? []),
-    [dashboard?.calendar_week],
-  );
-  const canGoToPreviousWeek = true;
-  const canGoToNextWeek = useMemo(() => {
-    const nextAnchorDate = addDaysToDateKey(anchorDate, 7);
-
-    if (!nextAnchorDate) {
-      return false;
-    }
-
-    return compareDateKeys(nextAnchorDate, todayDateKey) <= 0;
-  }, [anchorDate, todayDateKey]);
-
-  const handleShiftWeek = useCallback((direction: -1 | 1) => {
-    const nextAnchorDate = addDaysToDateKey(anchorDate, direction * 7);
-
-    if (!nextAnchorDate) {
-      return;
-    }
-
-    if (compareDateKeys(nextAnchorDate, todayDateKey) > 0) {
-      return;
-    }
-
-    setAnchorDate(nextAnchorDate);
-  }, [anchorDate, todayDateKey]);
-
-  const handleOpenDatePicker = useCallback(() => {
-    setIsDatePickerVisible(true);
-  }, []);
-
-  const handleCloseDatePicker = useCallback(() => {
-    setIsDatePickerVisible(false);
-  }, []);
-
-  const handleSelectAnchorDate = useCallback((date: Date) => {
-    const nextDateKey = toLocalDateKey(date);
-
-    if (!nextDateKey || compareDateKeys(nextDateKey, todayDateKey) > 0) {
-      return;
-    }
-
-    setIsDatePickerVisible(false);
-    setAnchorDate(nextDateKey);
-  }, [todayDateKey]);
 
   const quickAction = useMemo(() => {
     const inProgressWorkout = dashboard?.recent_history.find((workout) => workout.status === 'in_progress');
@@ -704,7 +582,7 @@ export default function WorkoutsScreen() {
     if (latestWorkout) {
       return {
         label: 'Ultimo registro',
-        hint: `${latestWorkout.training_day_name} · ${formatLocalDate(latestWorkout.performed_on_date, {
+        hint: `${latestWorkout.training_day_name} - ${formatLocalDate(latestWorkout.performed_on_date, {
           day: 'numeric',
           month: 'short',
         })}`,
@@ -834,73 +712,119 @@ export default function WorkoutsScreen() {
           isTablet ? styles.pageHeaderTablet : null,
         ]}
       >
-        <HistoricalNavigator
-          eyebrow="Entrenamientos"
-          title="Historial semanal"
-          subtitle={`Vista anclada al ${anchorDateLabel}`}
-          weekLabel={navigatorWeekLabel}
-          days={navigatorDays}
-          contentWidth={contentWidth}
-          canGoToPreviousWeek={canGoToPreviousWeek}
-          canGoToNextWeek={canGoToNextWeek}
-          showWeekButtons={isTablet}
-          datePickerLabel="Fecha"
-          onShiftWeek={handleShiftWeek}
-          onOpenDatePicker={handleOpenDatePicker}
+        <View style={styles.screenIntro}>
+          <Text style={styles.screenEyebrow}>Entrenamientos</Text>
+          <Text style={styles.screenTitle}>Progreso</Text>
+          <Text style={styles.screenSubtitle}>
+            Cambia la ventana de analisis y organiza el contenido por vista
+            para revisar tu progreso con menos ruido.
+          </Text>
+        </View>
+
+        <SegmentedControl
+          options={TAB_OPTIONS.map((option) => ({
+            key: option.value,
+            label: option.label,
+          }))}
+          value={activeTab}
+          onChange={(value) => handleTabChange(value)}
         />
 
-        <WorkoutAnalyticsHero
-          title="Resumen del progreso"
-          subtitle="Volumen, sesiones clave y acceso rapido del periodo actual."
-          rangeLabel={getRangeLabel(range)}
-          anchorLabel={anchorDateLabel}
-          actionLabel={quickAction.label}
-          actionHint={quickAction.hint}
-          actionIcon={quickAction.icon}
-          metrics={heroMetrics}
-          onActionPress={quickAction.onPress}
-        />
+        {activeTab === 'overview' ? (
+          <>
+            <WorkoutAnalyticsHero
+              eyebrow="Resumen"
+              title="Resumen del periodo"
+              subtitle="Volumen, sesiones clave y acceso rapido segun la ventana que elijas."
+              rangeLabel={getRangeLabel(range)}
+              actionLabel={quickAction.label}
+              actionHint={quickAction.hint}
+              actionIcon={quickAction.icon}
+              metrics={heroMetrics}
+              onActionPress={quickAction.onPress}
+            />
 
-        <Card padding="sm" style={styles.controlsCard}>
-          <AnalyticsRangeSelector value={range} onChange={setRange} />
-          <WorkoutAnalyticsPillSelector
-            items={TAB_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
-            value={activeTab}
-            onChange={handleTabChange}
-          />
+            <Card padding="sm" style={styles.utilityCard}>
+              <View style={styles.utilityGroup}>
+                <Text style={styles.utilityLabel}>Ventana de analisis</Text>
+                <AnalyticsRangeSelector value={range} onChange={setRange} />
+              </View>
+            </Card>
+          </>
+        ) : null}
 
-          {activeTab === 'exercises' ? (
-            <View style={styles.controlStack}>
-              <SearchField
-                value={exerciseSearchQuery}
-                placeholder="Buscar ejercicio"
-                onChangeText={setExerciseSearchQuery}
-                onClear={() => setExerciseSearchQuery('')}
-              />
-              <WorkoutAnalyticsPillSelector
-                items={EXERCISE_SORT_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-                value={exerciseSort}
-                onChange={handleExerciseSortChange}
-              />
-            </View>
-          ) : null}
+        {activeTab === 'exercises' ? (
+          <>
+            <Card style={styles.tabContextCard}>
+              <Text style={styles.tabContextEyebrow}>Ejercicios</Text>
+              <Text style={styles.tabContextTitle}>Lista completa del progreso</Text>
+              <Text style={styles.tabContextSubtitle}>
+                Busca y ordena tus movimientos para detectar avances recientes.
+              </Text>
+            </Card>
 
-          {activeTab === 'history' ? (
-            <View style={styles.controlStack}>
-              <WorkoutAnalyticsPillSelector
-                items={HISTORY_STATUS_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: option.label,
-                }))}
-                value={historyStatus}
-                onChange={handleHistoryStatusChange}
-              />
-            </View>
-          ) : null}
-        </Card>
+            <Card padding="sm" style={styles.utilityCard}>
+              <View style={styles.utilityStack}>
+                <View style={styles.utilityGroup}>
+                  <Text style={styles.utilityLabel}>Ventana de analisis</Text>
+                  <AnalyticsRangeSelector value={range} onChange={setRange} />
+                </View>
+
+                <SearchField
+                  value={exerciseSearchQuery}
+                  placeholder="Buscar ejercicio"
+                  onChangeText={setExerciseSearchQuery}
+                  onClear={() => setExerciseSearchQuery('')}
+                />
+
+                <View style={styles.utilityGroup}>
+                  <Text style={styles.utilityLabel}>Orden</Text>
+                  <WorkoutAnalyticsPillSelector
+                    items={EXERCISE_SORT_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                    value={exerciseSort}
+                    onChange={handleExerciseSortChange}
+                  />
+                </View>
+              </View>
+            </Card>
+          </>
+        ) : null}
+
+        {activeTab === 'history' ? (
+          <>
+            <Card style={styles.tabContextCard}>
+              <Text style={styles.tabContextEyebrow}>Historial</Text>
+              <Text style={styles.tabContextTitle}>Sesiones registradas</Text>
+              <Text style={styles.tabContextSubtitle}>
+                Filtra el historial completo por ventana y estado sin salir de esta vista.
+              </Text>
+            </Card>
+
+            <Card padding="sm" style={styles.utilityCard}>
+              <View style={styles.utilityStack}>
+                <View style={styles.utilityGroup}>
+                  <Text style={styles.utilityLabel}>Ventana de analisis</Text>
+                  <AnalyticsRangeSelector value={range} onChange={setRange} />
+                </View>
+
+                <View style={styles.utilityGroup}>
+                  <Text style={styles.utilityLabel}>Estado</Text>
+                  <WorkoutAnalyticsPillSelector
+                    items={HISTORY_STATUS_OPTIONS.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                    value={historyStatus}
+                    onChange={handleHistoryStatusChange}
+                  />
+                </View>
+              </View>
+            </Card>
+          </>
+        ) : null}
 
         {error ? (
           <View style={styles.inlineBanner}>
@@ -998,7 +922,7 @@ export default function WorkoutsScreen() {
                                 onPress={() =>
                                   router.push({
                                     pathname: '/workouts/exercises/[exerciseId]',
-                                    params: { exerciseId: exercise.exercise_id, range, anchorDate },
+                                    params: { exerciseId: exercise.exercise_id, range },
                                   })
                                 }
                               />
@@ -1101,7 +1025,7 @@ export default function WorkoutsScreen() {
                   onPress={() =>
                     router.push({
                       pathname: '/workouts/exercises/[exerciseId]',
-                      params: { exerciseId: item.exercise_id, range, anchorDate },
+                      params: { exerciseId: item.exercise_id, range },
                     })
                   }
                 />
@@ -1270,16 +1194,6 @@ export default function WorkoutsScreen() {
           onClose={() => setIsRangeEditorVisible(false)}
           onSave={handleSaveRepRanges}
         />
-
-        <CalendarDatePickerModal
-          visible={isDatePickerVisible}
-          title="Ir a fecha"
-          subtitle="Reancla el resumen y el historial a cualquier dia anterior."
-          selectedDate={anchorDate}
-          maxDate={todayDateKey}
-          onClose={handleCloseDatePicker}
-          onSelect={handleSelectAnchorDate}
-        />
       </SafeAreaView>
     </TabScreenWrapper>
   );
@@ -1304,7 +1218,27 @@ const createStyles = (theme: AppTheme) =>
     pageHeaderTablet: {
       paddingTop: spacing.lg,
     },
-    controlsCard: {
+    screenIntro: {
+      gap: spacing.xs,
+    },
+    screenEyebrow: {
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+    },
+    screenTitle: {
+      fontSize: fontSize['2xl'],
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    screenSubtitle: {
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.textMuted,
+    },
+    utilityCard: {
       gap: spacing.sm,
       borderRadius: borderRadius.lg,
       backgroundColor: theme.colors.surfaceAlt,
@@ -1315,15 +1249,50 @@ const createStyles = (theme: AppTheme) =>
       shadowOffset: { width: 0, height: 0 },
       elevation: 0,
     },
-    controlStack: {
+    utilityStack: {
       gap: spacing.md,
+    },
+    utilityGroup: {
+      gap: spacing.sm,
+    },
+    utilityLabel: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.7,
+    },
+    tabContextCard: {
+      gap: spacing.xs,
+      shadowColor: 'transparent',
+      shadowOpacity: 0,
+      shadowRadius: 0,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 0,
+    },
+    tabContextEyebrow: {
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+    },
+    tabContextTitle: {
+      fontSize: fontSize.xl,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    tabContextSubtitle: {
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.textMuted,
     },
     searchField: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
       borderRadius: borderRadius.lg,
-      backgroundColor: theme.colors.surfaceAlt,
+      backgroundColor: theme.colors.surface,
       borderWidth: 1,
       borderColor: theme.colors.border,
       paddingHorizontal: spacing.md,
