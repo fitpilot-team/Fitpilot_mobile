@@ -10,9 +10,11 @@ export type TurnstileBridgeMessage =
   | { type: 'expired'; message?: string }
   | { type: 'error'; message?: string };
 
-const DEFAULT_TURNSTILE_BRIDGE_URL = 'https://app.fitpilot.fit/turnstile/mobile';
+const DEFAULT_TURNSTILE_BRIDGE_URL = 'https://pro.fitpilot.fit/turnstile/mobile';
 
 const extra = (Constants.expoConfig?.extra ?? {}) as PublicExtra;
+let hasLoggedDefaultBridgeUsage = false;
+let hasLoggedInvalidBridgeUrl = false;
 
 const normalizeBridgeUrl = (value: string | undefined): string | null => {
   const normalized = value?.trim();
@@ -27,12 +29,50 @@ const normalizeBridgeUrl = (value: string | undefined): string | null => {
   }
 };
 
-export const resolveTurnstileBridgeUrl = (): string | null =>
-  normalizeBridgeUrl(
-    process.env.EXPO_PUBLIC_TURNSTILE_BRIDGE_URL ||
-      extra.turnstileBridgeUrl ||
-      DEFAULT_TURNSTILE_BRIDGE_URL,
-  );
+const resolveConfiguredBridgeUrl = () => {
+  const envValue = process.env.EXPO_PUBLIC_TURNSTILE_BRIDGE_URL?.trim();
+  if (envValue) {
+    return {
+      source: 'env',
+      value: envValue,
+    } as const;
+  }
+
+  const extraValue = extra.turnstileBridgeUrl?.trim();
+  if (extraValue) {
+    return {
+      source: 'expo-config',
+      value: extraValue,
+    } as const;
+  }
+
+  return null;
+};
+
+export const resolveTurnstileBridgeUrl = (): string | null => {
+  const configuredBridge = resolveConfiguredBridgeUrl();
+  if (configuredBridge) {
+    const normalized = normalizeBridgeUrl(configuredBridge.value);
+
+    if (__DEV__ && !normalized && !hasLoggedInvalidBridgeUrl) {
+      hasLoggedInvalidBridgeUrl = true;
+      console.warn('[Turnstile] Invalid public bridge URL configuration:', configuredBridge);
+    }
+
+    return normalized;
+  }
+
+  const fallbackUrl = normalizeBridgeUrl(DEFAULT_TURNSTILE_BRIDGE_URL);
+  if (__DEV__ && fallbackUrl && !hasLoggedDefaultBridgeUsage) {
+    hasLoggedDefaultBridgeUsage = true;
+    console.warn(
+      '[Turnstile] EXPO_PUBLIC_TURNSTILE_BRIDGE_URL is not configured. Falling back to default bridge URL:',
+      fallbackUrl,
+    );
+  }
+
+  return fallbackUrl;
+};
 
 export const buildTurnstileBridgeUrl = (reloadKey: number, platform: string): string | null => {
   const baseUrl = resolveTurnstileBridgeUrl();
