@@ -7,6 +7,17 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "APP_ENV": "development",
+        "EXPO_PUBLIC_NUTRITION_API_URL": "https://nutrition-api.fitpilot.fit/v1",
+        "EXPO_PUBLIC_TRAINING_API_URL": "https://training-api.fitpilot.fit/api",
+        "EXPO_PUBLIC_TURNSTILE_BRIDGE_URL": "https://pro.fitpilot.fit/turnstile/mobile",
+        "EXPO_PUBLIC_TERMS_URL": "https://pro.fitpilot.fit/es/terms",
+        "EXPO_PUBLIC_PRIVACY_URL": "https://pro.fitpilot.fit/es/privacy"
+      }
+    },
+    "development-simulator": {
+      "extends": "development",
       "ios": {
         "simulator": true
       }
