@@ -8,9 +8,13 @@ import type {
 export const listMyMeasurements = (
   page: number = 1,
   limit: number = 20,
+  options?: {
+    skipErrorLogging?: boolean;
+  },
 ): Promise<MeasurementHistoryResponse> =>
   nutritionClient.get<MeasurementHistoryResponse>('/measurements/me', {
     params: { page, limit },
+    skipErrorLogging: options?.skipErrorLogging,
   });
 
 export const getMyMeasurementDetail = (

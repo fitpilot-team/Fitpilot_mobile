@@ -105,8 +105,6 @@ const createApiError = (
   const message = error.response?.data?.message;
   let errorMessage = fallbackMessage;
 
-  console.warn(`[API ERROR TRACE] status: ${error.response?.status}`, error.response?.data);
-
   if (typeof detail === 'string') {
     errorMessage = detail;
   } else if (Array.isArray(detail)) {
@@ -133,7 +131,6 @@ const createApiError = (
 };
 
 const extractApiErrorMessage = (error: AxiosError<ApiErrorPayload>) => {
-  console.warn(`[API ERROR TRACE] status: ${error.response?.status}`, error.response?.data);
   const detail = error.response?.data?.detail;
   const message = error.response?.data?.message;
 
@@ -346,6 +343,7 @@ const attachAuthInterceptors = (instance: AxiosInstance, label: 'nutrition' | 't
           error.response?.status,
           error.message,
         );
+        console.warn(`[API ERROR TRACE] status: ${error.response?.status}`, error.response?.data);
       }
 
       return Promise.reject(createApiError(error));

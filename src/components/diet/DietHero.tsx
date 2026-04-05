@@ -27,7 +27,7 @@ export const DietHero: React.FC<DietHeroProps> = ({
     month: 'long',
   });
   const subtitle = menu.description || `Plan activo para ${dateLabel}`;
-  const badgeLabel = isPreview ? 'Vista previa' : isToday ? 'Hoy' : 'Plan del dia';
+  const badgeLabel = isPreview ? 'Previsualizando' : isToday ? 'Hoy' : 'Plan del dia';
   const badgeIcon = isPreview ? 'eye-outline' : isToday ? 'sparkles' : 'calendar-outline';
   const stats = [
     { label: 'Comidas', value: menu.totalMeals },

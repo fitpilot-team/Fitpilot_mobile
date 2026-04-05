@@ -454,14 +454,6 @@ export interface MuscleVolumeResponse {
   muscles: MuscleVolumeItem[];
 }
 
-export interface MetricSummary {
-  metric_type: string;
-  latest_value: number;
-  latest_date: string;
-  unit: string;
-  change_from_previous: number | null;
-}
-
 export interface ClientRecipeSummary {
   id: number;
   title: string;
@@ -550,7 +542,8 @@ export interface ClientDietWeekDay {
   id: string;
   assignedDate: string;
   isToday: boolean;
-  assignedMenuId: number | null;
+  backendPrimaryMenuId: number | null;
+  rotationMenuOptions: ClientDietMenu[];
   menuOptions: ClientDietMenu[];
 }
 

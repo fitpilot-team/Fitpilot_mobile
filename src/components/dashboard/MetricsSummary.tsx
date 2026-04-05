@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInUp } from 'react-native-reanimated';
-import { brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
+import { spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import { StatCardSkeleton } from '../common/Skeleton';
-import { nutritionClient } from '../../services/api';
-import type { ApiError, MetricSummary } from '../../types';
+import { listMyMeasurements } from '../../services/measurements';
+import type { ApiError } from '../../types';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import {
   type MeasurementPreference,
@@ -14,6 +14,10 @@ import {
 } from '../../store/measurementPreferenceStore';
 import { convertMeasurementUnitValue } from '../../utils/measurementUnits';
 import { formatMeasurementNumber } from '../../utils/measurements';
+import {
+  buildMeasurementSummaries,
+  type MeasurementSummaryItem,
+} from '../../utils/measurementSummaries';
 
 interface MetricsSummaryProps {
   onPress?: () => void;
@@ -21,17 +25,10 @@ interface MetricsSummaryProps {
   horizontalPadding?: number;
 }
 
-const metricConfig: Record<
-  string,
-  { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; color: string }
-> = {
-  weight: { icon: 'scale', label: 'Peso', color: '#3B82F6' },
-  body_fat: { icon: 'body', label: 'Grasa', color: '#EF4444' },
-  chest: { icon: 'fitness', label: 'Pecho', color: '#10B981' },
-  waist: { icon: 'resize', label: 'Cintura', color: '#F59E0B' },
-  hips: { icon: 'ellipse', label: 'Cadera', color: '#8B5CF6' },
-  arms: { icon: 'barbell', label: 'Brazos', color: '#EC4899' },
-  thighs: { icon: 'walk', label: 'Piernas', color: '#06B6D4' },
+const metricConfig: Record<MeasurementSummaryItem['key'], { color: string }> = {
+  weight_kg: { color: '#3B82F6' },
+  body_fat_pct: { color: '#EF4444' },
+  muscle_mass_kg: { color: '#10B981' },
 };
 
 export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
@@ -41,7 +38,7 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
-  const [metrics, setMetrics] = useState<MetricSummary[]>([]);
+  const [metrics, setMetrics] = useState<MeasurementSummaryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
@@ -59,10 +56,8 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
     try {
       setIsLoading(true);
       setError(null);
-      const response = await nutritionClient.get<MetricSummary[]>('/client-metrics/me/summary', {
-        skipErrorLogging: true,
-      });
-      setMetrics(response);
+      const response = await listMyMeasurements(1, 100, { skipErrorLogging: true });
+      setMetrics(buildMeasurementSummaries(response.data));
     } catch (loadError) {
       const apiError = loadError as ApiError;
 
@@ -114,7 +109,7 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
       <View style={[styles.metricsGrid, contentWidth >= 720 ? styles.metricsGridTablet : null]}>
         {displayMetrics.map((metric, index) => (
           <MetricCard
-            key={metric.metric_type}
+            key={metric.key}
             metric={metric}
             index={index}
             measurementPreference={measurementPreference}
@@ -126,7 +121,7 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
 };
 
 interface MetricCardProps {
-  metric: MetricSummary;
+  metric: MeasurementSummaryItem;
   index: number;
   measurementPreference: MeasurementPreference;
 }
@@ -138,29 +133,24 @@ const MetricCard: React.FC<MetricCardProps> = ({
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
-  const config = metricConfig[metric.metric_type] || {
-    icon: 'analytics' as React.ComponentProps<typeof Ionicons>['name'],
-    label: metric.metric_type,
-    color: brandColors.sky,
-  };
+  const config = metricConfig[metric.key];
   const convertedMetric = convertMeasurementUnitValue(
-    metric.latest_value,
+    metric.latestValue,
     metric.unit,
     measurementPreference,
   );
-  const convertedChange = metric.change_from_previous === null
+  const convertedChange = metric.changeFromPrevious === null
     ? null
     : convertMeasurementUnitValue(
-        Math.abs(metric.change_from_previous),
+        Math.abs(metric.changeFromPrevious),
         metric.unit,
         measurementPreference,
       );
 
-  const hasChange = metric.change_from_previous !== null;
-  const isPositive = metric.change_from_previous && metric.change_from_previous > 0;
-  const isNegative = metric.change_from_previous && metric.change_from_previous < 0;
-  const isWeightOrFat = ['weight', 'body_fat'].includes(metric.metric_type);
-  const changeColor = isWeightOrFat
+  const hasChange = metric.changeFromPrevious !== null;
+  const isPositive = (metric.changeFromPrevious ?? 0) > 0;
+  const isNegative = (metric.changeFromPrevious ?? 0) < 0;
+  const changeColor = metric.emphasizeDecrease
     ? isNegative ? theme.colors.success : isPositive ? theme.colors.error : theme.colors.textMuted
     : isPositive ? theme.colors.success : isNegative ? theme.colors.error : theme.colors.textMuted;
   const gradientColors: readonly [string, string] = theme.isDark
@@ -179,7 +169,11 @@ const MetricCard: React.FC<MetricCardProps> = ({
         style={styles.metricCard}
       >
         <View style={[styles.metricIcon, { backgroundColor: `${config.color}18` }]}>
-          <Ionicons name={config.icon} size={16} color={config.color} />
+          <Ionicons
+            name={metric.icon as React.ComponentProps<typeof Ionicons>['name']}
+            size={16}
+            color={config.color}
+          />
         </View>
 
         <View style={styles.metricValueRow}>
@@ -192,9 +186,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
           <Text style={styles.metricUnit}>{convertedMetric.unit}</Text>
         </View>
 
-        <Text style={styles.metricLabel}>{config.label}</Text>
+        <Text style={styles.metricLabel}>{metric.label}</Text>
 
-        {hasChange && metric.change_from_previous !== 0 && (
+        {hasChange && metric.changeFromPrevious !== 0 && (
           <View style={[styles.changeBadge, { backgroundColor: `${changeColor}18` }]}>
             <Ionicons
               name={isPositive ? 'arrow-up' : 'arrow-down'}
