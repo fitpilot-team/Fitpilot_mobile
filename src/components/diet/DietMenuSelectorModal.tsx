@@ -64,7 +64,7 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
               <Text style={styles.title}>Menus del pool</Text>
               <Text style={styles.subtitle}>{dateLabel}</Text>
               <Text style={styles.supportingText}>
-                Esta seleccion solo cambia la vista de esta pantalla.
+                El menu asignado marca el arranque semanal. Esta seleccion solo cambia la vista.
               </Text>
             </View>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
@@ -149,7 +149,8 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
                         <View style={[styles.badge, styles.assignedBadge]}>
                           <Text style={[styles.badgeText, styles.assignedBadgeText]}>Asignado</Text>
                         </View>
-                      ) : isPrimary ? (
+                      ) : null}
+                      {isPrimary ? (
                         <View style={[styles.badge, styles.primaryBadge]}>
                           <Text style={[styles.badgeText, styles.primaryBadgeText]}>Principal</Text>
                         </View>

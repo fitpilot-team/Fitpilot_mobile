@@ -21,6 +21,7 @@ import {
   TodayWorkoutCard,
   UserHeader,
 } from '../../src/components/dashboard';
+import type { ScienceTip } from '../../src/constants/scienceTips';
 import { spacing } from '../../src/constants/colors';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { getMuscleVolume } from '../../src/services/api';
@@ -252,11 +253,6 @@ export default function HomeScreen() {
     [startWorkout],
   );
 
-  const handleFocusDate = useCallback((dateKey: string) => {
-    setFocusedDateKey(dateKey);
-    setIsSessionPickerVisible(false);
-  }, []);
-
   const handleShiftWeek = useCallback(
     (direction: -1 | 1) => {
       const nextDateKey = shiftProgramTimelineFocusByWeek(
@@ -342,6 +338,12 @@ export default function HomeScreen() {
       programTimelineView.workoutTotal,
     ],
   );
+  const handleOpenScienceTip = useCallback((tip: ScienceTip) => {
+    router.push({
+      pathname: '/recommendations/[tipId]',
+      params: { tipId: tip.id },
+    });
+  }, []);
 
   if (!user) {
     return null;
@@ -438,6 +440,7 @@ export default function HomeScreen() {
                 context={tipContext}
                 contentWidth={contentWidth}
                 horizontalPadding={horizontalPadding}
+                onTipPress={handleOpenScienceTip}
               />
             </Animated.View>
 

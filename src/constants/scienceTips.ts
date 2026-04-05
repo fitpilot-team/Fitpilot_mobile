@@ -325,3 +325,6 @@ export const scienceTips: ScienceTip[] = [
     tags: ['program_start', 'pre_workout'],
   },
 ];
+
+export const getScienceTipById = (tipId: string): ScienceTip | null =>
+  scienceTips.find((tip) => tip.id === tipId) ?? null;

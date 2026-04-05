@@ -23,12 +23,15 @@ interface TurnstileChallengeModalProps {
   onToken: (token: string) => void | Promise<void>;
 }
 
-type ChallengeViewState = 'loading' | 'ready' | 'error';
+type WebViewLoadState = 'idle' | 'loading' | 'loaded' | 'error';
+type BridgeState = 'waiting' | 'ready' | 'token' | 'expired' | 'error';
 
 const CONFIGURATION_ERROR_MESSAGE =
   'No fue posible abrir la verificacion de seguridad. Revisa la configuracion publica del bridge.';
 const LOAD_ERROR_MESSAGE =
   'No se pudo cargar la verificacion de seguridad. Intenta de nuevo.';
+const WAITING_HELP_MESSAGE =
+  'Si el challenge tarda en mostrarse, espera unos segundos o recarga la verificacion.';
 
 export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = ({
   visible,
@@ -38,7 +41,8 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const [reloadKey, setReloadKey] = useState(0);
-  const [viewState, setViewState] = useState<ChallengeViewState>('loading');
+  const [webViewState, setWebViewState] = useState<WebViewLoadState>('idle');
+  const [bridgeState, setBridgeState] = useState<BridgeState>('waiting');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const tokenHandledRef = useRef(false);
 
@@ -47,38 +51,61 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
     [reloadKey],
   );
 
+  const logDebug = useCallback((event: string, details?: Record<string, unknown>) => {
+    if (!__DEV__) {
+      return;
+    }
+
+    if (details) {
+      console.log('[Turnstile]', event, details);
+      return;
+    }
+
+    console.log('[Turnstile]', event);
+  }, []);
+
   useEffect(() => {
     if (!visible) {
       return;
     }
 
     tokenHandledRef.current = false;
+
     if (!bridgeUrl) {
-      setViewState('error');
+      setWebViewState('error');
+      setBridgeState('error');
       setErrorMessage(CONFIGURATION_ERROR_MESSAGE);
+      logDebug('bridge-url-missing');
       return;
     }
 
-    setViewState('loading');
+    setWebViewState('loading');
+    setBridgeState('waiting');
     setErrorMessage(null);
-  }, [bridgeUrl, visible]);
+    logDebug('modal-open', { bridgeUrl });
+  }, [bridgeUrl, logDebug, visible]);
 
   const handleRetry = useCallback(() => {
     tokenHandledRef.current = false;
-    setViewState('loading');
+    setWebViewState('loading');
+    setBridgeState('waiting');
     setErrorMessage(null);
     setReloadKey((current) => current + 1);
-  }, []);
+    logDebug('retry');
+  }, [logDebug]);
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
+      logDebug('message-received', { payload: event.nativeEvent.data });
+
       const message = parseTurnstileBridgeMessage(event.nativeEvent.data);
       if (!message) {
+        logDebug('message-ignored');
         return;
       }
 
       if (message.type === 'ready') {
-        setViewState('ready');
+        setBridgeState('ready');
         setErrorMessage(null);
         return;
       }
@@ -89,12 +116,13 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
         }
 
         tokenHandledRef.current = true;
+        setBridgeState('token');
         void Promise.resolve(onToken(message.token));
         return;
       }
 
       tokenHandledRef.current = false;
-      setViewState('error');
+      setBridgeState(message.type === 'expired' ? 'expired' : 'error');
       setErrorMessage(
         message.message ||
           (message.type === 'expired'
@@ -102,14 +130,28 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
             : LOAD_ERROR_MESSAGE),
       );
     },
-    [onToken],
+    [logDebug, onToken],
   );
 
-  const handleLoadFailure = useCallback(() => {
-    tokenHandledRef.current = false;
-    setViewState('error');
-    setErrorMessage(LOAD_ERROR_MESSAGE);
-  }, []);
+  const handleLoadFailure = useCallback(
+    (source: 'error' | 'http-error', details?: Record<string, unknown>) => {
+      logDebug('load-failure', {
+        source,
+        ...(details ?? {}),
+      });
+
+      tokenHandledRef.current = false;
+      setWebViewState('error');
+      setBridgeState('error');
+      setErrorMessage(LOAD_ERROR_MESSAGE);
+    },
+    [logDebug],
+  );
+
+  const showLoadingOverlay = webViewState === 'loading';
+  const showErrorOverlay =
+    webViewState === 'error' || bridgeState === 'error' || bridgeState === 'expired';
+  const showWaitingHelp = webViewState === 'loaded' && bridgeState === 'waiting';
 
   return (
     <Modal
@@ -152,23 +194,41 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
                 setSupportMultipleWindows={false}
                 originWhitelist={['https://*', 'about:blank', 'about:srcdoc']}
                 onMessage={handleMessage}
-                onError={handleLoadFailure}
-                onHttpError={handleLoadFailure}
-                onLoadStart={() => {
+                onError={(event) => {
+                  handleLoadFailure('error', {
+                    code: event.nativeEvent.code,
+                    description: event.nativeEvent.description,
+                    url: event.nativeEvent.url,
+                  });
+                }}
+                onHttpError={(event) => {
+                  handleLoadFailure('http-error', {
+                    description: event.nativeEvent.description,
+                    statusCode: event.nativeEvent.statusCode,
+                    url: event.nativeEvent.url,
+                  });
+                }}
+                onLoadStart={(event) => {
                   tokenHandledRef.current = false;
-                  setViewState('loading');
+                  setWebViewState('loading');
+                  setBridgeState('waiting');
                   setErrorMessage(null);
+                  logDebug('load-start', { url: event.nativeEvent.url });
+                }}
+                onLoadEnd={(event) => {
+                  setWebViewState((current) => (current === 'error' ? current : 'loaded'));
+                  logDebug('load-end', { url: event.nativeEvent.url });
                 }}
               />
             ) : null}
 
-            {viewState === 'loading' ? (
+            {showLoadingOverlay ? (
               <View style={styles.overlayState}>
                 <LoadingSpinner text="Preparando verificacion..." />
               </View>
             ) : null}
 
-            {viewState === 'error' ? (
+            {showErrorOverlay ? (
               <View style={styles.overlayState}>
                 <View style={styles.errorCard}>
                   <Ionicons
@@ -183,6 +243,20 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
               </View>
             ) : null}
           </View>
+
+          {showWaitingHelp ? (
+            <View style={styles.waitingHelpCard}>
+              <View style={styles.waitingHelpCopy}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={18}
+                  color={theme.colors.primary}
+                />
+                <Text style={styles.waitingHelpText}>{WAITING_HELP_MESSAGE}</Text>
+              </View>
+              <Button title="Reintentar" onPress={handleRetry} style={styles.waitingHelpButton} />
+            </View>
+          ) : null}
 
           <Text style={styles.footerText}>
             Si cierras este modal, tu sesion no se iniciara hasta completar la verificacion.
@@ -264,6 +338,30 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'center',
       backgroundColor: theme.isDark ? 'rgba(8, 17, 31, 0.92)' : 'rgba(248, 250, 252, 0.96)',
       padding: spacing.lg,
+    },
+    waitingHelpCard: {
+      marginHorizontal: spacing.lg,
+      marginBottom: spacing.md,
+      padding: spacing.md,
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+      gap: spacing.sm,
+    },
+    waitingHelpCopy: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
+    },
+    waitingHelpText: {
+      flex: 1,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
+    },
+    waitingHelpButton: {
+      alignSelf: 'stretch',
     },
     errorCard: {
       width: '100%',

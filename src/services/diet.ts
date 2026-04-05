@@ -261,6 +261,62 @@ const isGramBasedRecipeIngredient = (ingredient: NutritionRecipeDetailIngredient
   );
 };
 
+const isHouseholdUnit = (unitName: string | null | undefined): boolean => {
+  const normalized = normalizeUnit(unitName);
+  if (!normalized) return false;
+  if (['g', 'gr', 'gramo', 'gramos'].includes(normalized)) return false;
+  if (normalized.includes('equivalente') || normalized.includes('smae')) return false;
+  return true;
+};
+
+const deriveFallbackHouseholdLabel = (
+  grams: number | null,
+  servingUnits: { unit_name?: string | null; gram_equivalent?: number | string | null }[] | null | undefined
+): string | null => {
+  if (grams === null || grams <= 0 || !servingUnits?.length) {
+    return null;
+  }
+
+  let bestCandidate: { unitName: string; quantity: number; relativeError: number; distanceToOne: number } | null = null;
+
+  for (const servingUnit of servingUnits) {
+    const unitName = servingUnit.unit_name?.trim() || null;
+    const gramEquivalent = toNumber(servingUnit.gram_equivalent);
+
+    if (!unitName || !isHouseholdUnit(unitName) || gramEquivalent === null || gramEquivalent <= 0) {
+      continue;
+    }
+
+    const rawQuantity = grams / gramEquivalent;
+    if (!Number.isFinite(rawQuantity) || rawQuantity <= 0) {
+      continue;
+    }
+
+    const roundedQuantity = Math.round(rawQuantity * 4) / 4;
+    if (roundedQuantity < 0.25 || roundedQuantity > 6) {
+      continue;
+    }
+
+    const relativeError = Math.abs(rawQuantity - roundedQuantity) / rawQuantity;
+    if (relativeError > 0.15) {
+      continue;
+    }
+
+    const distanceToOne = Math.abs(roundedQuantity - 1);
+    const candidate = { unitName, quantity: roundedQuantity, relativeError, distanceToOne };
+
+    if (!bestCandidate) {
+      bestCandidate = candidate;
+    } else if (candidate.relativeError < bestCandidate.relativeError) {
+      bestCandidate = candidate;
+    } else if (candidate.relativeError === bestCandidate.relativeError && candidate.distanceToOne < bestCandidate.distanceToOne) {
+      bestCandidate = candidate;
+    }
+  }
+
+  return bestCandidate ? `${formatDisplayNumber(bestCandidate.quantity)} ${bestCandidate.unitName}` : null;
+};
+
 const buildPortion = (
   householdLabel: string | null,
   equivalents: number | null,
@@ -300,13 +356,19 @@ const derivePortionFromMenuItem = (item: NutritionMenuItemResponse): ClientDietP
       ? grams / baseServingSize
       : explicitEquivalent;
 
-  const householdLabel = unitName
-    ? quantity !== null
-      ? `${formatDisplayNumber(quantity)} ${unitName}`
-      : null
-    : grams !== null
-      ? `${formatDisplayNumber(grams)} g`
-      : null;
+  let householdLabel: string | null = null;
+
+  if (unitName && isHouseholdUnit(unitName) && quantity !== null) {
+    householdLabel = `${formatDisplayNumber(quantity)} ${unitName}`;
+  }
+
+  if (!householdLabel) {
+    householdLabel = deriveFallbackHouseholdLabel(grams, item.foods?.serving_units);
+  }
+
+  if (!householdLabel && grams !== null) {
+    householdLabel = `${formatDisplayNumber(grams)} g`;
+  }
 
   return buildPortion(householdLabel, equivalents, grams);
 };
@@ -333,13 +395,19 @@ const derivePortionFromRecipeIngredient = (
       ? grams / baseServingSize
       : null;
 
-  const householdLabel = unitName
-    ? quantity !== null
-      ? `${formatDisplayNumber(quantity)} ${unitName}`
-      : null
-    : grams !== null
-      ? `${formatDisplayNumber(grams)} g`
-      : null;
+  let householdLabel: string | null = null;
+
+  if (unitName && isHouseholdUnit(unitName) && quantity !== null) {
+    householdLabel = `${formatDisplayNumber(quantity)} ${unitName}`;
+  }
+
+  if (!householdLabel) {
+    householdLabel = deriveFallbackHouseholdLabel(grams, ingredient.food?.serving_units);
+  }
+
+  if (!householdLabel && grams !== null) {
+    householdLabel = `${formatDisplayNumber(grams)} g`;
+  }
 
   return buildPortion(householdLabel, equivalents, grams);
 };
