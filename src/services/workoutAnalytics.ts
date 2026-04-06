@@ -1,6 +1,8 @@
 import { trainingClient } from './api';
 import type {
   ExerciseTrendDetail,
+  Macrocycle,
+  MacrocycleListResponse,
   WorkoutAnalyticsDashboard,
   WorkoutAnalyticsHistoryPage,
   WorkoutAnalyticsHistoryStatusFilter,
@@ -46,6 +48,23 @@ export const getWorkoutAnalyticsModules = ({
       ...(microcycleId ? { microcycle_id: microcycleId } : {}),
     },
   });
+
+export const listWorkoutMacrocycles = ({
+  skip = 0,
+  limit = 100,
+}: {
+  skip?: number;
+  limit?: number;
+} = {}) =>
+  trainingClient.get<MacrocycleListResponse>('/mesocycles', {
+    params: {
+      skip,
+      limit,
+    },
+  });
+
+export const getWorkoutMacrocycleDetail = (macrocycleId: string) =>
+  trainingClient.get<Macrocycle>(`/mesocycles/${macrocycleId}`);
 
 export const getWorkoutAnalyticsExerciseDetail = (
   exerciseId: string,

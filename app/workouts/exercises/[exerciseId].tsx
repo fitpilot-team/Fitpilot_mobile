@@ -220,7 +220,7 @@ export default function ExerciseTrendDetailScreen() {
           <Text style={styles.subtitle}>
             {scopeKind === 'range'
               ? `Evolucion de ${metricLabel.toLowerCase()} a lo largo del tiempo`
-              : `Evolucion de ${metricLabel.toLowerCase()} dentro del ${scopeLabel.toLowerCase()} actual`}
+              : `Evolucion de ${metricLabel.toLowerCase()} dentro del ${scopeLabel.toLowerCase()} seleccionado`}
           </Text>
         </View>
       </View>
@@ -246,7 +246,7 @@ export default function ExerciseTrendDetailScreen() {
             <Text style={styles.scopeEyebrow}>Contexto</Text>
             <Text style={styles.scopeTitle}>{scopeLabel}</Text>
             <Text style={styles.scopeText}>
-              Esta vista esta fijada al contexto programatico actual y no usa selector de ventana.
+              Esta vista hereda el contexto programatico seleccionado y no usa selector de ventana.
             </Text>
           </View>
         )}

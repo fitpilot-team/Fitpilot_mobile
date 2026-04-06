@@ -28,6 +28,8 @@ import { ExerciseSparkline } from '../../src/components/workout-analytics/Exerci
 import { RepRangeEditorModal } from '../../src/components/workout-analytics/RepRangeEditorModal';
 import { RepRangeVolumeChart } from '../../src/components/workout-analytics/RepRangeVolumeChart';
 import { WorkoutAnalyticsComparisonGroup } from '../../src/components/workout-analytics/WorkoutAnalyticsComparisonGroup';
+import { WorkoutAnalyticsContextNavigator } from '../../src/components/workout-analytics/WorkoutAnalyticsContextNavigator';
+import { WorkoutAnalyticsContextPickerModal } from '../../src/components/workout-analytics/WorkoutAnalyticsContextPickerModal';
 import { WorkoutAnalyticsHero, type WorkoutAnalyticsHeroMetric } from '../../src/components/workout-analytics/WorkoutAnalyticsHero';
 import { WorkoutAnalyticsLineTrendChart } from '../../src/components/workout-analytics/WorkoutAnalyticsLineTrendChart';
 import { WorkoutAnalyticsPillSelector } from '../../src/components/workout-analytics/WorkoutAnalyticsPillSelector';
@@ -35,8 +37,10 @@ import { WorkoutAnalyticsSnapshotCard } from '../../src/components/workout-analy
 import { DEFAULT_WORKOUT_ANALYTICS_RANGE } from '../../src/constants/workoutAnalytics';
 import { borderRadius, fontSize, spacing } from '../../src/constants/colors';
 import {
+  getWorkoutMacrocycleDetail,
   getWorkoutAnalyticsHistory,
   getWorkoutAnalyticsModules,
+  listWorkoutMacrocycles,
   updateWorkoutAnalyticsPreferences,
 } from '../../src/services/workoutAnalytics';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
@@ -44,6 +48,8 @@ import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
   ExerciseTrendSummary,
+  Macrocycle,
+  MacrocycleListItem,
   RecentWorkoutHistoryItem,
   RepRangeBucket,
   WorkoutAnalyticsComparisonGroupSection,
@@ -67,6 +73,20 @@ import {
 } from '../../src/utils/layout';
 import { formatVolumeKg, formatWeightKg, getTrendStatusMeta } from '../../src/utils/workoutAnalytics';
 import { formatMetricValue } from '../../src/utils/analyticsProfiles';
+import {
+  areSelectionsEqual,
+  buildHistoricalProgramsCatalog,
+  getAdjacentSelectionForScope,
+  getContextItemsForScope,
+  getPickerSectionsForScope,
+  getRequestParamsForSelection,
+  getSelectedContextItemForScope,
+  getSelectionFromProgramScope,
+  isCurrentSelectionForScope,
+  synchronizeSelectionForScope,
+  type HistoricalWorkoutAnalyticsScopeKind,
+  type WorkoutAnalyticsContextItem,
+} from '../../src/utils/workoutAnalyticsContext';
 
 type WorkoutAnalyticsTab = 'overview' | 'exercises' | 'history';
 type ExerciseSortOption = 'recent' | 'progress' | 'frequency';
@@ -277,12 +297,6 @@ const buildHeroMetrics = (
     value: card.display_value,
     icon: HERO_METRIC_ICONS[card.id] ?? 'analytics-outline',
   }));
-
-const getScopeRouteParams = (programScope: WorkoutAnalyticsProgramScope | null | undefined) => ({
-  macrocycleId: programScope?.macrocycle_id ?? null,
-  mesocycleId: programScope?.mesocycle_id ?? null,
-  microcycleId: programScope?.microcycle_id ?? null,
-});
 
 const getTabSubtitle = (activeTab: WorkoutAnalyticsTab) => {
   if (activeTab === 'history') {
@@ -561,12 +575,59 @@ export default function WorkoutsScreen() {
   const [isRangeEditorVisible, setIsRangeEditorVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [currentProgramScope, setCurrentProgramScope] = useState<WorkoutAnalyticsProgramScope | null>(null);
+  const [selectedMacrocycleId, setSelectedMacrocycleId] = useState<string | null>(null);
+  const [selectedMesocycleId, setSelectedMesocycleId] = useState<string | null>(null);
+  const [selectedMicrocycleId, setSelectedMicrocycleId] = useState<string | null>(null);
+  const [isContextBootstrapped, setIsContextBootstrapped] = useState(false);
+  const [isContextCatalogLoaded, setIsContextCatalogLoaded] = useState(false);
+  const [isContextCatalogLoading, setIsContextCatalogLoading] = useState(false);
+  const [isContextPickerVisible, setIsContextPickerVisible] = useState(false);
+  const [contextCatalogError, setContextCatalogError] = useState<string | null>(null);
+  const [macrocycleSummaries, setMacrocycleSummaries] = useState<MacrocycleListItem[]>([]);
+  const [macrocycleDetailsById, setMacrocycleDetailsById] = useState<Record<string, Macrocycle>>({});
   const deferredExerciseSearch = useDeferredValue(exerciseSearchQuery);
-  const scopeRouteParams = useMemo(() => getScopeRouteParams(modules?.program_scope), [modules?.program_scope]);
+  const selectedContext = useMemo(
+    () => ({
+      macrocycleId: selectedMacrocycleId,
+      mesocycleId: selectedMesocycleId,
+      microcycleId: selectedMicrocycleId,
+    }),
+    [selectedMacrocycleId, selectedMesocycleId, selectedMicrocycleId],
+  );
+  const fallbackProgramScopeSelection = useMemo(
+    () => getSelectionFromProgramScope(currentProgramScope ?? modules?.program_scope),
+    [currentProgramScope, modules?.program_scope],
+  );
+  const effectiveHistoricalSelection = useMemo(
+    () => (isContextBootstrapped ? selectedContext : fallbackProgramScopeSelection),
+    [fallbackProgramScopeSelection, isContextBootstrapped, selectedContext],
+  );
+  const activeScopeRouteParams = useMemo(
+    () =>
+      analyticsScopeKind === 'range'
+        ? { macrocycleId: null, mesocycleId: null, microcycleId: null }
+        : getRequestParamsForSelection(analyticsScopeKind, effectiveHistoricalSelection),
+    [analyticsScopeKind, effectiveHistoricalSelection],
+  );
+  const historicalPrograms = useMemo(
+    () => buildHistoricalProgramsCatalog(macrocycleSummaries, macrocycleDetailsById),
+    [macrocycleDetailsById, macrocycleSummaries],
+  );
+  const historicalScopeKind =
+    analyticsScopeKind === 'range'
+      ? null
+      : (analyticsScopeKind as HistoricalWorkoutAnalyticsScopeKind);
 
   const loadModules = useCallback(
-    async (options?: { refresh?: boolean }) => {
+    async (options?: { refresh?: boolean; forceCurrentContext?: boolean }) => {
       const isRefresh = options?.refresh ?? false;
+      const shouldResolveCurrentContext =
+        analyticsScopeKind !== 'range' && ((options?.forceCurrentContext ?? false) || !isContextBootstrapped);
+      const requestScopeParams =
+        analyticsScopeKind === 'range' || shouldResolveCurrentContext
+          ? { macrocycleId: null, mesocycleId: null, microcycleId: null }
+          : getRequestParamsForSelection(analyticsScopeKind, selectedContext);
 
       if (isRefresh) {
         setIsRefreshing(true);
@@ -578,9 +639,21 @@ export default function WorkoutsScreen() {
         const nextModules = await getWorkoutAnalyticsModules({
           scopeKind: analyticsScopeKind,
           range,
+          macrocycleId: requestScopeParams.macrocycleId,
+          mesocycleId: requestScopeParams.mesocycleId,
+          microcycleId: requestScopeParams.microcycleId,
         });
         setModules(nextModules);
         setError(null);
+
+        if (analyticsScopeKind !== 'range' && nextModules.program_scope && shouldResolveCurrentContext) {
+          const nextSelection = getSelectionFromProgramScope(nextModules.program_scope);
+          setCurrentProgramScope(nextModules.program_scope);
+          setSelectedMacrocycleId(nextSelection.macrocycleId);
+          setSelectedMesocycleId(nextSelection.mesocycleId);
+          setSelectedMicrocycleId(nextSelection.microcycleId);
+          setIsContextBootstrapped(true);
+        }
       } catch (loadError) {
         const apiError = loadError as ApiError;
         setError(apiError.message || 'No fue posible cargar tus entrenamientos.');
@@ -589,7 +662,47 @@ export default function WorkoutsScreen() {
         setIsRefreshing(false);
       }
     },
-    [analyticsScopeKind, range],
+    [analyticsScopeKind, isContextBootstrapped, range, selectedContext],
+  );
+
+  const loadHistoricalCatalog = useCallback(
+    async (options?: { refresh?: boolean }) => {
+      if (analyticsScopeKind === 'range') {
+        return;
+      }
+
+      const isRefresh = options?.refresh ?? false;
+
+      if (!isRefresh && isContextCatalogLoaded) {
+        return;
+      }
+
+      setIsContextCatalogLoading(true);
+
+      try {
+        const nextListResponse = await listWorkoutMacrocycles({ limit: 200 });
+        const visibleMacrocycles = nextListResponse.macrocycles.filter(
+          (macrocycle) => macrocycle.status === 'active' || macrocycle.status === 'completed',
+        );
+        const detailEntries = await Promise.all(
+          visibleMacrocycles.map(async (macrocycle) => {
+            const detail = await getWorkoutMacrocycleDetail(macrocycle.id);
+            return [macrocycle.id, detail] as const;
+          }),
+        );
+
+        setMacrocycleSummaries(visibleMacrocycles);
+        setMacrocycleDetailsById(Object.fromEntries(detailEntries));
+        setContextCatalogError(null);
+      } catch (loadError) {
+        const apiError = loadError as ApiError;
+        setContextCatalogError(apiError.message || 'No fue posible cargar el historico del programa.');
+      } finally {
+        setIsContextCatalogLoaded(true);
+        setIsContextCatalogLoading(false);
+      }
+    },
+    [analyticsScopeKind, isContextCatalogLoaded],
   );
 
   const loadHistoryPage = useCallback(
@@ -617,9 +730,9 @@ export default function WorkoutsScreen() {
           status: historyStatus,
           skip,
           limit: HISTORY_PAGE_SIZE,
-          macrocycleId: scopeRouteParams.macrocycleId,
-          mesocycleId: scopeRouteParams.mesocycleId,
-          microcycleId: scopeRouteParams.microcycleId,
+          macrocycleId: activeScopeRouteParams.macrocycleId,
+          mesocycleId: activeScopeRouteParams.mesocycleId,
+          microcycleId: activeScopeRouteParams.microcycleId,
         });
         setHistoryPage((currentPage) => (reset ? nextPage : mergeHistoryPages(currentPage, nextPage)));
         setHistoryError(null);
@@ -634,11 +747,11 @@ export default function WorkoutsScreen() {
     },
     [
       analyticsScopeKind,
+      activeScopeRouteParams.macrocycleId,
+      activeScopeRouteParams.mesocycleId,
+      activeScopeRouteParams.microcycleId,
       historyStatus,
       range,
-      scopeRouteParams.macrocycleId,
-      scopeRouteParams.mesocycleId,
-      scopeRouteParams.microcycleId,
     ],
   );
 
@@ -651,6 +764,14 @@ export default function WorkoutsScreen() {
   }, [isFocused, loadModules]);
 
   useEffect(() => {
+    if (analyticsScopeKind === 'range' || !isFocused || isContextCatalogLoaded) {
+      return;
+    }
+
+    void loadHistoricalCatalog();
+  }, [analyticsScopeKind, isContextCatalogLoaded, isFocused, loadHistoricalCatalog]);
+
+  useEffect(() => {
     if (!isFocused || activeTab !== 'history') {
       return;
     }
@@ -658,17 +779,65 @@ export default function WorkoutsScreen() {
     void loadHistoryPage({ reset: true });
   }, [activeTab, isFocused, loadHistoryPage]);
 
+  useEffect(() => {
+    if (analyticsScopeKind === 'range' || !isContextBootstrapped || !historicalPrograms.length) {
+      return;
+    }
+
+    const currentSelectionItem = getSelectedContextItemForScope(
+      analyticsScopeKind,
+      selectedContext,
+      historicalPrograms,
+    );
+    const fallbackSelection = currentSelectionItem
+      ? selectedContext
+      : getSelectionFromProgramScope(currentProgramScope ?? modules?.program_scope);
+    const nextSelection = synchronizeSelectionForScope(
+      analyticsScopeKind,
+      fallbackSelection,
+      historicalPrograms,
+    );
+
+    if (!areSelectionsEqual(selectedContext, nextSelection)) {
+      setSelectedMacrocycleId(nextSelection.macrocycleId);
+      setSelectedMesocycleId(nextSelection.mesocycleId);
+      setSelectedMicrocycleId(nextSelection.microcycleId);
+    }
+  }, [
+    analyticsScopeKind,
+    currentProgramScope,
+    historicalPrograms,
+    isContextBootstrapped,
+    modules?.program_scope,
+    selectedContext,
+  ]);
+
+  useEffect(() => {
+    if (analyticsScopeKind === 'range') {
+      setIsContextPickerVisible(false);
+    }
+  }, [analyticsScopeKind]);
+
   const handleRefresh = useCallback(async () => {
+    const refreshContextCatalog =
+      analyticsScopeKind !== 'range'
+        ? loadHistoricalCatalog({ refresh: true })
+        : Promise.resolve();
+
     if (activeTab === 'history') {
       await Promise.all([
         loadModules({ refresh: true }),
         loadHistoryPage({ reset: true, refresh: true }),
+        refreshContextCatalog,
       ]);
       return;
     }
 
-    await loadModules({ refresh: true });
-  }, [activeTab, loadHistoryPage, loadModules]);
+    await Promise.all([
+      loadModules({ refresh: true }),
+      refreshContextCatalog,
+    ]);
+  }, [activeTab, analyticsScopeKind, loadHistoricalCatalog, loadHistoryPage, loadModules]);
 
   const handleSaveRepRanges = useCallback(
     async (nextRepRanges: RepRangeBucket[]) => {
@@ -698,13 +867,56 @@ export default function WorkoutsScreen() {
   const heroMetrics = useMemo(() => buildHeroMetrics(summarySection), [summarySection]);
   const exerciseItems = useMemo(() => exerciseSection?.items ?? [], [exerciseSection]);
   const recentSessions = useMemo(() => recentSessionsSection?.items ?? [], [recentSessionsSection]);
-  const scopeContextLabel = useMemo(() => {
-    if (!modules || analyticsScopeKind === 'range') {
-      return null;
+  const contextItems = useMemo(
+    () =>
+      historicalScopeKind
+        ? getContextItemsForScope(historicalScopeKind, historicalPrograms)
+        : [],
+    [historicalPrograms, historicalScopeKind],
+  );
+  const selectedContextItem = useMemo(
+    () =>
+      historicalScopeKind
+        ? getSelectedContextItemForScope(
+            historicalScopeKind,
+            effectiveHistoricalSelection,
+            historicalPrograms,
+          )
+        : null,
+    [effectiveHistoricalSelection, historicalPrograms, historicalScopeKind],
+  );
+  const contextPickerSections = useMemo(
+    () =>
+      historicalScopeKind
+        ? getPickerSectionsForScope(historicalScopeKind, historicalPrograms)
+        : [],
+    [historicalPrograms, historicalScopeKind],
+  );
+  const selectedContextIndex = useMemo(() => {
+    if (!historicalScopeKind || !selectedContextItem) {
+      return -1;
     }
 
-    return modules.time_scope?.label ?? modules.context.scope_label;
-  }, [analyticsScopeKind, modules]);
+    return contextItems.findIndex((item) => item.id === selectedContextItem.id);
+  }, [contextItems, historicalScopeKind, selectedContextItem]);
+  const canGoToPreviousContext =
+    historicalScopeKind != null &&
+    selectedContextIndex >= 0 &&
+    selectedContextIndex < contextItems.length - 1;
+  const canGoToNextContext =
+    historicalScopeKind != null &&
+    selectedContextIndex > 0;
+  const isCurrentHistoricalSelection = useMemo(
+    () =>
+      historicalScopeKind
+        ? isCurrentSelectionForScope(
+            historicalScopeKind,
+            effectiveHistoricalSelection,
+            currentProgramScope,
+          )
+        : true,
+    [currentProgramScope, effectiveHistoricalSelection, historicalScopeKind],
+  );
 
   const quickAction = useMemo(() => {
     const inProgressWorkout = recentSessions.find((workout) => workout.status === 'in_progress');
@@ -799,6 +1011,56 @@ export default function WorkoutsScreen() {
     setHistoryStatus(nextValue as WorkoutAnalyticsHistoryStatusFilter);
   }, []);
 
+  const applyHistoricalSelection = useCallback((nextSelection: {
+    macrocycleId: string | null;
+    mesocycleId: string | null;
+    microcycleId: string | null;
+  }) => {
+    setSelectedMacrocycleId(nextSelection.macrocycleId);
+    setSelectedMesocycleId(nextSelection.mesocycleId);
+    setSelectedMicrocycleId(nextSelection.microcycleId);
+    setIsContextBootstrapped(true);
+  }, []);
+
+  const handleContextStep = useCallback(
+    (direction: 'previous' | 'next') => {
+      if (!historicalScopeKind) {
+        return;
+      }
+
+      const nextSelection = getAdjacentSelectionForScope(
+        historicalScopeKind,
+        effectiveHistoricalSelection,
+        historicalPrograms,
+        direction,
+      );
+
+      if (!nextSelection) {
+        return;
+      }
+
+      applyHistoricalSelection(nextSelection);
+    },
+    [applyHistoricalSelection, effectiveHistoricalSelection, historicalPrograms, historicalScopeKind],
+  );
+
+  const handleContextItemSelect = useCallback(
+    (item: WorkoutAnalyticsContextItem) => {
+      applyHistoricalSelection({
+        macrocycleId: item.macrocycleId,
+        mesocycleId: item.mesocycleId,
+        microcycleId: item.microcycleId,
+      });
+      setIsContextPickerVisible(false);
+    },
+    [applyHistoricalSelection],
+  );
+
+  const handleResetToCurrentContext = useCallback(async () => {
+    setIsContextPickerVisible(false);
+    await loadModules({ refresh: true, forceCurrentContext: true });
+  }, [loadModules]);
+
   const openExerciseDetail = useCallback(
     (exerciseId: string) => {
       router.push({
@@ -807,19 +1069,69 @@ export default function WorkoutsScreen() {
           exerciseId,
           range,
           scopeKind: analyticsScopeKind,
-          ...(scopeRouteParams.macrocycleId ? { macrocycleId: scopeRouteParams.macrocycleId } : {}),
-          ...(scopeRouteParams.mesocycleId ? { mesocycleId: scopeRouteParams.mesocycleId } : {}),
-          ...(scopeRouteParams.microcycleId ? { microcycleId: scopeRouteParams.microcycleId } : {}),
+          ...(activeScopeRouteParams.macrocycleId ? { macrocycleId: activeScopeRouteParams.macrocycleId } : {}),
+          ...(activeScopeRouteParams.mesocycleId ? { mesocycleId: activeScopeRouteParams.mesocycleId } : {}),
+          ...(activeScopeRouteParams.microcycleId ? { microcycleId: activeScopeRouteParams.microcycleId } : {}),
         },
       });
     },
-    [analyticsScopeKind, range, scopeRouteParams.macrocycleId, scopeRouteParams.mesocycleId, scopeRouteParams.microcycleId],
+    [
+      activeScopeRouteParams.macrocycleId,
+      activeScopeRouteParams.mesocycleId,
+      activeScopeRouteParams.microcycleId,
+      analyticsScopeKind,
+      range,
+    ],
   );
 
   const overviewEmptyState = useMemo(
     () => buildOverviewEmptyState(analyticsScopeKind, modules?.context.empty_message),
     [analyticsScopeKind, modules?.context.empty_message],
   );
+  const historicalScopeLabel =
+    analyticsScopeKind === 'microcycle'
+      ? 'Microciclo'
+      : analyticsScopeKind === 'mesocycle'
+        ? 'Bloque'
+        : analyticsScopeKind === 'program'
+          ? 'Programa'
+          : '';
+  const historicalContextNavigator =
+    historicalScopeKind && selectedContextItem ? (
+      <WorkoutAnalyticsContextNavigator
+        scopeLabel={historicalScopeLabel}
+        title={selectedContextItem.title}
+        subtitle={selectedContextItem.subtitle}
+        startDate={selectedContextItem.startDate}
+        endDate={selectedContextItem.endDate}
+        isCurrent={isCurrentHistoricalSelection}
+        isLoading={isContextCatalogLoading}
+        errorMessage={contextCatalogError}
+        canGoPrevious={canGoToPreviousContext}
+        canGoNext={canGoToNextContext}
+        onPrevious={() => handleContextStep('previous')}
+        onNext={() => handleContextStep('next')}
+        onResetToCurrent={() => void handleResetToCurrentContext()}
+        onOpenPicker={() => setIsContextPickerVisible(true)}
+      />
+    ) : historicalScopeKind ? (
+      <WorkoutAnalyticsContextNavigator
+        scopeLabel={historicalScopeLabel}
+        title={modules?.context.title ?? 'Contexto programatico'}
+        subtitle={modules?.context.scope_label ?? 'Sin contexto resuelto'}
+        startDate={modules?.program_scope?.start_date ?? null}
+        endDate={modules?.program_scope?.end_date ?? null}
+        isCurrent={isCurrentHistoricalSelection}
+        isLoading={isContextCatalogLoading}
+        errorMessage={contextCatalogError}
+        canGoPrevious={false}
+        canGoNext={false}
+        onPrevious={() => undefined}
+        onNext={() => undefined}
+        onResetToCurrent={() => void handleResetToCurrentContext()}
+        onOpenPicker={() => setIsContextPickerVisible(true)}
+      />
+    ) : null;
 
   if (isLoading && !modules) {
     return <LoadingSpinner fullScreen text="Cargando tus entrenamientos..." />;
@@ -897,12 +1209,8 @@ export default function WorkoutsScreen() {
                     <Text style={styles.utilityLabel}>Ventana de analisis</Text>
                     <AnalyticsRangeSelector value={range} onChange={setRange} />
                   </View>
-                ) : scopeContextLabel ? (
-                  <View style={styles.resolvedContextCard}>
-                    <Text style={styles.resolvedContextEyebrow}>Contexto resuelto</Text>
-                    <Text style={styles.resolvedContextTitle}>{modules.context.title}</Text>
-                    <Text style={styles.resolvedContextText}>{scopeContextLabel}</Text>
-                  </View>
+                ) : historicalContextNavigator ? (
+                  historicalContextNavigator
                 ) : null}
               </View>
             </Card>
@@ -935,12 +1243,8 @@ export default function WorkoutsScreen() {
                     <Text style={styles.utilityLabel}>Ventana de analisis</Text>
                     <AnalyticsRangeSelector value={range} onChange={setRange} />
                   </View>
-                ) : scopeContextLabel ? (
-                  <View style={styles.resolvedContextCard}>
-                    <Text style={styles.resolvedContextEyebrow}>Contexto resuelto</Text>
-                    <Text style={styles.resolvedContextTitle}>{modules.context.title}</Text>
-                    <Text style={styles.resolvedContextText}>{scopeContextLabel}</Text>
-                  </View>
+                ) : historicalContextNavigator ? (
+                  historicalContextNavigator
                 ) : null}
 
                 <SearchField
@@ -992,12 +1296,8 @@ export default function WorkoutsScreen() {
                     <Text style={styles.utilityLabel}>Ventana de analisis</Text>
                     <AnalyticsRangeSelector value={range} onChange={setRange} />
                   </View>
-                ) : scopeContextLabel ? (
-                  <View style={styles.resolvedContextCard}>
-                    <Text style={styles.resolvedContextEyebrow}>Contexto resuelto</Text>
-                    <Text style={styles.resolvedContextTitle}>{modules.context.title}</Text>
-                    <Text style={styles.resolvedContextText}>{scopeContextLabel}</Text>
-                  </View>
+                ) : historicalContextNavigator ? (
+                  historicalContextNavigator
                 ) : null}
 
                 <View style={styles.utilityGroup}>
@@ -1370,7 +1670,11 @@ export default function WorkoutsScreen() {
                   <EmptyStateCard
                     icon="calendar-clear-outline"
                     title="Sin sesiones para este filtro"
-                    description="Prueba otro estado o amplia la ventana temporal."
+                    description={
+                      analyticsScopeKind === 'range'
+                        ? 'Prueba otro estado o amplia la ventana temporal.'
+                        : 'Prueba otro estado o cambia el contexto historico.'
+                    }
                     actionLabel="Ver todos"
                     onActionPress={() => setHistoryStatus('all')}
                   />
@@ -1409,6 +1713,19 @@ export default function WorkoutsScreen() {
           onClose={() => setIsRangeEditorVisible(false)}
           onSave={handleSaveRepRanges}
         />
+        {historicalScopeKind ? (
+          <WorkoutAnalyticsContextPickerModal
+            visible={isContextPickerVisible}
+            scopeKind={historicalScopeKind}
+            sections={contextPickerSections}
+            selectedId={selectedContextItem?.id ?? null}
+            isLoading={isContextCatalogLoading}
+            errorMessage={contextCatalogError}
+            onClose={() => setIsContextPickerVisible(false)}
+            onRetry={() => void loadHistoricalCatalog({ refresh: true })}
+            onSelect={handleContextItemSelect}
+          />
+        ) : null}
       </SafeAreaView>
     </TabScreenWrapper>
   );
@@ -1476,31 +1793,6 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 0.7,
-    },
-    resolvedContextCard: {
-      gap: spacing.xs,
-      borderRadius: borderRadius.lg,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      padding: spacing.md,
-    },
-    resolvedContextEyebrow: {
-      fontSize: fontSize.xs,
-      fontWeight: '800',
-      color: theme.colors.primary,
-      textTransform: 'uppercase',
-      letterSpacing: 0.8,
-    },
-    resolvedContextTitle: {
-      fontSize: fontSize.base,
-      fontWeight: '800',
-      color: theme.colors.textPrimary,
-    },
-    resolvedContextText: {
-      fontSize: fontSize.sm,
-      lineHeight: 20,
-      color: theme.colors.textMuted,
     },
     tabContextCard: {
       gap: spacing.xs,

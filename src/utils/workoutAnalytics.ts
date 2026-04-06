@@ -194,6 +194,7 @@ export const buildLineCoordinates = (
   width: number,
   height: number,
   padding: { top: number; right: number; bottom: number; left: number },
+  domain?: { min: number; max: number },
 ): ChartCoordinate[] => {
   if (!values.length) {
     return [];
@@ -201,8 +202,8 @@ export const buildLineCoordinates = (
 
   const usableWidth = Math.max(width - padding.left - padding.right, 1);
   const usableHeight = Math.max(height - padding.top - padding.bottom, 1);
-  const maxValue = Math.max(...values);
-  const minValue = Math.min(...values);
+  const maxValue = domain?.max ?? Math.max(...values);
+  const minValue = domain?.min ?? Math.min(...values);
   const valueRange = maxValue === minValue ? Math.max(maxValue, 1) : maxValue - minValue;
 
   return values.map((value, index) => {

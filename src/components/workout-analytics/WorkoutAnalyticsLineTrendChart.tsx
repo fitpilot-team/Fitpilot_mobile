@@ -1,5 +1,6 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { borderRadius, fontSize, spacing } from '../../constants/colors';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
@@ -14,6 +15,7 @@ interface WorkoutAnalyticsLineTrendChartProps {
 const CHART_HEIGHT = 220;
 const CHART_PADDING = { top: 20, right: 18, bottom: 32, left: 18 };
 const SLOT_WIDTH = 56;
+const COMPACT_SLOT_WIDTH = 36;
 
 const formatValue = (value: number | null | undefined, unit?: string | null) => {
   if (value == null || Number.isNaN(value)) {
@@ -27,6 +29,27 @@ const formatValue = (value: number | null | undefined, unit?: string | null) => 
   return unit ? `${formatted} ${unit}` : formatted;
 };
 
+const axisDateFormatter = new Intl.DateTimeFormat('es-MX', {
+  day: '2-digit',
+  month: 'short',
+});
+
+const formatAxisLabel = (tooltipLabel: string | null | undefined, fallbackLabel: string) => {
+  if (!tooltipLabel) {
+    return fallbackLabel;
+  }
+
+  const parsed = new Date(`${tooltipLabel}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return fallbackLabel;
+  }
+
+  return axisDateFormatter.format(parsed).replace('.', '');
+};
+
+const isOutOfPlanPoint = (value: number | null | undefined, secondaryValue: number | null | undefined) =>
+  (value ?? 0) > 0 && (secondaryValue ?? 0) === 0;
+
 export const WorkoutAnalyticsLineTrendChart: React.FC<WorkoutAnalyticsLineTrendChartProps> = ({
   section,
   contentWidth = 360,
@@ -35,6 +58,7 @@ export const WorkoutAnalyticsLineTrendChart: React.FC<WorkoutAnalyticsLineTrendC
   const styles = useThemedStyles(createStyles);
   const hasPrimary = section.points.some((point) => point.value != null);
   const hasSecondary = section.points.some((point) => point.secondary_value != null);
+  const isDailySessionComparison = hasSecondary && section.unit === 'sesiones';
 
   if (!section.points.length || !hasPrimary) {
     return (
@@ -46,17 +70,50 @@ export const WorkoutAnalyticsLineTrendChart: React.FC<WorkoutAnalyticsLineTrendC
     );
   }
 
+  const slotWidth = isDailySessionComparison ? COMPACT_SLOT_WIDTH : SLOT_WIDTH;
   const svgWidth = Math.max(
     contentWidth - spacing.lg * 2,
-    section.points.length * SLOT_WIDTH + CHART_PADDING.left + CHART_PADDING.right,
+    section.points.length * slotWidth + CHART_PADDING.left + CHART_PADDING.right,
   );
   const primaryValues = section.points.map((point) => point.value ?? 0);
   const secondaryValues = section.points.map((point) => point.secondary_value ?? 0);
-  const primaryCoordinates = buildLineCoordinates(primaryValues, svgWidth, CHART_HEIGHT, CHART_PADDING);
+  const outOfPlanPointIndexes = isDailySessionComparison
+    ? section.points.flatMap((point, index) =>
+        isOutOfPlanPoint(point.value, point.secondary_value) ? [index] : [],
+      )
+    : [];
+  const outOfPlanPointLabels = outOfPlanPointIndexes.map((index) =>
+    formatAxisLabel(section.points[index]?.tooltip_label, section.points[index]?.label ?? ''),
+  );
+  const sharedDomain = hasSecondary
+    ? {
+        min: Math.min(...primaryValues, ...secondaryValues),
+        max: Math.max(...primaryValues, ...secondaryValues),
+      }
+    : undefined;
+  const primaryCoordinates = buildLineCoordinates(
+    primaryValues,
+    svgWidth,
+    CHART_HEIGHT,
+    CHART_PADDING,
+    sharedDomain,
+  );
   const secondaryCoordinates = hasSecondary
-    ? buildLineCoordinates(secondaryValues, svgWidth, CHART_HEIGHT, CHART_PADDING)
+    ? buildLineCoordinates(secondaryValues, svgWidth, CHART_HEIGHT, CHART_PADDING, sharedDomain)
     : [];
   const latestPoint = section.points[section.points.length - 1];
+  const primaryFooterValue = isDailySessionComparison
+    ? primaryValues.reduce((sum, value) => sum + value, 0)
+    : latestPoint.value;
+  const secondaryFooterValue = isDailySessionComparison
+    ? secondaryValues.reduce((sum, value) => sum + value, 0)
+    : latestPoint.secondary_value;
+  const primaryFooterLabel = isDailySessionComparison
+    ? `${section.primary_label ?? 'Serie principal'} totales`
+    : section.primary_label ?? 'Actual';
+  const secondaryFooterLabel = isDailySessionComparison
+    ? `${section.secondary_label ?? 'Serie secundaria'} totales`
+    : section.secondary_label ?? 'Planeado';
 
   return (
     <View style={styles.container}>
@@ -88,7 +145,7 @@ export const WorkoutAnalyticsLineTrendChart: React.FC<WorkoutAnalyticsLineTrendC
                 />
                 {secondaryCoordinates.map((point, index) => (
                   <Circle
-                    key={`secondary-${section.points[index]?.label ?? index}`}
+                    key={`secondary-${section.points[index]?.tooltip_label ?? section.points[index]?.label ?? index}`}
                     cx={point.x}
                     cy={point.y}
                     r={4}
@@ -110,38 +167,72 @@ export const WorkoutAnalyticsLineTrendChart: React.FC<WorkoutAnalyticsLineTrendC
             />
 
             {primaryCoordinates.map((point, index) => (
-              <Circle
-                key={`primary-${section.points[index]?.label ?? index}`}
-                cx={point.x}
-                cy={point.y}
-                r={4.5}
-                fill={theme.colors.surface}
-                stroke={theme.colors.primary}
-                strokeWidth={2}
-              />
+              <React.Fragment
+                key={`primary-${section.points[index]?.tooltip_label ?? section.points[index]?.label ?? index}`}
+              >
+                {outOfPlanPointIndexes.includes(index) ? (
+                  <Circle
+                    cx={point.x}
+                    cy={point.y}
+                    r={7}
+                    fill={`${theme.colors.warning}22`}
+                    stroke={theme.colors.warning}
+                    strokeWidth={1.5}
+                  />
+                ) : null}
+                <Circle
+                  cx={point.x}
+                  cy={point.y}
+                  r={4.5}
+                  fill={theme.colors.surface}
+                  stroke={outOfPlanPointIndexes.includes(index) ? theme.colors.warning : theme.colors.primary}
+                  strokeWidth={2}
+                />
+              </React.Fragment>
             ))}
           </Svg>
 
           <View style={styles.labelsRow}>
-            {section.points.map((point) => (
-              <Text key={point.label} style={styles.axisLabel}>
-                {point.label}
+            {section.points.map((point, index) => (
+              <Text
+                key={point.tooltip_label ?? `${point.label}-${index}`}
+                style={[
+                  styles.axisLabel,
+                  { width: slotWidth },
+                  outOfPlanPointIndexes.includes(index) ? styles.axisLabelOutOfPlan : null,
+                ]}
+              >
+                {formatAxisLabel(point.tooltip_label, point.label)}
               </Text>
             ))}
           </View>
         </View>
       </ScrollView>
 
+      {outOfPlanPointLabels.length ? (
+        <View style={styles.outOfPlanCard}>
+          <View style={styles.outOfPlanBadge}>
+            <Ionicons name="alert-circle" size={14} color={theme.colors.warning} />
+            <Text style={styles.outOfPlanBadgeText}>Fuera del plan</Text>
+          </View>
+          <Text style={styles.outOfPlanText}>
+            {outOfPlanPointLabels.length === 1
+              ? `Se registro una ejecucion sin sesion planeada en ${outOfPlanPointLabels[0]}.`
+              : `Se registraron ejecuciones sin sesion planeada en ${outOfPlanPointLabels.join(', ')}.`}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.footerRow}>
         <View style={styles.footerMetric}>
-          <Text style={styles.footerLabel}>{section.primary_label ?? 'Actual'}</Text>
-          <Text style={styles.footerValue}>{formatValue(latestPoint.value, section.unit)}</Text>
+          <Text style={styles.footerLabel}>{primaryFooterLabel}</Text>
+          <Text style={styles.footerValue}>{formatValue(primaryFooterValue, section.unit)}</Text>
         </View>
         {hasSecondary ? (
           <View style={styles.footerMetric}>
-            <Text style={styles.footerLabel}>{section.secondary_label ?? 'Planeado'}</Text>
+            <Text style={styles.footerLabel}>{secondaryFooterLabel}</Text>
             <Text style={styles.footerValue}>
-              {formatValue(latestPoint.secondary_value, section.unit)}
+              {formatValue(secondaryFooterValue, section.unit)}
             </Text>
           </View>
         ) : null}
@@ -181,10 +272,39 @@ const createStyles = (theme: AppTheme) =>
       gap: spacing.sm,
     },
     axisLabel: {
-      width: SLOT_WIDTH,
       fontSize: fontSize.xs,
       color: theme.colors.textMuted,
       textAlign: 'center',
+    },
+    axisLabelOutOfPlan: {
+      color: theme.colors.warning,
+      fontWeight: '700',
+    },
+    outOfPlanCard: {
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.isDark ? 'rgba(251, 191, 36, 0.12)' : '#fff7ed',
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(251, 191, 36, 0.24)' : '#fdba74',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      gap: spacing.xs,
+    },
+    outOfPlanBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    outOfPlanBadgeText: {
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      color: theme.colors.warning,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    outOfPlanText: {
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
     },
     footerRow: {
       flexDirection: 'row',

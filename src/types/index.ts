@@ -161,6 +161,8 @@ export interface Mesocycle {
   macrocycle_id: string;
   block_number: number;
   name: string;
+  start_date: string;
+  end_date: string;
   focus?: string | null;
   microcycles: Microcycle[];
 }
@@ -176,6 +178,26 @@ export interface Macrocycle {
   start_date: string;
   end_date: string;
   mesocycles: Mesocycle[];
+}
+
+export interface MacrocycleListItem {
+  id: string;
+  name: string;
+  description?: string | null;
+  objective: string;
+  status: MesocycleStatus;
+  client_id?: string | null;
+  trainer_id: string;
+  start_date: string;
+  end_date: string;
+  mesocycles_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MacrocycleListResponse {
+  total: number;
+  macrocycles: MacrocycleListItem[];
 }
 
 // Workout tracking types
