@@ -27,27 +27,36 @@ import { AnalyticsRangeSelector } from '../../src/components/workout-analytics/A
 import { ExerciseSparkline } from '../../src/components/workout-analytics/ExerciseSparkline';
 import { RepRangeEditorModal } from '../../src/components/workout-analytics/RepRangeEditorModal';
 import { RepRangeVolumeChart } from '../../src/components/workout-analytics/RepRangeVolumeChart';
-import { WorkoutAnalyticsHero } from '../../src/components/workout-analytics/WorkoutAnalyticsHero';
+import { WorkoutAnalyticsComparisonGroup } from '../../src/components/workout-analytics/WorkoutAnalyticsComparisonGroup';
+import { WorkoutAnalyticsHero, type WorkoutAnalyticsHeroMetric } from '../../src/components/workout-analytics/WorkoutAnalyticsHero';
+import { WorkoutAnalyticsLineTrendChart } from '../../src/components/workout-analytics/WorkoutAnalyticsLineTrendChart';
 import { WorkoutAnalyticsPillSelector } from '../../src/components/workout-analytics/WorkoutAnalyticsPillSelector';
-import { DEFAULT_WORKOUT_ANALYTICS_RANGE, WORKOUT_ANALYTICS_RANGE_OPTIONS } from '../../src/constants/workoutAnalytics';
+import { WorkoutAnalyticsSnapshotCard } from '../../src/components/workout-analytics/WorkoutAnalyticsSnapshotCard';
+import { DEFAULT_WORKOUT_ANALYTICS_RANGE } from '../../src/constants/workoutAnalytics';
 import { borderRadius, fontSize, spacing } from '../../src/constants/colors';
 import {
-  getWorkoutAnalyticsDashboard,
   getWorkoutAnalyticsHistory,
+  getWorkoutAnalyticsModules,
   updateWorkoutAnalyticsPreferences,
 } from '../../src/services/workoutAnalytics';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
-import { useWorkoutStore } from '../../src/store/workoutStore';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type {
   ApiError,
   ExerciseTrendSummary,
   RecentWorkoutHistoryItem,
   RepRangeBucket,
-  WorkoutAnalyticsDashboard,
+  WorkoutAnalyticsComparisonGroupSection,
+  WorkoutAnalyticsExerciseHighlightsSection,
   WorkoutAnalyticsHistoryPage,
   WorkoutAnalyticsHistoryStatusFilter,
+  WorkoutAnalyticsModules,
+  WorkoutAnalyticsProgramScope,
   WorkoutAnalyticsRange,
+  WorkoutAnalyticsRecentSessionsSection,
+  WorkoutAnalyticsScopeKind,
+  WorkoutAnalyticsSummaryCardsSection,
+  WorkoutAnalyticsTrendSeriesSection,
 } from '../../src/types';
 import { formatLocalDate } from '../../src/utils/date';
 import { formatDuration } from '../../src/utils/formatters';
@@ -56,34 +65,66 @@ import {
   getPrimaryScreenHorizontalPadding,
   isTabletLayout,
 } from '../../src/utils/layout';
-import { formatDeltaKg, formatVolumeKg, formatWeightKg } from '../../src/utils/workoutAnalytics';
+import { formatVolumeKg, formatWeightKg, getTrendStatusMeta } from '../../src/utils/workoutAnalytics';
+import { formatMetricValue } from '../../src/utils/analyticsProfiles';
 
 type WorkoutAnalyticsTab = 'overview' | 'exercises' | 'history';
 type ExerciseSortOption = 'recent' | 'progress' | 'frequency';
-type OverviewModule = 'chart' | 'exercises' | 'history';
+
 type HistorySection = {
   title: string;
   data: RecentWorkoutHistoryItem[];
 };
 
+const TREND_STATUS_SORT_PRIORITY: Record<string, number> = {
+  rising: 4,
+  stable: 3,
+  declining: 2,
+  insufficient: 1,
+};
+
 const HISTORY_PAGE_SIZE = 20;
-const OVERVIEW_MODULES: OverviewModule[] = ['chart', 'exercises', 'history'];
+
 const TAB_OPTIONS = [
   { value: 'overview', label: 'Resumen' },
   { value: 'exercises', label: 'Ejercicios' },
   { value: 'history', label: 'Historial' },
 ] as const;
+
 const EXERCISE_SORT_OPTIONS = [
   { value: 'recent', label: 'Recientes' },
   { value: 'progress', label: 'Mayor progreso' },
   { value: 'frequency', label: 'Mas frecuentes' },
 ] as const;
+
 const HISTORY_STATUS_OPTIONS = [
   { value: 'all', label: 'Todos' },
   { value: 'in_progress', label: 'En progreso' },
   { value: 'completed', label: 'Completados' },
   { value: 'abandoned', label: 'Abandonados' },
 ] as const;
+
+const ANALYTICS_SCOPE_OPTIONS: { value: WorkoutAnalyticsScopeKind; label: string }[] = [
+  { value: 'range', label: 'Ventana' },
+  { value: 'microcycle', label: 'Microciclo' },
+  { value: 'mesocycle', label: 'Bloque' },
+  { value: 'program', label: 'Programa' },
+];
+
+const HERO_METRIC_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  sessions: 'barbell-outline',
+  volume: 'trending-up-outline',
+  active_days: 'flash-outline',
+  avg_duration: 'time-outline',
+  planned_sessions: 'calendar-outline',
+  completed_sessions: 'checkmark-done-outline',
+  double_sessions: 'copy-outline',
+  weeks: 'calendar-clear-outline',
+  completed_weeks: 'layers-outline',
+  current_block: 'layers-outline',
+  current_week: 'calendar-outline',
+  completion: 'stats-chart-outline',
+};
 
 const getHistoryStatusMeta = (
   status: RecentWorkoutHistoryItem['status'],
@@ -101,14 +142,6 @@ const getHistoryStatusMeta = (
   }
 };
 
-const getDeltaColor = (delta: number | null | undefined, theme: AppTheme) => {
-  if (delta == null || delta === 0) {
-    return theme.colors.textMuted;
-  }
-
-  return delta > 0 ? theme.colors.success : theme.colors.warning;
-};
-
 const normalizeSearchValue = (value: string) =>
   value
     .trim()
@@ -116,15 +149,26 @@ const normalizeSearchValue = (value: string) =>
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
-const getRangeLabel = (range: WorkoutAnalyticsRange) =>
-  WORKOUT_ANALYTICS_RANGE_OPTIONS.find((option) => option.value === range)?.label ?? range;
-
 const compareExercisesBySort = (
   left: ExerciseTrendSummary,
   right: ExerciseTrendSummary,
   sort: ExerciseSortOption,
 ) => {
   if (sort === 'progress') {
+    const leftPriority = TREND_STATUS_SORT_PRIORITY[left.trend_status ?? 'insufficient'] ?? 0;
+    const rightPriority = TREND_STATUS_SORT_PRIORITY[right.trend_status ?? 'insufficient'] ?? 0;
+    const trendDiff = rightPriority - leftPriority;
+    if (trendDiff !== 0) {
+      return trendDiff;
+    }
+
+    const scoreDiff =
+      (right.progress_score ?? Number.NEGATIVE_INFINITY) -
+      (left.progress_score ?? Number.NEGATIVE_INFINITY);
+    if (scoreDiff !== 0) {
+      return scoreDiff;
+    }
+
     const deltaDiff =
       (right.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY) -
       (left.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY);
@@ -210,6 +254,68 @@ const mergeHistoryPages = (
   return {
     total: nextPage.total,
     items: mergedItems,
+  };
+};
+
+const getSummarySection = (modules: WorkoutAnalyticsModules | null) =>
+  (modules?.sections.find((section) => section.kind === 'summary_cards') as WorkoutAnalyticsSummaryCardsSection | undefined) ??
+  undefined;
+
+const getExerciseSection = (modules: WorkoutAnalyticsModules | null) =>
+  (modules?.sections.find((section) => section.kind === 'exercise_highlights') as WorkoutAnalyticsExerciseHighlightsSection | undefined) ??
+  undefined;
+
+const getRecentSessionsSection = (modules: WorkoutAnalyticsModules | null) =>
+  (modules?.sections.find((section) => section.kind === 'recent_sessions') as WorkoutAnalyticsRecentSessionsSection | undefined) ??
+  undefined;
+
+const buildHeroMetrics = (
+  summarySection: WorkoutAnalyticsSummaryCardsSection | undefined,
+): WorkoutAnalyticsHeroMetric[] =>
+  (summarySection?.cards ?? []).map((card) => ({
+    label: card.label,
+    value: card.display_value,
+    icon: HERO_METRIC_ICONS[card.id] ?? 'analytics-outline',
+  }));
+
+const getScopeRouteParams = (programScope: WorkoutAnalyticsProgramScope | null | undefined) => ({
+  macrocycleId: programScope?.macrocycle_id ?? null,
+  mesocycleId: programScope?.mesocycle_id ?? null,
+  microcycleId: programScope?.microcycle_id ?? null,
+});
+
+const getTabSubtitle = (activeTab: WorkoutAnalyticsTab) => {
+  if (activeTab === 'history') {
+    return 'Filtra el historial completo por ventana y estado sin salir de esta vista.';
+  }
+
+  if (activeTab === 'exercises') {
+    return 'Cambia el contexto y revisa la progresion de cada movimiento sin depender del resumen principal.';
+  }
+
+  return 'Cambia el alcance del analisis para revisar tu progreso por ventana, microciclo, bloque o programa.';
+};
+
+const buildOverviewEmptyState = (
+  scopeKind: WorkoutAnalyticsScopeKind,
+  emptyMessage?: string | null,
+) => {
+  if (scopeKind !== 'range') {
+    return {
+      icon: 'layers-outline' as const,
+      title: 'Sin contexto programatico disponible',
+      description:
+        emptyMessage ??
+        'Aun no hay un programa activo o el cliente no tiene un contexto programatico resoluble.',
+    };
+  }
+
+  return {
+    icon: 'analytics-outline' as const,
+    title: 'Sin datos suficientes',
+    description:
+      emptyMessage ??
+      'Todavia no hay suficientes sesiones en la ventana seleccionada para construir analytics utiles.',
   };
 };
 
@@ -313,9 +419,8 @@ const ExerciseCard = ({
   exercise: ExerciseTrendSummary;
   onPress: () => void;
 }) => {
-  const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
-  const deltaColor = getDeltaColor(exercise.best_weight_delta_kg, theme);
+  const trendMeta = getTrendStatusMeta(exercise.trend_status);
 
   return (
     <TouchableOpacity style={styles.exerciseCard} activeOpacity={0.88} onPress={onPress}>
@@ -340,9 +445,18 @@ const ExerciseCard = ({
       </View>
 
       <View style={styles.exerciseFooter}>
+        <View style={[styles.trendBadge, { backgroundColor: `${trendMeta.color}14` }]}>
+          <Ionicons name={trendMeta.icon as keyof typeof Ionicons.glyphMap} size={14} color={trendMeta.color} />
+          <Text style={[styles.trendBadgeText, { color: trendMeta.color }]}>{trendMeta.label}</Text>
+        </View>
+
         <View style={styles.exerciseMetricPill}>
-          <Text style={styles.exerciseMetricLabel}>Mejor carga</Text>
-          <Text style={styles.exerciseMetricValue}>{formatWeightKg(exercise.latest_best_weight_kg ?? null)}</Text>
+          <Text style={styles.exerciseMetricLabel}>Mejor reciente</Text>
+          <Text style={styles.exerciseMetricValue}>
+            {exercise.primary_metric_value != null
+              ? formatMetricValue(exercise.primary_metric_value, exercise.primary_metric_unit ?? '')
+              : formatWeightKg(exercise.best_recent_weight_kg ?? exercise.latest_best_weight_kg ?? null)}
+          </Text>
         </View>
 
         <View style={styles.exerciseMetricPill}>
@@ -350,9 +464,12 @@ const ExerciseCard = ({
           <Text style={styles.exerciseMetricValue}>{exercise.sessions_count}</Text>
         </View>
 
-        <View style={[styles.deltaPill, { backgroundColor: `${deltaColor}14` }]}>
-          <Text style={[styles.deltaText, { color: deltaColor }]}>{formatDeltaKg(exercise.best_weight_delta_kg)}</Text>
-        </View>
+        {exercise.total_volume_kg != null && exercise.total_volume_kg > 0 ? (
+          <View style={styles.exerciseMetricPill}>
+            <Text style={styles.exerciseMetricLabel}>Volumen</Text>
+            <Text style={styles.exerciseMetricValue}>{formatVolumeKg(exercise.total_volume_kg)}</Text>
+          </View>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
@@ -426,9 +543,10 @@ export default function WorkoutsScreen() {
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset();
   const isFocused = useIsFocused();
-  const { workoutLogsVersion } = useWorkoutStore();
+  const isTablet = isTabletLayout(width, height);
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
-  const [dashboard, setDashboard] = useState<WorkoutAnalyticsDashboard | null>(null);
+  const [analyticsScopeKind, setAnalyticsScopeKind] = useState<WorkoutAnalyticsScopeKind>('range');
+  const [modules, setModules] = useState<WorkoutAnalyticsModules | null>(null);
   const [activeTab, setActiveTab] = useState<WorkoutAnalyticsTab>('overview');
   const [exerciseSort, setExerciseSort] = useState<ExerciseSortOption>('recent');
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState('');
@@ -444,12 +562,9 @@ export default function WorkoutsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const deferredExerciseSearch = useDeferredValue(exerciseSearchQuery);
+  const scopeRouteParams = useMemo(() => getScopeRouteParams(modules?.program_scope), [modules?.program_scope]);
 
-  const hasAnyHistory = (dashboard?.summary.total_sessions ?? 0) > 0;
-  const hasRangeData = (dashboard?.summary.sessions_in_range ?? 0) > 0;
-  const isTablet = isTabletLayout(width, height);
-
-  const loadDashboard = useCallback(
+  const loadModules = useCallback(
     async (options?: { refresh?: boolean }) => {
       const isRefresh = options?.refresh ?? false;
 
@@ -460,8 +575,11 @@ export default function WorkoutsScreen() {
       }
 
       try {
-        const nextDashboard = await getWorkoutAnalyticsDashboard(range);
-        setDashboard(nextDashboard);
+        const nextModules = await getWorkoutAnalyticsModules({
+          scopeKind: analyticsScopeKind,
+          range,
+        });
+        setModules(nextModules);
         setError(null);
       } catch (loadError) {
         const apiError = loadError as ApiError;
@@ -471,7 +589,7 @@ export default function WorkoutsScreen() {
         setIsRefreshing(false);
       }
     },
-    [range],
+    [analyticsScopeKind, range],
   );
 
   const loadHistoryPage = useCallback(
@@ -494,10 +612,14 @@ export default function WorkoutsScreen() {
 
       try {
         const nextPage = await getWorkoutAnalyticsHistory({
+          scopeKind: analyticsScopeKind,
           range,
           status: historyStatus,
           skip,
           limit: HISTORY_PAGE_SIZE,
+          macrocycleId: scopeRouteParams.macrocycleId,
+          mesocycleId: scopeRouteParams.mesocycleId,
+          microcycleId: scopeRouteParams.microcycleId,
         });
         setHistoryPage((currentPage) => (reset ? nextPage : mergeHistoryPages(currentPage, nextPage)));
         setHistoryError(null);
@@ -510,7 +632,14 @@ export default function WorkoutsScreen() {
         setIsHistoryLoadingMore(false);
       }
     },
-    [historyStatus, range],
+    [
+      analyticsScopeKind,
+      historyStatus,
+      range,
+      scopeRouteParams.macrocycleId,
+      scopeRouteParams.mesocycleId,
+      scopeRouteParams.microcycleId,
+    ],
   );
 
   useEffect(() => {
@@ -518,8 +647,8 @@ export default function WorkoutsScreen() {
       return;
     }
 
-    void loadDashboard();
-  }, [isFocused, loadDashboard, workoutLogsVersion]);
+    void loadModules();
+  }, [isFocused, loadModules]);
 
   useEffect(() => {
     if (!isFocused || activeTab !== 'history') {
@@ -527,48 +656,58 @@ export default function WorkoutsScreen() {
     }
 
     void loadHistoryPage({ reset: true });
-  }, [activeTab, isFocused, loadHistoryPage, workoutLogsVersion]);
+  }, [activeTab, isFocused, loadHistoryPage]);
 
   const handleRefresh = useCallback(async () => {
     if (activeTab === 'history') {
       await Promise.all([
-        loadDashboard({ refresh: true }),
+        loadModules({ refresh: true }),
         loadHistoryPage({ reset: true, refresh: true }),
       ]);
       return;
     }
 
-    await loadDashboard({ refresh: true });
-  }, [activeTab, loadDashboard, loadHistoryPage]);
+    await loadModules({ refresh: true });
+  }, [activeTab, loadHistoryPage, loadModules]);
 
-  const handleSaveRepRanges = useCallback(async (nextRepRanges: RepRangeBucket[]) => {
-    setIsSavingRanges(true);
+  const handleSaveRepRanges = useCallback(
+    async (nextRepRanges: RepRangeBucket[]) => {
+      setIsSavingRanges(true);
 
-    try {
-      await updateWorkoutAnalyticsPreferences({ rep_ranges: nextRepRanges });
-      setIsRangeEditorVisible(false);
-      await loadDashboard();
-    } catch (saveError) {
-      const apiError = saveError as ApiError;
-      Alert.alert('Error', apiError.message || 'No fue posible guardar tus rangos.');
-    } finally {
-      setIsSavingRanges(false);
+      try {
+        await updateWorkoutAnalyticsPreferences({ rep_ranges: nextRepRanges });
+        setIsRangeEditorVisible(false);
+        await loadModules();
+      } catch (saveError) {
+        const apiError = saveError as ApiError;
+        Alert.alert('Error', apiError.message || 'No fue posible guardar tus rangos.');
+      } finally {
+        setIsSavingRanges(false);
+      }
+    },
+    [loadModules],
+  );
+
+  const summarySection = useMemo(() => getSummarySection(modules), [modules]);
+  const exerciseSection = useMemo(() => getExerciseSection(modules), [modules]);
+  const recentSessionsSection = useMemo(() => getRecentSessionsSection(modules), [modules]);
+  const overviewSections = useMemo(
+    () => (modules?.sections ?? []).filter((section) => section.kind !== 'summary_cards'),
+    [modules?.sections],
+  );
+  const heroMetrics = useMemo(() => buildHeroMetrics(summarySection), [summarySection]);
+  const exerciseItems = useMemo(() => exerciseSection?.items ?? [], [exerciseSection]);
+  const recentSessions = useMemo(() => recentSessionsSection?.items ?? [], [recentSessionsSection]);
+  const scopeContextLabel = useMemo(() => {
+    if (!modules || analyticsScopeKind === 'range') {
+      return null;
     }
-  }, [loadDashboard]);
 
-  const heroMetrics = useMemo(() => {
-    const summary = dashboard?.summary;
-
-    return [
-      { label: 'Sesiones', value: `${summary?.total_sessions ?? 0}`, icon: 'barbell-outline' as const },
-      { label: 'Volumen', value: formatVolumeKg(summary?.total_volume_kg ?? 0), icon: 'trending-up-outline' as const },
-      { label: 'En rango', value: `${summary?.sessions_in_range ?? 0}`, icon: 'calendar-outline' as const },
-      { label: 'Dias activos', value: `${summary?.active_days ?? 0}`, icon: 'flash-outline' as const },
-    ];
-  }, [dashboard?.summary]);
+    return modules.time_scope?.label ?? modules.context.scope_label;
+  }, [analyticsScopeKind, modules]);
 
   const quickAction = useMemo(() => {
-    const inProgressWorkout = dashboard?.recent_history.find((workout) => workout.status === 'in_progress');
+    const inProgressWorkout = recentSessions.find((workout) => workout.status === 'in_progress');
     if (inProgressWorkout) {
       return {
         label: 'Continuar',
@@ -578,7 +717,7 @@ export default function WorkoutsScreen() {
       };
     }
 
-    const latestWorkout = dashboard?.recent_history[0];
+    const latestWorkout = recentSessions[0];
     if (latestWorkout) {
       return {
         label: 'Ultimo registro',
@@ -593,41 +732,16 @@ export default function WorkoutsScreen() {
 
     return {
       label: 'Abrir programa',
-      hint: 'Revisa tu semana activa desde Inicio',
+      hint: modules?.context.scope_label ?? 'Revisa tu semana activa desde Inicio',
       icon: 'home-outline' as const,
       onPress: () => router.push('/(tabs)'),
     };
-  }, [dashboard?.recent_history]);
-
-  const featuredExercises = useMemo(() => {
-    const exercises = dashboard?.exercise_summaries ?? [];
-    if (!exercises.length) {
-      return [];
-    }
-
-    const topProgress = [...exercises]
-      .sort((left, right) => compareExercisesBySort(left, right, 'progress'))
-      .slice(0, 3);
-
-    if (topProgress.some((exercise) => (exercise.best_weight_delta_kg ?? 0) > 0)) {
-      return topProgress;
-    }
-
-    return [...exercises]
-      .sort((left, right) => compareExercisesBySort(left, right, 'recent'))
-      .slice(0, 3);
-  }, [dashboard?.exercise_summaries]);
-
-  const recentHistoryPreview = useMemo(
-    () => (dashboard?.recent_history ?? []).slice(0, 3),
-    [dashboard?.recent_history],
-  );
+  }, [modules?.context.scope_label, recentSessions]);
 
   const filteredExercises = useMemo(() => {
-    const exercises = dashboard?.exercise_summaries ?? [];
     const searchValue = normalizeSearchValue(deferredExerciseSearch);
 
-    return exercises
+    return exerciseItems
       .filter((exercise) => {
         if (!searchValue) {
           return true;
@@ -636,7 +750,7 @@ export default function WorkoutsScreen() {
         return normalizeSearchValue(exercise.exercise_name).includes(searchValue);
       })
       .sort((left, right) => compareExercisesBySort(left, right, exerciseSort));
-  }, [dashboard?.exercise_summaries, deferredExerciseSearch, exerciseSort]);
+  }, [deferredExerciseSearch, exerciseItems, exerciseSort]);
 
   const historySections = useMemo(
     () => buildHistorySections(historyPage?.items ?? []),
@@ -673,6 +787,10 @@ export default function WorkoutsScreen() {
     });
   }, []);
 
+  const handleScopeChange = useCallback((nextValue: string) => {
+    setAnalyticsScopeKind(nextValue as WorkoutAnalyticsScopeKind);
+  }, []);
+
   const handleExerciseSortChange = useCallback((nextValue: string) => {
     setExerciseSort(nextValue as ExerciseSortOption);
   }, []);
@@ -681,11 +799,33 @@ export default function WorkoutsScreen() {
     setHistoryStatus(nextValue as WorkoutAnalyticsHistoryStatusFilter);
   }, []);
 
-  if (isLoading && !dashboard) {
+  const openExerciseDetail = useCallback(
+    (exerciseId: string) => {
+      router.push({
+        pathname: '/workouts/exercises/[exerciseId]',
+        params: {
+          exerciseId,
+          range,
+          scopeKind: analyticsScopeKind,
+          ...(scopeRouteParams.macrocycleId ? { macrocycleId: scopeRouteParams.macrocycleId } : {}),
+          ...(scopeRouteParams.mesocycleId ? { mesocycleId: scopeRouteParams.mesocycleId } : {}),
+          ...(scopeRouteParams.microcycleId ? { microcycleId: scopeRouteParams.microcycleId } : {}),
+        },
+      });
+    },
+    [analyticsScopeKind, range, scopeRouteParams.macrocycleId, scopeRouteParams.mesocycleId, scopeRouteParams.microcycleId],
+  );
+
+  const overviewEmptyState = useMemo(
+    () => buildOverviewEmptyState(analyticsScopeKind, modules?.context.empty_message),
+    [analyticsScopeKind, modules?.context.empty_message],
+  );
+
+  if (isLoading && !modules) {
     return <LoadingSpinner fullScreen text="Cargando tus entrenamientos..." />;
   }
 
-  if (!dashboard) {
+  if (!modules) {
     return (
       <TabScreenWrapper>
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -695,7 +835,7 @@ export default function WorkoutsScreen() {
               title="No fue posible cargar los datos"
               description={error || 'Intenta de nuevo para recuperar tu resumen de entrenamientos.'}
               actionLabel="Reintentar"
-              onActionPress={() => void loadDashboard()}
+              onActionPress={() => void loadModules()}
             />
           </View>
         </SafeAreaView>
@@ -715,10 +855,7 @@ export default function WorkoutsScreen() {
         <View style={styles.screenIntro}>
           <Text style={styles.screenEyebrow}>Entrenamientos</Text>
           <Text style={styles.screenTitle}>Progreso</Text>
-          <Text style={styles.screenSubtitle}>
-            Cambia la ventana de analisis y organiza el contenido por vista
-            para revisar tu progreso con menos ruido.
-          </Text>
+          <Text style={styles.screenSubtitle}>{getTabSubtitle(activeTab)}</Text>
         </View>
 
         <SegmentedControl
@@ -733,10 +870,10 @@ export default function WorkoutsScreen() {
         {activeTab === 'overview' ? (
           <>
             <WorkoutAnalyticsHero
-              eyebrow="Resumen"
-              title="Resumen del periodo"
-              subtitle="Volumen, sesiones clave y acceso rapido segun la ventana que elijas."
-              rangeLabel={getRangeLabel(range)}
+              eyebrow={modules.context.scope_kind === 'range' ? 'Resumen' : modules.context.scope_label}
+              title={modules.context.title}
+              subtitle={modules.context.subtitle}
+              rangeLabel={modules.context.scope_label}
               actionLabel={quickAction.label}
               actionHint={quickAction.hint}
               actionIcon={quickAction.icon}
@@ -745,9 +882,28 @@ export default function WorkoutsScreen() {
             />
 
             <Card padding="sm" style={styles.utilityCard}>
-              <View style={styles.utilityGroup}>
-                <Text style={styles.utilityLabel}>Ventana de analisis</Text>
-                <AnalyticsRangeSelector value={range} onChange={setRange} />
+              <View style={styles.utilityStack}>
+                <View style={styles.utilityGroup}>
+                  <Text style={styles.utilityLabel}>Contexto</Text>
+                  <WorkoutAnalyticsPillSelector
+                    items={ANALYTICS_SCOPE_OPTIONS}
+                    value={analyticsScopeKind}
+                    onChange={handleScopeChange}
+                  />
+                </View>
+
+                {analyticsScopeKind === 'range' ? (
+                  <View style={styles.utilityGroup}>
+                    <Text style={styles.utilityLabel}>Ventana de analisis</Text>
+                    <AnalyticsRangeSelector value={range} onChange={setRange} />
+                  </View>
+                ) : scopeContextLabel ? (
+                  <View style={styles.resolvedContextCard}>
+                    <Text style={styles.resolvedContextEyebrow}>Contexto resuelto</Text>
+                    <Text style={styles.resolvedContextTitle}>{modules.context.title}</Text>
+                    <Text style={styles.resolvedContextText}>{scopeContextLabel}</Text>
+                  </View>
+                ) : null}
               </View>
             </Card>
           </>
@@ -759,16 +915,33 @@ export default function WorkoutsScreen() {
               <Text style={styles.tabContextEyebrow}>Ejercicios</Text>
               <Text style={styles.tabContextTitle}>Lista completa del progreso</Text>
               <Text style={styles.tabContextSubtitle}>
-                Busca y ordena tus movimientos para detectar avances recientes.
+                Busca y ordena los ejercicios dentro del contexto activo para detectar avances recientes.
               </Text>
             </Card>
 
             <Card padding="sm" style={styles.utilityCard}>
               <View style={styles.utilityStack}>
                 <View style={styles.utilityGroup}>
-                  <Text style={styles.utilityLabel}>Ventana de analisis</Text>
-                  <AnalyticsRangeSelector value={range} onChange={setRange} />
+                  <Text style={styles.utilityLabel}>Contexto</Text>
+                  <WorkoutAnalyticsPillSelector
+                    items={ANALYTICS_SCOPE_OPTIONS}
+                    value={analyticsScopeKind}
+                    onChange={handleScopeChange}
+                  />
                 </View>
+
+                {analyticsScopeKind === 'range' ? (
+                  <View style={styles.utilityGroup}>
+                    <Text style={styles.utilityLabel}>Ventana de analisis</Text>
+                    <AnalyticsRangeSelector value={range} onChange={setRange} />
+                  </View>
+                ) : scopeContextLabel ? (
+                  <View style={styles.resolvedContextCard}>
+                    <Text style={styles.resolvedContextEyebrow}>Contexto resuelto</Text>
+                    <Text style={styles.resolvedContextTitle}>{modules.context.title}</Text>
+                    <Text style={styles.resolvedContextText}>{scopeContextLabel}</Text>
+                  </View>
+                ) : null}
 
                 <SearchField
                   value={exerciseSearchQuery}
@@ -799,16 +972,33 @@ export default function WorkoutsScreen() {
               <Text style={styles.tabContextEyebrow}>Historial</Text>
               <Text style={styles.tabContextTitle}>Sesiones registradas</Text>
               <Text style={styles.tabContextSubtitle}>
-                Filtra el historial completo por ventana y estado sin salir de esta vista.
+                Revisa los registros dentro del mismo contexto activo y filtralos por estado cuando haga falta.
               </Text>
             </Card>
 
             <Card padding="sm" style={styles.utilityCard}>
               <View style={styles.utilityStack}>
                 <View style={styles.utilityGroup}>
-                  <Text style={styles.utilityLabel}>Ventana de analisis</Text>
-                  <AnalyticsRangeSelector value={range} onChange={setRange} />
+                  <Text style={styles.utilityLabel}>Contexto</Text>
+                  <WorkoutAnalyticsPillSelector
+                    items={ANALYTICS_SCOPE_OPTIONS}
+                    value={analyticsScopeKind}
+                    onChange={handleScopeChange}
+                  />
                 </View>
+
+                {analyticsScopeKind === 'range' ? (
+                  <View style={styles.utilityGroup}>
+                    <Text style={styles.utilityLabel}>Ventana de analisis</Text>
+                    <AnalyticsRangeSelector value={range} onChange={setRange} />
+                  </View>
+                ) : scopeContextLabel ? (
+                  <View style={styles.resolvedContextCard}>
+                    <Text style={styles.resolvedContextEyebrow}>Contexto resuelto</Text>
+                    <Text style={styles.resolvedContextTitle}>{modules.context.title}</Text>
+                    <Text style={styles.resolvedContextText}>{scopeContextLabel}</Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.utilityGroup}>
                   <Text style={styles.utilityLabel}>Estado</Text>
@@ -841,8 +1031,8 @@ export default function WorkoutsScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         {activeTab === 'overview' ? (
           <FlatList
-            data={OVERVIEW_MODULES}
-            keyExtractor={(item) => item}
+            data={overviewSections}
+            keyExtractor={(item, index) => `${item.kind}-${index}`}
             style={styles.list}
             contentContainerStyle={[
               styles.listContent,
@@ -865,20 +1055,28 @@ export default function WorkoutsScreen() {
                 { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
               ];
 
-                  if (item === 'chart') {
-                    return (
-                      <View style={shellStyle}>
-                        <Card style={styles.featureCard} padding="lg">
-                        <View style={styles.featureCardHeader}>
-                          <View style={styles.sectionHeaderCopy}>
-                            <Text style={styles.sectionTitle}>Kg movidos por rango</Text>
-                            <Text style={styles.sectionSubtitle}>
-                              {dashboard.summary.total_volume_kg
-                                ? `${formatVolumeKg(dashboard.summary.total_volume_kg)} acumulados en la ventana`
-                                : 'Sin carga registrada en esta ventana'}
-                            </Text>
-                          </View>
+              if (item.kind === 'snapshot') {
+                return (
+                  <View style={shellStyle}>
+                    <WorkoutAnalyticsSnapshotCard section={item} />
+                  </View>
+                );
+              }
 
+              if (item.kind === 'trend_series') {
+                const trendSection = item as WorkoutAnalyticsTrendSeriesSection;
+                return (
+                  <View style={shellStyle}>
+                    <Card style={styles.featureCard} padding="lg">
+                      <View style={styles.featureCardHeader}>
+                        <View style={styles.sectionHeaderCopy}>
+                          <Text style={styles.sectionTitle}>{trendSection.title}</Text>
+                          {trendSection.subtitle ? (
+                            <Text style={styles.sectionSubtitle}>{trendSection.subtitle}</Text>
+                          ) : null}
+                        </View>
+
+                        {trendSection.chart_variant === 'stacked_rep_ranges' ? (
                           <TouchableOpacity
                             style={styles.editButton}
                             activeOpacity={0.86}
@@ -887,93 +1085,119 @@ export default function WorkoutsScreen() {
                             <Ionicons name="options-outline" size={16} color={theme.colors.primary} />
                             <Text style={styles.editButtonText}>Editar</Text>
                           </TouchableOpacity>
-                        </View>
+                        ) : null}
+                      </View>
 
+                      {trendSection.chart_variant === 'stacked_rep_ranges' ? (
                         <RepRangeVolumeChart
-                          points={dashboard.rep_range_chart}
-                          repRanges={dashboard.preferences.rep_ranges}
+                          points={trendSection.rep_range_points}
+                          repRanges={trendSection.rep_ranges}
                           contentWidth={chartWidth}
                         />
-                        </Card>
-                      </View>
-                    );
-                  }
-
-                  if (item === 'exercises') {
-                    return (
-                      <View style={[styles.sectionBlock, shellStyle]}>
-                        <SectionHeading
-                          title="Ejercicios clave"
-                          subtitle={
-                            hasRangeData
-                              ? 'Los movimientos con mas señal en la ventana actual.'
-                              : 'No hay progresos visibles en la ventana actual.'
-                          }
-                          actionLabel={hasRangeData ? 'Ver todos' : undefined}
-                          onActionPress={hasRangeData ? () => handleTabChange('exercises') : undefined}
-                        />
-
-                        {hasAnyHistory && hasRangeData ? (
-                          <View style={styles.cardsStack}>
-                            {featuredExercises.map((exercise) => (
-                              <ExerciseCard
-                                key={exercise.exercise_id}
-                                exercise={exercise}
-                                onPress={() =>
-                                  router.push({
-                                    pathname: '/workouts/exercises/[exerciseId]',
-                                    params: { exerciseId: exercise.exercise_id, range },
-                                  })
-                                }
-                              />
-                            ))}
-                          </View>
-                        ) : (
-                          <EmptyStateCard
-                            icon={hasAnyHistory ? 'filter-outline' : 'analytics-outline'}
-                            title={hasAnyHistory ? 'Sin datos en este rango' : 'Todavia no tienes historial'}
-                            description={
-                              hasAnyHistory
-                                ? 'Cambia la ventana temporal para recuperar el progreso de tus ejercicios.'
-                                : 'Cuando completes tus primeras sesiones veras aqui tus ejercicios destacados.'
-                            }
-                            actionLabel={hasAnyHistory ? 'Ver todo' : 'Ir a inicio'}
-                            onActionPress={hasAnyHistory ? () => setRange('all') : () => router.push('/(tabs)')}
-                          />
-                        )}
-                      </View>
-                    );
-                  }
-
-                  return (
-                    <View style={[styles.sectionBlock, shellStyle]}>
-                      <SectionHeading
-                        title="Sesiones recientes"
-                        subtitle="Abre cualquier log para revisar el registro y corregirlo desde detalle si hace falta."
-                        actionLabel={recentHistoryPreview.length ? 'Abrir historial' : undefined}
-                        onActionPress={recentHistoryPreview.length ? () => handleTabChange('history') : undefined}
-                      />
-
-                      {recentHistoryPreview.length ? (
-                        <View style={styles.cardsStack}>
-                          {recentHistoryPreview.map((workout) => (
-                            <HistoryCard
-                              key={workout.workout_log_id}
-                              workout={workout}
-                              onPress={() => router.push(`/workout/${workout.workout_log_id}`)}
-                            />
-                          ))}
-                        </View>
                       ) : (
-                        <EmptyStateCard
-                          icon="barbell-outline"
-                          title="Sin sesiones recientes"
-                          description="Tu historial aparecera aqui en cuanto registres entrenamientos."
-                        />
+                        <WorkoutAnalyticsLineTrendChart section={trendSection} contentWidth={chartWidth} />
                       )}
+                    </Card>
+                  </View>
+                );
+              }
+
+              if (item.kind === 'comparison_group') {
+                return (
+                  <View style={shellStyle}>
+                    <WorkoutAnalyticsComparisonGroup section={item as WorkoutAnalyticsComparisonGroupSection} />
+                  </View>
+                );
+              }
+
+              if (item.kind === 'exercise_highlights') {
+                const exerciseHighlights = item as WorkoutAnalyticsExerciseHighlightsSection;
+                return (
+                  <View style={[styles.sectionBlock, shellStyle]}>
+                    <SectionHeading
+                      title={exerciseHighlights.title}
+                      subtitle={exerciseHighlights.subtitle ?? 'Movimientos con mas señal de progreso.'}
+                      actionLabel={exerciseHighlights.items.length ? 'Ver todos' : undefined}
+                      onActionPress={exerciseHighlights.items.length ? () => handleTabChange('exercises') : undefined}
+                    />
+
+                    {exerciseHighlights.items.length ? (
+                      <View style={styles.cardsStack}>
+                        {exerciseHighlights.items.slice(0, 3).map((exercise) => (
+                          <ExerciseCard
+                            key={exercise.exercise_id}
+                            exercise={exercise}
+                            onPress={() => openExerciseDetail(exercise.exercise_id)}
+                          />
+                        ))}
+                      </View>
+                    ) : (
+                      <EmptyStateCard
+                        icon="analytics-outline"
+                        title="Sin ejercicios destacados"
+                        description={
+                          analyticsScopeKind === 'range'
+                            ? 'Completa mas sesiones o cambia la ventana temporal para recuperar progreso.'
+                            : modules.context.empty_message ??
+                              'Todavia no hay suficiente señal dentro de este contexto programatico.'
+                        }
+                      />
+                    )}
+                  </View>
+                );
+              }
+
+              const recentSection = item as WorkoutAnalyticsRecentSessionsSection;
+              return (
+                <View style={[styles.sectionBlock, shellStyle]}>
+                  <SectionHeading
+                    title={recentSection.title}
+                    subtitle={recentSection.subtitle ?? 'Registros recientes dentro del alcance actual.'}
+                    actionLabel={
+                      analyticsScopeKind === 'range' && recentSection.items.length ? 'Abrir historial' : undefined
+                    }
+                    onActionPress={
+                      analyticsScopeKind === 'range' && recentSection.items.length
+                        ? () => handleTabChange('history')
+                        : undefined
+                    }
+                  />
+
+                  {recentSection.items.length ? (
+                    <View style={styles.cardsStack}>
+                      {recentSection.items.slice(0, 3).map((workout) => (
+                        <HistoryCard
+                          key={workout.workout_log_id}
+                          workout={workout}
+                          onPress={() => router.push(`/workout/${workout.workout_log_id}`)}
+                        />
+                      ))}
                     </View>
-                  );
-                }}
+                  ) : (
+                    <EmptyStateCard
+                      icon="barbell-outline"
+                      title="Sin sesiones recientes"
+                      description="Tu historial aparecera aqui en cuanto registres entrenamientos."
+                    />
+                  )}
+                </View>
+              );
+            }}
+            ListEmptyComponent={(
+              <View
+                style={[
+                  styles.sectionShell,
+                  styles.emptyListWrap,
+                  { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+                ]}
+              >
+                <EmptyStateCard
+                  icon={overviewEmptyState.icon}
+                  title={overviewEmptyState.title}
+                  description={overviewEmptyState.description}
+                />
+              </View>
+            )}
           />
         ) : null}
 
@@ -996,11 +1220,11 @@ export default function WorkoutsScreen() {
                     { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
                   ]}
                 >
-                    <Text style={styles.listMetaTitle}>Lista completa</Text>
-                    <Text style={styles.listMetaText}>
-                      {filteredExercises.length} de {dashboard.exercise_summaries.length} ejercicios visibles
-                    </Text>
-                  </View>
+                  <Text style={styles.listMetaTitle}>Lista completa</Text>
+                  <Text style={styles.listMetaText}>
+                    {filteredExercises.length} de {exerciseItems.length} ejercicios visibles
+                  </Text>
+                </View>
               </>
             )}
             showsVerticalScrollIndicator={false}
@@ -1020,15 +1244,7 @@ export default function WorkoutsScreen() {
                   { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
                 ]}
               >
-                <ExerciseCard
-                  exercise={item}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/workouts/exercises/[exerciseId]',
-                      params: { exerciseId: item.exercise_id, range },
-                    })
-                  }
-                />
+                <ExerciseCard exercise={item} onPress={() => openExerciseDetail(item.exercise_id)} />
               </View>
             )}
             ListEmptyComponent={(
@@ -1039,29 +1255,28 @@ export default function WorkoutsScreen() {
                   { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
                 ]}
               >
-                    {!hasAnyHistory ? (
-                      <EmptyStateCard
-                        icon="analytics-outline"
-                        title="Todavia no tienes historial"
-                        description="Completa tus primeras sesiones para desbloquear esta vista."
-                      />
-                    ) : !hasRangeData ? (
-                      <EmptyStateCard
-                        icon="filter-outline"
-                        title="Sin datos en este rango"
-                        description="Prueba con una ventana mas amplia para recuperar progreso."
-                        actionLabel="Ver todo"
-                        onActionPress={() => setRange('all')}
-                      />
-                    ) : (
-                      <EmptyStateCard
-                        icon="search-outline"
-                        title="Sin coincidencias"
-                        description="Ajusta tu busqueda o cambia el criterio de orden."
-                        actionLabel="Limpiar"
-                        onActionPress={() => setExerciseSearchQuery('')}
-                      />
-                    )}
+                {!exerciseItems.length ? (
+                  <EmptyStateCard
+                    icon={analyticsScopeKind === 'range' ? 'filter-outline' : 'layers-outline'}
+                    title={analyticsScopeKind === 'range' ? 'Sin datos en este rango' : 'Sin ejercicios en este contexto'}
+                    description={
+                      analyticsScopeKind === 'range'
+                        ? 'Prueba con una ventana mas amplia para recuperar progreso.'
+                        : modules.context.empty_message ??
+                          'Todavia no hay suficiente actividad para construir esta lista en el contexto actual.'
+                    }
+                    actionLabel={analyticsScopeKind === 'range' ? 'Ver todo' : undefined}
+                    onActionPress={analyticsScopeKind === 'range' ? () => setRange('all') : undefined}
+                  />
+                ) : (
+                  <EmptyStateCard
+                    icon="search-outline"
+                    title="Sin coincidencias"
+                    description="Ajusta tu busqueda o cambia el criterio de orden."
+                    actionLabel="Limpiar"
+                    onActionPress={() => setExerciseSearchQuery('')}
+                  />
+                )}
               </View>
             )}
           />
@@ -1114,8 +1329,8 @@ export default function WorkoutsScreen() {
                   { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
                 ]}
               >
-                    <Text style={styles.monthHeaderText}>{section.title}</Text>
-                  </View>
+                <Text style={styles.monthHeaderText}>{section.title}</Text>
+              </View>
             )}
             renderItem={({ item }) => (
               <View
@@ -1138,28 +1353,28 @@ export default function WorkoutsScreen() {
                   { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
                 ]}
               >
-                    {showFullHistorySpinner ? (
-                      <View style={styles.loadingHistoryWrap}>
-                        <ActivityIndicator size="small" color={theme.colors.primary} />
-                        <Text style={styles.loadingHistoryText}>Cargando historial...</Text>
-                      </View>
-                    ) : historyError ? (
-                      <EmptyStateCard
-                        icon="cloud-offline-outline"
-                        title="No fue posible cargar el historial"
-                        description={historyError}
-                        actionLabel="Reintentar"
-                        onActionPress={() => void loadHistoryPage({ reset: true })}
-                      />
-                    ) : (
-                      <EmptyStateCard
-                        icon="calendar-clear-outline"
-                        title="Sin sesiones para este filtro"
-                        description="Prueba otro estado o amplía la ventana temporal."
-                        actionLabel="Ver todos"
-                        onActionPress={() => setHistoryStatus('all')}
-                      />
-                    )}
+                {showFullHistorySpinner ? (
+                  <View style={styles.loadingHistoryWrap}>
+                    <ActivityIndicator size="small" color={theme.colors.primary} />
+                    <Text style={styles.loadingHistoryText}>Cargando historial...</Text>
+                  </View>
+                ) : historyError ? (
+                  <EmptyStateCard
+                    icon="cloud-offline-outline"
+                    title="No fue posible cargar el historial"
+                    description={historyError}
+                    actionLabel="Reintentar"
+                    onActionPress={() => void loadHistoryPage({ reset: true })}
+                  />
+                ) : (
+                  <EmptyStateCard
+                    icon="calendar-clear-outline"
+                    title="Sin sesiones para este filtro"
+                    description="Prueba otro estado o amplia la ventana temporal."
+                    actionLabel="Ver todos"
+                    onActionPress={() => setHistoryStatus('all')}
+                  />
+                )}
               </View>
             )}
             ListFooterComponent={(
@@ -1170,18 +1385,18 @@ export default function WorkoutsScreen() {
                   { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
                 ]}
               >
-                    {isHistoryLoadingMore ? (
-                      <ActivityIndicator size="small" color={theme.colors.primary} />
-                    ) : null}
-                    {historyError && (historyPage?.items.length ?? 0) > 0 ? (
-                      <TouchableOpacity
-                        style={styles.retryFooterButton}
-                        activeOpacity={0.86}
-                        onPress={() => void loadHistoryPage({ skip: historyPage?.items.length ?? 0 })}
-                      >
-                        <Text style={styles.retryFooterText}>Reintentar carga</Text>
-                      </TouchableOpacity>
-                    ) : null}
+                {isHistoryLoadingMore ? (
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
+                ) : null}
+                {historyError && (historyPage?.items.length ?? 0) > 0 ? (
+                  <TouchableOpacity
+                    style={styles.retryFooterButton}
+                    activeOpacity={0.86}
+                    onPress={() => void loadHistoryPage({ skip: historyPage?.items.length ?? 0 })}
+                  >
+                    <Text style={styles.retryFooterText}>Reintentar carga</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             )}
           />
@@ -1189,7 +1404,7 @@ export default function WorkoutsScreen() {
 
         <RepRangeEditorModal
           visible={isRangeEditorVisible}
-          repRanges={dashboard.preferences.rep_ranges}
+          repRanges={modules.preferences.rep_ranges}
           isSaving={isSavingRanges}
           onClose={() => setIsRangeEditorVisible(false)}
           onSave={handleSaveRepRanges}
@@ -1261,6 +1476,31 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 0.7,
+    },
+    resolvedContextCard: {
+      gap: spacing.xs,
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.md,
+    },
+    resolvedContextEyebrow: {
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+    },
+    resolvedContextTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    resolvedContextText: {
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.textMuted,
     },
     tabContextCard: {
       gap: spacing.xs,
@@ -1462,13 +1702,16 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       color: theme.colors.textPrimary,
     },
-    deltaPill: {
+    trendBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
       borderRadius: borderRadius.full,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
     },
-    deltaText: {
-      fontSize: fontSize.sm,
+    trendBadgeText: {
+      fontSize: fontSize.xs,
       fontWeight: '700',
     },
     historyCard: {

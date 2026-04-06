@@ -346,10 +346,28 @@ export interface MicrocycleProgress {
   days: MicrocycleDayProgress[];
 }
 
-export type WorkoutAnalyticsRange = '4w' | '8w' | '12w' | '24w' | 'all';
+export type WorkoutAnalyticsRange = '2w' | '4w' | '8w' | '12w' | 'all';
 export type WorkoutAnalyticsColorToken = 'navy' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet';
 export type WorkoutAnalyticsHistoryStatusFilter = 'all' | WorkoutStatus;
 export type WorkoutAnalyticsCalendarWeekStatus = 'none' | WorkoutStatus;
+export type ExerciseTrendStatus = 'rising' | 'stable' | 'declining' | 'insufficient';
+export type WorkoutAnalyticsScopeKind = 'range' | 'microcycle' | 'mesocycle' | 'program';
+export type WorkoutAnalyticsAvailability = 'available' | 'partial' | 'unavailable';
+export type WorkoutAnalyticsOrigin = 'measured' | 'derived';
+export type WorkoutAnalyticsTrendVariant = 'stacked_rep_ranges' | 'line';
+export type ExerciseDetailMetric =
+  | 'best_weight'
+  | 'volume'
+  | 'best_reps'
+  | 'effort'
+  | 'e1rm'
+  | 'top_set_weight'
+  | 'total_reps';
+export type AnalyticsProfileId =
+  | 'double_progression_hypertrophy'
+  | 'percentage_1rm_strength'
+  | 'rpe_strength'
+  | 'bodyweight_progression';
 
 export interface RepRangeBucket {
   id: string;
@@ -384,6 +402,14 @@ export interface ExerciseTrendSummary {
   latest_best_weight_kg?: number | null;
   best_weight_delta_kg?: number | null;
   sparkline_points: number[];
+  trend_status?: ExerciseTrendStatus | null;
+  best_recent_weight_kg?: number | null;
+  total_volume_kg?: number | null;
+  // Phase 2
+  analytics_profile?: AnalyticsProfileId | null;
+  primary_metric_value?: number | null;
+  primary_metric_unit?: string | null;
+  progress_score?: number | null;
 }
 
 export interface RecentWorkoutHistoryItem {
@@ -412,6 +438,131 @@ export interface WorkoutAnalyticsDashboard {
   preferences: WorkoutAnalyticsPreferences;
 }
 
+export interface WorkoutAnalyticsContext {
+  scope_kind: WorkoutAnalyticsScopeKind;
+  title: string;
+  subtitle: string;
+  scope_label: string;
+  empty_message?: string | null;
+}
+
+export interface WorkoutAnalyticsTimeScope {
+  range_key?: WorkoutAnalyticsRange | null;
+  anchor_date?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  label?: string | null;
+}
+
+export interface WorkoutAnalyticsProgramScope {
+  macrocycle_id?: string | null;
+  macrocycle_name?: string | null;
+  objective?: string | null;
+  mesocycle_id?: string | null;
+  mesocycle_name?: string | null;
+  block_number?: number | null;
+  microcycle_id?: string | null;
+  microcycle_name?: string | null;
+  week_number?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
+export interface WorkoutAnalyticsMetricCard {
+  id: string;
+  label: string;
+  value?: number | null;
+  display_value: string;
+  unit?: string | null;
+  helper_text?: string | null;
+  tone?: string | null;
+}
+
+export interface WorkoutAnalyticsSummaryCardsSection {
+  kind: 'summary_cards';
+  title: string;
+  subtitle?: string | null;
+  cards: WorkoutAnalyticsMetricCard[];
+}
+
+export interface WorkoutAnalyticsSnapshotSection {
+  kind: 'snapshot';
+  eyebrow?: string | null;
+  title: string;
+  subtitle?: string | null;
+  metrics: WorkoutAnalyticsMetricCard[];
+}
+
+export interface WorkoutAnalyticsTrendLinePoint {
+  label: string;
+  value?: number | null;
+  secondary_value?: number | null;
+  tooltip_label?: string | null;
+}
+
+export interface WorkoutAnalyticsTrendSeriesSection {
+  kind: 'trend_series';
+  title: string;
+  subtitle?: string | null;
+  chart_variant: WorkoutAnalyticsTrendVariant;
+  unit?: string | null;
+  primary_label?: string | null;
+  secondary_label?: string | null;
+  points: WorkoutAnalyticsTrendLinePoint[];
+  rep_range_points: RepRangeChartPoint[];
+  rep_ranges: RepRangeBucket[];
+}
+
+export interface WorkoutAnalyticsComparisonItem {
+  id: string;
+  label: string;
+  planned_value?: number | null;
+  actual_value?: number | null;
+  planned_display: string;
+  actual_display: string;
+  unit?: string | null;
+  availability: WorkoutAnalyticsAvailability;
+  origin: WorkoutAnalyticsOrigin;
+  helper_text?: string | null;
+}
+
+export interface WorkoutAnalyticsComparisonGroupSection {
+  kind: 'comparison_group';
+  title: string;
+  subtitle?: string | null;
+  items: WorkoutAnalyticsComparisonItem[];
+}
+
+export interface WorkoutAnalyticsExerciseHighlightsSection {
+  kind: 'exercise_highlights';
+  title: string;
+  subtitle?: string | null;
+  items: ExerciseTrendSummary[];
+}
+
+export interface WorkoutAnalyticsRecentSessionsSection {
+  kind: 'recent_sessions';
+  title: string;
+  subtitle?: string | null;
+  items: RecentWorkoutHistoryItem[];
+}
+
+export type WorkoutAnalyticsSection =
+  | WorkoutAnalyticsSummaryCardsSection
+  | WorkoutAnalyticsSnapshotSection
+  | WorkoutAnalyticsTrendSeriesSection
+  | WorkoutAnalyticsComparisonGroupSection
+  | WorkoutAnalyticsExerciseHighlightsSection
+  | WorkoutAnalyticsRecentSessionsSection;
+
+export interface WorkoutAnalyticsModules {
+  context: WorkoutAnalyticsContext;
+  time_scope?: WorkoutAnalyticsTimeScope | null;
+  program_scope?: WorkoutAnalyticsProgramScope | null;
+  preferences: WorkoutAnalyticsPreferences;
+  sections: WorkoutAnalyticsSection[];
+}
+
 export interface WorkoutAnalyticsHistoryPage {
   total: number;
   items: RecentWorkoutHistoryItem[];
@@ -422,6 +573,34 @@ export interface ExerciseTrendPoint {
   best_weight_kg?: number | null;
   volume_kg: number;
   reps_bucket_id?: string | null;
+  rep_bucket_totals: Record<string, number>;
+  best_reps?: number | null;
+  avg_effort?: number | null;
+  // Phase 2
+  e1rm_kg?: number | null;
+  top_set_weight_kg?: number | null;
+  top_set_reps?: number | null;
+  total_reps?: number | null;
+  planned_effort_value?: number | null;
+  planned_effort_type?: string | null;
+  relative_intensity_pct?: number | null;
+  adherence_ratio?: number | null;
+  top_set_backoff_delta_kg?: number | null;
+  backoff_volume_kg?: number | null;
+}
+
+export interface AvailableMetric {
+  key: ExerciseDetailMetric;
+  label: string;
+  unit: string;
+  available: boolean;
+}
+
+export interface DisplayHints {
+  show_volume_bars: boolean;
+  show_rep_range_buckets: boolean;
+  show_effort_comparison: boolean;
+  recommended_chart_type: string;
 }
 
 export interface ExerciseTrendDetailSummary {
@@ -437,6 +616,11 @@ export interface ExerciseTrendDetail {
   summary: ExerciseTrendDetailSummary;
   series: ExerciseTrendPoint[];
   preferences: WorkoutAnalyticsPreferences;
+  // Phase 2
+  analytics_profile?: AnalyticsProfileId | null;
+  available_metrics?: AvailableMetric[];
+  default_metric?: ExerciseDetailMetric | null;
+  display_hints?: DisplayHints | null;
 }
 
 // Muscle Volume types (from GET /api/training-days/{id}/muscle-volume)

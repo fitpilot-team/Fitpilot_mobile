@@ -68,13 +68,17 @@ export const getDayExerciseByProgress = (
 
 export const getExerciseTargetSetNumber = (
   dayExercise?: DayExercise,
-  progress?: ExerciseProgress,
+  _progress?: ExerciseProgress,
   targetSetNumber?: number,
 ) => {
   const maxSets = dayExercise && isCardioExercise(dayExercise)
     ? getCardioEffectiveSets(dayExercise)
     : (dayExercise?.sets || 1);
-  return targetSetNumber ?? Math.min((progress?.completed_sets ?? 0) + 1, maxSets);
+  if (targetSetNumber != null) {
+    return Math.max(1, Math.min(targetSetNumber, maxSets));
+  }
+
+  return 1;
 };
 
 const cloneSegmentDraft = (segment: WorkoutSetSegmentDraft, segmentIndex: number): WorkoutSetSegmentDraft => ({
@@ -141,9 +145,6 @@ const normalizeSegmentDrafts = (
   return normalizedSegments.map((segment, index) => cloneSegmentDraft(segment, index + 1));
 };
 
-const getLastLoggedSetGroup = (progress?: ExerciseProgress): WorkoutSetGroup | undefined =>
-  progress?.sets_data?.[progress.sets_data.length - 1];
-
 export const getExerciseDraftValues = (
   dayExercise?: DayExercise,
   progress?: ExerciseProgress,
@@ -152,8 +153,7 @@ export const getExerciseDraftValues = (
   const preferredSet = targetSetNumber
     ? progress?.sets_data?.find((setGroup) => setGroup.set_number === targetSetNumber)
     : undefined;
-  const templateSet = preferredSet ?? getLastLoggedSetGroup(progress);
-  const templateSegments = preferredSet?.segments ?? templateSet?.segments ?? null;
+  const templateSegments = preferredSet?.segments ?? null;
 
   return {
     segments: normalizeSegmentDrafts(dayExercise, templateSegments),

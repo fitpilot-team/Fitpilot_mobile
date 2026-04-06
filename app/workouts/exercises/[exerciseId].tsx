@@ -14,15 +14,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, LoadingSpinner } from '../../../src/components/common';
 import { AnalyticsRangeSelector } from '../../../src/components/workout-analytics/AnalyticsRangeSelector';
 import { ExerciseTrendChart } from '../../../src/components/workout-analytics/ExerciseTrendChart';
+import { WorkoutAnalyticsPillSelector } from '../../../src/components/workout-analytics/WorkoutAnalyticsPillSelector';
 import { DEFAULT_WORKOUT_ANALYTICS_RANGE } from '../../../src/constants/workoutAnalytics';
 import { borderRadius, fontSize, shadows, spacing } from '../../../src/constants/colors';
 import { getWorkoutAnalyticsExerciseDetail } from '../../../src/services/workoutAnalytics';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../../src/theme';
 import type {
   ApiError,
+  ExerciseDetailMetric,
   ExerciseTrendDetail,
   RepRangeBucket,
   WorkoutAnalyticsRange,
+  WorkoutAnalyticsScopeKind,
 } from '../../../src/types';
 import { formatLocalDate } from '../../../src/utils/date';
 import {
@@ -30,11 +33,49 @@ import {
   formatWeightKg,
   normalizeWorkoutAnalyticsRange,
 } from '../../../src/utils/workoutAnalytics';
+import {
+  formatMetricValue,
+  getAvailableMetrics,
+  getDefaultMetric,
+  getMetricChartSubtitle,
+  getMetricLabel,
+  getMetricValue,
+  getPrimaryMetricPersonalBest,
+  getProfileConfig,
+  getProfileContextCopy,
+  getProfilePrimaryMetricLabel,
+} from '../../../src/utils/analyticsProfiles';
+
+// METRIC_CHART_SUBTITLES removed (now in analyticsProfiles.ts)
+
+const getPointBucketEntries = (
+  bucketTotals: Record<string, number> | null | undefined,
+  repRangeMap: Record<string, string>,
+) =>
+  Object.entries(bucketTotals ?? {})
+    .filter(([, value]) => value > 0)
+    .sort((left, right) => right[1] - left[1])
+    .map(([bucketId, value]) => ({
+      bucketId,
+      label: repRangeMap[bucketId] ?? bucketId,
+      value,
+    }));
 
 export default function ExerciseTrendDetailScreen() {
-  const { exerciseId, range: rangeParam } = useLocalSearchParams<{
+  const {
+    exerciseId,
+    range: rangeParam,
+    scopeKind: scopeKindParam,
+    macrocycleId,
+    mesocycleId,
+    microcycleId,
+  } = useLocalSearchParams<{
     exerciseId: string;
     range?: string;
+    scopeKind?: string;
+    macrocycleId?: string;
+    mesocycleId?: string;
+    microcycleId?: string;
   }>();
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -42,6 +83,13 @@ export default function ExerciseTrendDetailScreen() {
   const [range, setRange] = useState<WorkoutAnalyticsRange>(
     normalizeWorkoutAnalyticsRange(rangeParam, DEFAULT_WORKOUT_ANALYTICS_RANGE),
   );
+  const scopeKind: WorkoutAnalyticsScopeKind =
+    scopeKindParam === 'microcycle' ||
+    scopeKindParam === 'mesocycle' ||
+    scopeKindParam === 'program'
+      ? scopeKindParam
+      : 'range';
+  const [selectedMetric, setSelectedMetric] = useState<ExerciseDetailMetric>('best_weight');
   const [detail, setDetail] = useState<ExerciseTrendDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -65,9 +113,15 @@ export default function ExerciseTrendDetailScreen() {
       }
 
       try {
-        const response = await getWorkoutAnalyticsExerciseDetail(exerciseId, range);
+        const response = await getWorkoutAnalyticsExerciseDetail(exerciseId, range, undefined, {
+          scopeKind,
+          macrocycleId: macrocycleId ?? null,
+          mesocycleId: mesocycleId ?? null,
+          microcycleId: microcycleId ?? null,
+        });
         setDetail(response);
         setError(null);
+        setSelectedMetric(getDefaultMetric(response));
       } catch (loadError) {
         const apiError = loadError as ApiError;
         setError(apiError.message || 'No fue posible cargar este ejercicio.');
@@ -76,7 +130,7 @@ export default function ExerciseTrendDetailScreen() {
         setIsRefreshing(false);
       }
     },
-    [exerciseId, range],
+    [exerciseId, macrocycleId, mesocycleId, microcycleId, range, scopeKind],
   );
 
   useEffect(() => {
@@ -91,13 +145,34 @@ export default function ExerciseTrendDetailScreen() {
     return Object.fromEntries(entries);
   }, [detail?.preferences.rep_ranges]);
 
+  const hasEffortData = useMemo(
+    () => (detail?.series ?? []).some((point) => point.avg_effort != null),
+    [detail?.series],
+  );
+
+  const metricOptions = useMemo(() => {
+    return getAvailableMetrics(detail).map((option) => ({
+      value: option.key,
+      label: option.label,
+      disabled: !option.available,
+    }));
+  }, [detail]);
+
+  const primaryMetricPersonalBest = useMemo(
+    () => getPrimaryMetricPersonalBest(detail),
+    [detail],
+  );
+
   const summaryCards = useMemo(() => {
     if (!detail) {
       return [];
     }
 
-    return [
-      { label: 'PR en rango', value: formatWeightKg(detail.summary.personal_best_kg ?? null) },
+    const base = [
+      {
+        label: `${primaryMetricPersonalBest.label} PR`,
+        value: formatMetricValue(primaryMetricPersonalBest.value, primaryMetricPersonalBest.unit),
+      },
       { label: 'Sesiones', value: `${detail.summary.total_sessions}` },
       {
         label: 'Primera',
@@ -112,7 +187,23 @@ export default function ExerciseTrendDetailScreen() {
           : '--',
       },
     ];
-  }, [detail]);
+
+    return base;
+  }, [detail, primaryMetricPersonalBest]);
+
+  const chartSubtitle = getMetricChartSubtitle(selectedMetric);
+  const metricLabel = getMetricLabel(selectedMetric);
+  const profileConfig = getProfileConfig(detail?.analytics_profile);
+  const profileContextCopy = getProfileContextCopy(detail?.analytics_profile);
+  const primaryMetricLabel = getProfilePrimaryMetricLabel(detail?.analytics_profile);
+  const scopeLabel =
+    scopeKind === 'microcycle'
+      ? 'Microciclo'
+      : scopeKind === 'mesocycle'
+        ? 'Bloque'
+        : scopeKind === 'program'
+          ? 'Programa'
+          : 'Ventana';
 
   if (isLoading && !detail) {
     return <LoadingSpinner fullScreen text="Cargando progreso del ejercicio..." />;
@@ -126,7 +217,11 @@ export default function ExerciseTrendDetailScreen() {
         </TouchableOpacity>
         <View style={styles.headerCopy}>
           <Text style={styles.title}>{detail?.exercise_name ?? 'Ejercicio'}</Text>
-          <Text style={styles.subtitle}>Evolucion de carga y volumen a lo largo del tiempo</Text>
+          <Text style={styles.subtitle}>
+            {scopeKind === 'range'
+              ? `Evolucion de ${metricLabel.toLowerCase()} a lo largo del tiempo`
+              : `Evolucion de ${metricLabel.toLowerCase()} dentro del ${scopeLabel.toLowerCase()} actual`}
+          </Text>
         </View>
       </View>
 
@@ -144,7 +239,32 @@ export default function ExerciseTrendDetailScreen() {
           />
         }
       >
-        <AnalyticsRangeSelector value={range} onChange={setRange} />
+        {scopeKind === 'range' ? (
+          <AnalyticsRangeSelector value={range} onChange={setRange} />
+        ) : (
+          <View style={styles.scopeCard}>
+            <Text style={styles.scopeEyebrow}>Contexto</Text>
+            <Text style={styles.scopeTitle}>{scopeLabel}</Text>
+            <Text style={styles.scopeText}>
+              Esta vista esta fijada al contexto programatico actual y no usa selector de ventana.
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.metricSelectorWrap}>
+          <Text style={styles.metricSelectorLabel}>Metrica</Text>
+          <WorkoutAnalyticsPillSelector
+            items={metricOptions.map((option) => ({
+              value: option.value,
+              label: option.label,
+            }))}
+            value={selectedMetric}
+            onChange={(value) => setSelectedMetric(value as ExerciseDetailMetric)}
+          />
+          {selectedMetric === 'effort' && !hasEffortData ? (
+            <Text style={styles.metricDisabledHint}>No hay datos de esfuerzo registrados en este rango.</Text>
+          ) : null}
+        </View>
 
         {error ? (
           <Card style={styles.errorCard}>
@@ -166,51 +286,129 @@ export default function ExerciseTrendDetailScreen() {
         ) : null}
 
         <Card style={styles.chartCard}>
-          <Text style={styles.sectionTitle}>Tendencia de mejor carga</Text>
-          <Text style={styles.sectionSubtitle}>
-            La linea principal sigue la mejor carga registrada; las barras dejan ver el volumen total.
-          </Text>
+          <Text style={styles.sectionTitle}>Tendencia de {metricLabel.toLowerCase()}</Text>
+          <Text style={styles.sectionSubtitle}>{chartSubtitle}</Text>
+          <Text style={styles.profileHint}>{profileContextCopy}</Text>
           <ExerciseTrendChart
             series={detail?.series ?? []}
             repRanges={detail?.preferences.rep_ranges ?? []}
             contentWidth={Math.max(width - spacing.lg * 2, 280)}
+            metric={selectedMetric}
+            displayHints={detail?.display_hints}
           />
         </Card>
 
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Registros</Text>
+          <Text style={styles.sectionSubtitleSmall}>
+            Historial detallado de cada sesion en el periodo seleccionado.
+          </Text>
           {detail?.series.length ? (
             detail.series
               .slice()
               .reverse()
-              .map((point) => (
-                <View key={point.performed_on_date} style={styles.recordCard}>
-                  <View style={styles.recordTopRow}>
-                    <Text style={styles.recordDate}>
-                      {formatLocalDate(point.performed_on_date, {
-                        weekday: 'long',
-                        day: 'numeric',
-                        month: 'short',
-                      })}
-                    </Text>
-                    <View style={styles.recordBucket}>
-                      <Text style={styles.recordBucketText}>
-                        {point.reps_bucket_id ? repRangeMap[point.reps_bucket_id] || 'Sin bucket' : 'Sin bucket'}
+              .map((point) => {
+                const bucketEntries = getPointBucketEntries(point.rep_bucket_totals, repRangeMap);
+                const primaryMetricValue = getMetricValue(point, profileConfig.primaryMetric);
+
+                return (
+                  <View key={point.performed_on_date} style={styles.recordCard}>
+                    <View style={styles.recordTopRow}>
+                      <Text style={styles.recordDate}>
+                        {formatLocalDate(point.performed_on_date, {
+                          weekday: 'long',
+                          day: 'numeric',
+                          month: 'short',
+                        })}
                       </Text>
+                      <View style={styles.recordBucket}>
+                        <Text style={styles.recordBucketText}>
+                          {bucketEntries.length
+                            ? `${bucketEntries.length} rango${bucketEntries.length > 1 ? 's' : ''}`
+                            : point.reps_bucket_id
+                              ? repRangeMap[point.reps_bucket_id] || 'Sin bucket'
+                              : 'Sin bucket'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {bucketEntries.length ? (
+                      <View style={styles.recordBucketsRow}>
+                        {bucketEntries.map((bucket) => (
+                          <View key={`${point.performed_on_date}-${bucket.bucketId}`} style={styles.recordBucketChip}>
+                            <Text style={styles.recordBucketChipText}>
+                              {bucket.label} | {formatVolumeKg(bucket.value)}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+
+                    <View style={styles.recordStatsRow}>
+                      <View style={styles.recordStatPill}>
+                        <Text style={styles.recordStatLabel}>{primaryMetricLabel}</Text>
+                        <Text style={styles.recordStatValue}>
+                          {formatMetricValue(primaryMetricValue, profileConfig.primaryUnit)}
+                        </Text>
+                      </View>
+                      {point.volume_kg > 0 ? (
+                        <View style={styles.recordStatPill}>
+                          <Text style={styles.recordStatLabel}>Volumen</Text>
+                          <Text style={styles.recordStatValue}>{formatVolumeKg(point.volume_kg)}</Text>
+                        </View>
+                      ) : null}
+                      {point.best_reps != null && point.best_reps > 0 ? (
+                        <View style={styles.recordStatPill}>
+                          <Text style={styles.recordStatLabel}>Mejor reps</Text>
+                          <Text style={styles.recordStatValue}>{point.best_reps}</Text>
+                        </View>
+                      ) : null}
+                      {point.total_reps != null && point.total_reps > 0 ? (
+                        <View style={styles.recordStatPill}>
+                          <Text style={styles.recordStatLabel}>Total reps</Text>
+                          <Text style={styles.recordStatValue}>{point.total_reps}</Text>
+                        </View>
+                      ) : null}
+                      {point.e1rm_kg != null && point.e1rm_kg > 0 ? (
+                        <View style={styles.recordStatPill}>
+                          <Text style={styles.recordStatLabel}>1RM est.</Text>
+                          <Text style={styles.recordStatValue}>{formatWeightKg(point.e1rm_kg)}</Text>
+                        </View>
+                      ) : null}
+                      {point.relative_intensity_pct != null ? (
+                        <View style={styles.recordStatPill}>
+                          <Text style={styles.recordStatLabel}>Intensidad rel.</Text>
+                          <Text style={styles.recordStatValue}>{point.relative_intensity_pct.toFixed(1)}%</Text>
+                        </View>
+                      ) : null}
+                      {point.avg_effort != null ? (
+                        <View style={styles.recordStatPill}>
+                          <Text style={styles.recordStatLabel}>Esfuerzo</Text>
+                          <Text style={styles.recordStatValue}>{point.avg_effort.toFixed(1)}</Text>
+                        </View>
+                      ) : null}
+                      {point.adherence_ratio != null ? (
+                        <View style={styles.recordStatPill}>
+                          <Text style={styles.recordStatLabel}>Adherencia</Text>
+                          <Text style={styles.recordStatValue}>{point.adherence_ratio.toFixed(2)}x</Text>
+                        </View>
+                      ) : null}
+                      {point.top_set_backoff_delta_kg != null ? (
+                        <View style={styles.recordStatPill}>
+                          <Text style={styles.recordStatLabel}>Top vs backoff</Text>
+                          <Text style={styles.recordStatValue}>{formatWeightKg(point.top_set_backoff_delta_kg)}</Text>
+                        </View>
+                      ) : null}
+                      {point.backoff_volume_kg != null && point.backoff_volume_kg > 0 ? (
+                        <View style={styles.recordStatPill}>
+                          <Text style={styles.recordStatLabel}>Vol. backoff</Text>
+                          <Text style={styles.recordStatValue}>{formatVolumeKg(point.backoff_volume_kg)}</Text>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
-                  <View style={styles.recordStatsRow}>
-                    <View style={styles.recordStatPill}>
-                      <Text style={styles.recordStatLabel}>Mejor carga</Text>
-                      <Text style={styles.recordStatValue}>{formatWeightKg(point.best_weight_kg ?? null)}</Text>
-                    </View>
-                    <View style={styles.recordStatPill}>
-                      <Text style={styles.recordStatLabel}>Volumen</Text>
-                      <Text style={styles.recordStatValue}>{formatVolumeKg(point.volume_kg)}</Text>
-                    </View>
-                  </View>
-                </View>
-              ))
+                );
+              })
           ) : (
             <Card style={styles.emptyCard}>
               <Ionicons name="analytics-outline" size={40} color={theme.colors.iconMuted} />
@@ -272,6 +470,46 @@ const createStyles = (theme: AppTheme) =>
       paddingBottom: spacing.xxl + 80,
       gap: spacing.lg,
     },
+    scopeCard: {
+      gap: spacing.xs,
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: spacing.md,
+    },
+    scopeEyebrow: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.7,
+    },
+    scopeTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    scopeText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      lineHeight: 20,
+    },
+    metricSelectorWrap: {
+      gap: spacing.sm,
+    },
+    metricSelectorLabel: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.7,
+    },
+    metricDisabledHint: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      fontStyle: 'italic',
+    },
     errorCard: {
       gap: spacing.sm,
     },
@@ -312,6 +550,12 @@ const createStyles = (theme: AppTheme) =>
     chartCard: {
       padding: spacing.lg,
     },
+    profileHint: {
+      marginBottom: spacing.md,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      lineHeight: 20,
+    },
     sectionContainer: {
       gap: spacing.md,
     },
@@ -325,6 +569,11 @@ const createStyles = (theme: AppTheme) =>
       marginBottom: spacing.md,
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
+    },
+    sectionSubtitleSmall: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      lineHeight: 20,
     },
     recordCard: {
       borderRadius: borderRadius.lg,
@@ -360,13 +609,34 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       color: theme.colors.primary,
     },
+    recordBucketsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+      marginTop: spacing.sm,
+    },
+    recordBucketChip: {
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 6,
+    },
+    recordBucketChipText: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textSecondary,
+      fontWeight: '600',
+    },
     recordStatsRow: {
       flexDirection: 'row',
-      gap: spacing.md,
+      flexWrap: 'wrap',
+      gap: spacing.sm,
       marginTop: spacing.md,
     },
     recordStatPill: {
       flex: 1,
+      minWidth: 70,
       borderRadius: borderRadius.md,
       backgroundColor: theme.colors.surfaceAlt,
       borderWidth: 1,

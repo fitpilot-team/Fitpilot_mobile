@@ -1,9 +1,38 @@
 import type {
+  ExerciseDetailMetric,
+  ExerciseTrendStatus,
   RepRangeBucket,
   WorkoutAnalyticsColorToken,
   WorkoutAnalyticsRange,
 } from '../types';
 import { WORKOUT_ANALYTICS_COLOR_MAP, WORKOUT_ANALYTICS_RANGE_OPTIONS } from '../constants/workoutAnalytics';
+
+export type TrendStatusMeta = {
+  icon: string;
+  color: string;
+  label: string;
+};
+
+const TREND_STATUS_META: Record<ExerciseTrendStatus, TrendStatusMeta> = {
+  rising: { icon: 'trending-up', color: '#22c55e', label: 'Subiendo' },
+  stable: { icon: 'remove-outline', color: '#f59e0b', label: 'Estable' },
+  declining: { icon: 'trending-down', color: '#ef4444', label: 'Bajando' },
+  insufficient: { icon: 'ellipsis-horizontal', color: '#94a3b8', label: 'Pocos datos' },
+};
+
+export const getTrendStatusMeta = (status: ExerciseTrendStatus | null | undefined): TrendStatusMeta =>
+  TREND_STATUS_META[status ?? 'insufficient'] ?? TREND_STATUS_META.insufficient;
+
+export const EXERCISE_DETAIL_METRIC_OPTIONS: {
+  value: ExerciseDetailMetric;
+  label: string;
+  unit: string;
+}[] = [
+  { value: 'best_weight', label: 'Mejor carga', unit: 'kg' },
+  { value: 'volume', label: 'Volumen', unit: 'kg' },
+  { value: 'best_reps', label: 'Mejor reps', unit: 'reps' },
+  { value: 'effort', label: 'Esfuerzo', unit: 'RIR/RPE' },
+];
 
 export type RepRangeDraft = {
   id: string;
@@ -32,7 +61,7 @@ export const isWorkoutAnalyticsRange = (value: string | undefined | null): value
 
 export const normalizeWorkoutAnalyticsRange = (
   value: string | undefined | null,
-  fallback: WorkoutAnalyticsRange = '12w',
+  fallback: WorkoutAnalyticsRange = '2w',
 ): WorkoutAnalyticsRange => (isWorkoutAnalyticsRange(value) ? value : fallback);
 
 export const formatVolumeKg = (value: number) => `${integerFormatter.format(Math.round(value))} kg`;

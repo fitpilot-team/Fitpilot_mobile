@@ -30,7 +30,9 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
   if (!points.length || repRanges.length === 0) {
     return (
       <View style={styles.emptyState}>
-        <Text style={styles.emptyText}>No hay volumen con carga en este rango.</Text>
+        <Text style={styles.emptyText}>
+          No hay volumen con carga en este rango. Completa sesiones con peso para ver la distribucion semanal.
+        </Text>
       </View>
     );
   }
@@ -109,6 +111,10 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
           </View>
         </View>
       </ScrollView>
+
+      <Text style={styles.chartHint}>
+        Cada columna resume el volumen semanal con carga. Los colores indican en que rangos de reps estuvo repartido.
+      </Text>
     </View>
   );
 };
@@ -165,6 +171,12 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
       textAlign: 'center',
+    },
+    chartHint: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      lineHeight: 18,
     },
   });
 
