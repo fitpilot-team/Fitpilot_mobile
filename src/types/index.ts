@@ -416,6 +416,12 @@ export interface RepRangeChartPoint {
   totals: Record<string, number>;
 }
 
+export interface WorkoutAnalyticsMetricContext {
+  reps_exact: number;
+  rep_bucket_id?: string | null;
+  rep_bucket_label?: string | null;
+}
+
 export interface ExerciseTrendSummary {
   exercise_id: string;
   exercise_name: string;
@@ -432,6 +438,8 @@ export interface ExerciseTrendSummary {
   primary_metric_value?: number | null;
   primary_metric_unit?: string | null;
   progress_score?: number | null;
+  primary_metric_context?: WorkoutAnalyticsMetricContext | null;
+  personal_best_context?: WorkoutAnalyticsMetricContext | null;
 }
 
 export interface RecentWorkoutHistoryItem {
@@ -609,6 +617,7 @@ export interface ExerciseTrendPoint {
   adherence_ratio?: number | null;
   top_set_backoff_delta_kg?: number | null;
   backoff_volume_kg?: number | null;
+  metric_contexts?: Partial<Record<ExerciseDetailMetric, WorkoutAnalyticsMetricContext>>;
 }
 
 export interface AvailableMetric {

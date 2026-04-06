@@ -5,6 +5,7 @@ import { borderRadius, fontSize, spacing } from '../../constants/colors';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { ExerciseDetailMetric, ExerciseTrendPoint, DisplayHints, RepRangeBucket } from '../../types';
 import { formatLocalDate } from '../../utils/date';
+import { formatMetricContext, getPointMetricContext } from '../../utils/analyticsProfiles';
 import {
   buildLineCoordinates,
   buildPolylinePoints,
@@ -145,6 +146,9 @@ export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
 
   const lastPoint = series[series.length - 1];
   const lastValue = extractMetricValue(lastPoint, metric);
+  const lastMetricContext = formatMetricContext(getPointMetricContext(lastPoint, metric), {
+    compact: false,
+  });
 
   return (
     <View>
@@ -246,6 +250,7 @@ export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
         <View style={styles.metaColumn}>
           <Text style={styles.metaLabel}>{config.lineLabel} reciente</Text>
           <Text style={styles.metaValue}>{config.formatValue(lastValue)}</Text>
+          {lastMetricContext ? <Text style={styles.metaContext}>{lastMetricContext}</Text> : null}
         </View>
       </View>
 
@@ -309,6 +314,12 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       fontWeight: '700',
       color: theme.colors.textPrimary,
+    },
+    metaContext: {
+      marginTop: 4,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      lineHeight: 16,
     },
     emptyState: {
       borderRadius: borderRadius.lg,

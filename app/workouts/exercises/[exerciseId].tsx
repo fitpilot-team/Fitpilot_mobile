@@ -35,11 +35,13 @@ import {
 } from '../../../src/utils/workoutAnalytics';
 import {
   formatMetricValue,
+  formatMetricContext,
   getAvailableMetrics,
   getDefaultMetric,
   getMetricChartSubtitle,
   getMetricLabel,
   getMetricValue,
+  getPointMetricContext,
   getPrimaryMetricPersonalBest,
   getProfileConfig,
   getProfileContextCopy,
@@ -172,19 +174,22 @@ export default function ExerciseTrendDetailScreen() {
       {
         label: `${primaryMetricPersonalBest.label} PR`,
         value: formatMetricValue(primaryMetricPersonalBest.value, primaryMetricPersonalBest.unit),
+        context: formatMetricContext(primaryMetricPersonalBest.context, { compact: false }),
       },
-      { label: 'Sesiones', value: `${detail.summary.total_sessions}` },
+      { label: 'Sesiones', value: `${detail.summary.total_sessions}`, context: null },
       {
         label: 'Primera',
         value: detail.summary.first_logged_at
           ? formatLocalDate(detail.summary.first_logged_at, { day: 'numeric', month: 'short' })
           : '--',
+        context: null,
       },
       {
         label: 'Ultima',
         value: detail.summary.last_logged_at
           ? formatLocalDate(detail.summary.last_logged_at, { day: 'numeric', month: 'short' })
           : '--',
+        context: null,
       },
     ];
 
@@ -279,6 +284,7 @@ export default function ExerciseTrendDetailScreen() {
             {summaryCards.map((card) => (
               <View key={card.label} style={styles.summaryCard}>
                 <Text style={styles.summaryValue}>{card.value}</Text>
+                {card.context ? <Text style={styles.summaryContext}>{card.context}</Text> : null}
                 <Text style={styles.summaryLabel}>{card.label}</Text>
               </View>
             ))}
@@ -310,6 +316,99 @@ export default function ExerciseTrendDetailScreen() {
               .map((point) => {
                 const bucketEntries = getPointBucketEntries(point.rep_bucket_totals, repRangeMap);
                 const primaryMetricValue = getMetricValue(point, profileConfig.primaryMetric);
+                const recordMetricItems = [
+                  {
+                    key: 'primary',
+                    label: primaryMetricLabel,
+                    value: formatMetricValue(primaryMetricValue, profileConfig.primaryUnit),
+                    context: formatMetricContext(
+                      getPointMetricContext(point, profileConfig.primaryMetric),
+                      { compact: false },
+                    ),
+                  },
+                  point.volume_kg > 0 && profileConfig.primaryMetric !== 'volume'
+                    ? {
+                        key: 'volume',
+                        label: 'Volumen',
+                        value: formatVolumeKg(point.volume_kg),
+                        context: null,
+                      }
+                    : null,
+                  point.best_reps != null &&
+                  point.best_reps > 0 &&
+                  profileConfig.primaryMetric !== 'best_reps'
+                    ? {
+                        key: 'best_reps',
+                        label: 'Mejor reps',
+                        value: `${point.best_reps}`,
+                        context: formatMetricContext(getPointMetricContext(point, 'best_reps'), {
+                          compact: false,
+                        }),
+                      }
+                    : null,
+                  point.total_reps != null &&
+                  point.total_reps > 0 &&
+                  profileConfig.primaryMetric !== 'total_reps'
+                    ? {
+                        key: 'total_reps',
+                        label: 'Total reps',
+                        value: `${point.total_reps}`,
+                        context: null,
+                      }
+                    : null,
+                  point.e1rm_kg != null &&
+                  point.e1rm_kg > 0 &&
+                  profileConfig.primaryMetric !== 'e1rm'
+                    ? {
+                        key: 'e1rm',
+                        label: '1RM est.',
+                        value: formatWeightKg(point.e1rm_kg),
+                        context: formatMetricContext(getPointMetricContext(point, 'e1rm'), {
+                          compact: false,
+                        }),
+                      }
+                    : null,
+                  point.relative_intensity_pct != null
+                    ? {
+                        key: 'relative_intensity',
+                        label: 'Intensidad rel.',
+                        value: `${point.relative_intensity_pct.toFixed(1)}%`,
+                        context: null,
+                      }
+                    : null,
+                  point.avg_effort != null
+                    ? {
+                        key: 'effort',
+                        label: 'Esfuerzo',
+                        value: point.avg_effort.toFixed(1),
+                        context: null,
+                      }
+                    : null,
+                  point.adherence_ratio != null
+                    ? {
+                        key: 'adherence',
+                        label: 'Adherencia',
+                        value: `${point.adherence_ratio.toFixed(2)}x`,
+                        context: null,
+                      }
+                    : null,
+                  point.top_set_backoff_delta_kg != null
+                    ? {
+                        key: 'top_vs_backoff',
+                        label: 'Top vs backoff',
+                        value: formatWeightKg(point.top_set_backoff_delta_kg),
+                        context: null,
+                      }
+                    : null,
+                  point.backoff_volume_kg != null && point.backoff_volume_kg > 0
+                    ? {
+                        key: 'backoff_volume',
+                        label: 'Vol. backoff',
+                        value: formatVolumeKg(point.backoff_volume_kg),
+                        context: null,
+                      }
+                    : null,
+                ].filter((item): item is { key: string; label: string; value: string; context: string | null } => Boolean(item));
 
                 return (
                   <View key={point.performed_on_date} style={styles.recordCard}>
@@ -345,66 +444,15 @@ export default function ExerciseTrendDetailScreen() {
                     ) : null}
 
                     <View style={styles.recordStatsRow}>
-                      <View style={styles.recordStatPill}>
-                        <Text style={styles.recordStatLabel}>{primaryMetricLabel}</Text>
-                        <Text style={styles.recordStatValue}>
-                          {formatMetricValue(primaryMetricValue, profileConfig.primaryUnit)}
-                        </Text>
-                      </View>
-                      {point.volume_kg > 0 ? (
-                        <View style={styles.recordStatPill}>
-                          <Text style={styles.recordStatLabel}>Volumen</Text>
-                          <Text style={styles.recordStatValue}>{formatVolumeKg(point.volume_kg)}</Text>
+                      {recordMetricItems.map((item) => (
+                        <View key={`${point.performed_on_date}-${item.key}`} style={styles.recordStatPill}>
+                          <Text style={styles.recordStatLabel}>{item.label}</Text>
+                          <Text style={styles.recordStatValue}>{item.value}</Text>
+                          {item.context ? (
+                            <Text style={styles.recordStatContext}>{item.context}</Text>
+                          ) : null}
                         </View>
-                      ) : null}
-                      {point.best_reps != null && point.best_reps > 0 ? (
-                        <View style={styles.recordStatPill}>
-                          <Text style={styles.recordStatLabel}>Mejor reps</Text>
-                          <Text style={styles.recordStatValue}>{point.best_reps}</Text>
-                        </View>
-                      ) : null}
-                      {point.total_reps != null && point.total_reps > 0 ? (
-                        <View style={styles.recordStatPill}>
-                          <Text style={styles.recordStatLabel}>Total reps</Text>
-                          <Text style={styles.recordStatValue}>{point.total_reps}</Text>
-                        </View>
-                      ) : null}
-                      {point.e1rm_kg != null && point.e1rm_kg > 0 ? (
-                        <View style={styles.recordStatPill}>
-                          <Text style={styles.recordStatLabel}>1RM est.</Text>
-                          <Text style={styles.recordStatValue}>{formatWeightKg(point.e1rm_kg)}</Text>
-                        </View>
-                      ) : null}
-                      {point.relative_intensity_pct != null ? (
-                        <View style={styles.recordStatPill}>
-                          <Text style={styles.recordStatLabel}>Intensidad rel.</Text>
-                          <Text style={styles.recordStatValue}>{point.relative_intensity_pct.toFixed(1)}%</Text>
-                        </View>
-                      ) : null}
-                      {point.avg_effort != null ? (
-                        <View style={styles.recordStatPill}>
-                          <Text style={styles.recordStatLabel}>Esfuerzo</Text>
-                          <Text style={styles.recordStatValue}>{point.avg_effort.toFixed(1)}</Text>
-                        </View>
-                      ) : null}
-                      {point.adherence_ratio != null ? (
-                        <View style={styles.recordStatPill}>
-                          <Text style={styles.recordStatLabel}>Adherencia</Text>
-                          <Text style={styles.recordStatValue}>{point.adherence_ratio.toFixed(2)}x</Text>
-                        </View>
-                      ) : null}
-                      {point.top_set_backoff_delta_kg != null ? (
-                        <View style={styles.recordStatPill}>
-                          <Text style={styles.recordStatLabel}>Top vs backoff</Text>
-                          <Text style={styles.recordStatValue}>{formatWeightKg(point.top_set_backoff_delta_kg)}</Text>
-                        </View>
-                      ) : null}
-                      {point.backoff_volume_kg != null && point.backoff_volume_kg > 0 ? (
-                        <View style={styles.recordStatPill}>
-                          <Text style={styles.recordStatLabel}>Vol. backoff</Text>
-                          <Text style={styles.recordStatValue}>{formatVolumeKg(point.backoff_volume_kg)}</Text>
-                        </View>
-                      ) : null}
+                      ))}
                     </View>
                   </View>
                 );
@@ -541,6 +589,12 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       color: theme.colors.textPrimary,
     },
+    summaryContext: {
+      marginTop: 4,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      lineHeight: 16,
+    },
     summaryLabel: {
       marginTop: spacing.xs,
       fontSize: fontSize.xs,
@@ -652,6 +706,12 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       fontWeight: '700',
       color: theme.colors.textPrimary,
+    },
+    recordStatContext: {
+      marginTop: 4,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      lineHeight: 16,
     },
     emptyCard: {
       alignItems: 'center',

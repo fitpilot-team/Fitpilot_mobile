@@ -11,6 +11,8 @@ import type {
   ExerciseDetailMetric,
   ExerciseTrendDetail,
   ExerciseTrendPoint,
+  ExerciseTrendSummary,
+  WorkoutAnalyticsMetricContext,
 } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -97,6 +99,55 @@ export const getMetricValue = (
 ): number | null | undefined => {
   const extractor = METRIC_EXTRACTORS[metricKey];
   return extractor ? extractor(point) : null;
+};
+
+const CONTEXTUAL_METRICS = new Set<ExerciseDetailMetric>([
+  'best_weight',
+  'best_reps',
+  'e1rm',
+  'top_set_weight',
+]);
+
+export const getPointMetricContext = (
+  point: ExerciseTrendPoint | null | undefined,
+  metricKey: ExerciseDetailMetric,
+): WorkoutAnalyticsMetricContext | null => {
+  if (!point || !CONTEXTUAL_METRICS.has(metricKey)) {
+    return null;
+  }
+
+  return point.metric_contexts?.[metricKey] ?? null;
+};
+
+export const getSummaryMetricContext = (
+  summary: ExerciseTrendSummary | null | undefined,
+  kind: 'primary' | 'personal_best' = 'primary',
+): WorkoutAnalyticsMetricContext | null => {
+  if (!summary) {
+    return null;
+  }
+
+  return kind === 'personal_best'
+    ? summary.personal_best_context ?? null
+    : summary.primary_metric_context ?? null;
+};
+
+export const formatMetricContext = (
+  context: WorkoutAnalyticsMetricContext | null | undefined,
+  options?: { compact?: boolean },
+): string | null => {
+  if (!context?.reps_exact) {
+    return null;
+  }
+
+  const compact = options?.compact ?? false;
+  const parts = [`${context.reps_exact} reps`];
+
+  if (context.rep_bucket_label) {
+    parts.push(compact ? context.rep_bucket_label : `rango ${context.rep_bucket_label}`);
+  }
+
+  return parts.join(' · ');
 };
 
 // ---------------------------------------------------------------------------
@@ -196,17 +247,32 @@ export const getProfilePrimaryMetricLabel = (
 
 export const getPrimaryMetricPersonalBest = (
   detail: ExerciseTrendDetail | null,
-): { label: string; value: number | null; unit: string } => {
+): {
+  label: string;
+  value: number | null;
+  unit: string;
+  context: WorkoutAnalyticsMetricContext | null;
+} => {
   const profile = getProfileConfig(detail?.analytics_profile);
   const metric = profile.primaryMetric;
-  const values = (detail?.series ?? [])
-    .map((point) => getMetricValue(point, metric))
-    .filter((value): value is number => value != null);
+  let bestValue: number | null = null;
+  let bestContext: WorkoutAnalyticsMetricContext | null = null;
+
+  (detail?.series ?? []).forEach((point) => {
+    const value = getMetricValue(point, metric);
+    if (value == null || (bestValue != null && value < bestValue)) {
+      return;
+    }
+
+    bestValue = value;
+    bestContext = getPointMetricContext(point, metric);
+  });
 
   return {
     label: getMetricLabel(metric),
-    value: values.length ? Math.max(...values) : null,
+    value: bestValue,
     unit: profile.primaryUnit,
+    context: bestContext,
   };
 };
 

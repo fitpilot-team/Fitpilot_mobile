@@ -72,7 +72,11 @@ import {
   isTabletLayout,
 } from '../../src/utils/layout';
 import { formatVolumeKg, formatWeightKg, getTrendStatusMeta } from '../../src/utils/workoutAnalytics';
-import { formatMetricValue } from '../../src/utils/analyticsProfiles';
+import {
+  formatMetricValue,
+  formatMetricContext,
+  getSummaryMetricContext,
+} from '../../src/utils/analyticsProfiles';
 import {
   areSelectionsEqual,
   buildHistoricalProgramsCatalog,
@@ -435,6 +439,9 @@ const ExerciseCard = ({
 }) => {
   const styles = useThemedStyles(createStyles);
   const trendMeta = getTrendStatusMeta(exercise.trend_status);
+  const primaryMetricContext = formatMetricContext(getSummaryMetricContext(exercise), {
+    compact: true,
+  });
 
   return (
     <TouchableOpacity style={styles.exerciseCard} activeOpacity={0.88} onPress={onPress}>
@@ -471,6 +478,9 @@ const ExerciseCard = ({
               ? formatMetricValue(exercise.primary_metric_value, exercise.primary_metric_unit ?? '')
               : formatWeightKg(exercise.best_recent_weight_kg ?? exercise.latest_best_weight_kg ?? null)}
           </Text>
+          {exercise.primary_metric_value != null && primaryMetricContext ? (
+            <Text style={styles.exerciseMetricContext}>{primaryMetricContext}</Text>
+          ) : null}
         </View>
 
         <View style={styles.exerciseMetricPill}>
@@ -1993,6 +2003,11 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       fontWeight: '700',
       color: theme.colors.textPrimary,
+    },
+    exerciseMetricContext: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      lineHeight: 16,
     },
     trendBadge: {
       flexDirection: 'row',
