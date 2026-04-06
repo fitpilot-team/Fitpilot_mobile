@@ -445,7 +445,7 @@ const ExerciseCard = ({
     profileConfig.primaryMetric,
     getSummaryMetricContext(exercise),
     {
-      compact: true,
+      variant: 'list_compact',
     },
   );
 

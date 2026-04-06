@@ -164,6 +164,9 @@ export default function ExerciseTrendDetailScreen() {
     () => getPrimaryMetricPersonalBest(detail),
     [detail],
   );
+  const profileConfig = getProfileConfig(detail?.analytics_profile);
+  const profileContextCopy = getProfileContextCopy(detail?.analytics_profile);
+  const primaryMetricLabel = getProfilePrimaryMetricLabel(detail?.analytics_profile);
 
   const summaryCards = useMemo(() => {
     if (!detail) {
@@ -175,7 +178,7 @@ export default function ExerciseTrendDetailScreen() {
         label: `${primaryMetricPersonalBest.label} PR`,
         value: formatMetricValue(primaryMetricPersonalBest.value, primaryMetricPersonalBest.unit),
         context: formatMetricContext(profileConfig.primaryMetric, primaryMetricPersonalBest.context, {
-          compact: false,
+          variant: 'summary_compact',
         }),
       },
       { label: 'Sesiones', value: `${detail.summary.total_sessions}`, context: null },
@@ -200,9 +203,6 @@ export default function ExerciseTrendDetailScreen() {
 
   const chartSubtitle = getMetricChartSubtitle(selectedMetric);
   const metricLabel = getMetricLabel(selectedMetric);
-  const profileConfig = getProfileConfig(detail?.analytics_profile);
-  const profileContextCopy = getProfileContextCopy(detail?.analytics_profile);
-  const primaryMetricLabel = getProfilePrimaryMetricLabel(detail?.analytics_profile);
   const scopeLabel =
     scopeKind === 'microcycle'
       ? 'Microciclo'
@@ -317,6 +317,14 @@ export default function ExerciseTrendDetailScreen() {
               .reverse()
               .map((point) => {
                 const bucketEntries = getPointBucketEntries(point.rep_bucket_totals, repRangeMap);
+                const recordBucketLabel =
+                  bucketEntries.length > 1
+                    ? 'Mixta'
+                    : bucketEntries.length === 1
+                      ? bucketEntries[0].label
+                      : point.reps_bucket_id
+                        ? repRangeMap[point.reps_bucket_id] || 'Sin bucket'
+                        : 'Sin bucket';
                 const primaryMetricValue = getMetricValue(point, profileConfig.primaryMetric);
                 const recordMetricItems = [
                   {
@@ -326,7 +334,7 @@ export default function ExerciseTrendDetailScreen() {
                     context: formatMetricContext(
                       profileConfig.primaryMetric,
                       getPointMetricContext(point, profileConfig.primaryMetric),
-                      { compact: false },
+                      { variant: 'record_detail' },
                     ),
                   },
                   point.volume_kg > 0 && profileConfig.primaryMetric !== 'volume'
@@ -348,7 +356,7 @@ export default function ExerciseTrendDetailScreen() {
                           'best_reps',
                           getPointMetricContext(point, 'best_reps'),
                           {
-                            compact: false,
+                            variant: 'record_detail',
                           },
                         ),
                       }
@@ -371,7 +379,7 @@ export default function ExerciseTrendDetailScreen() {
                         label: '1RM est.',
                         value: formatWeightKg(point.e1rm_kg),
                         context: formatMetricContext('e1rm', getPointMetricContext(point, 'e1rm'), {
-                          compact: false,
+                          variant: 'record_detail',
                         }),
                       }
                     : null,
@@ -428,13 +436,7 @@ export default function ExerciseTrendDetailScreen() {
                         })}
                       </Text>
                       <View style={styles.recordBucket}>
-                        <Text style={styles.recordBucketText}>
-                          {bucketEntries.length
-                            ? `${bucketEntries.length} rango${bucketEntries.length > 1 ? 's' : ''}`
-                            : point.reps_bucket_id
-                              ? repRangeMap[point.reps_bucket_id] || 'Sin bucket'
-                              : 'Sin bucket'}
-                        </Text>
+                        <Text style={styles.recordBucketText}>{recordBucketLabel}</Text>
                       </View>
                     </View>
 

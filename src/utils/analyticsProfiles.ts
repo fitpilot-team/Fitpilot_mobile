@@ -1,5 +1,5 @@
 /**
- * Analytics Profiles — Frontend adapter layer.
+ * Analytics Profiles - Frontend adapter layer.
  *
  * Provides utilities to interpret the backend's AnalyticsProfile-aware
  * data and drive the UI without hardcoding metric meanings.
@@ -15,10 +15,6 @@ import type {
   WorkoutAnalyticsMetricContext,
 } from '../types';
 
-// ---------------------------------------------------------------------------
-// Profile configuration (client-side mirror of backend profiles)
-// ---------------------------------------------------------------------------
-
 export interface ProfileConfig {
   id: AnalyticsProfileId;
   label: string;
@@ -33,7 +29,7 @@ export interface ProfileConfig {
 const PROFILE_CONFIGS: Record<AnalyticsProfileId, ProfileConfig> = {
   double_progression_hypertrophy: {
     id: 'double_progression_hypertrophy',
-    label: 'Doble progresión (hipertrofia)',
+    label: 'Doble progresion (hipertrofia)',
     primaryMetric: 'best_weight',
     primaryUnit: 'kg',
     showVolumeBars: true,
@@ -75,30 +71,17 @@ const PROFILE_CONFIGS: Record<AnalyticsProfileId, ProfileConfig> = {
 
 const DEFAULT_PROFILE: AnalyticsProfileId = 'double_progression_hypertrophy';
 
-export const getProfileConfig = (
-  profileId: AnalyticsProfileId | null | undefined,
-): ProfileConfig => PROFILE_CONFIGS[profileId ?? DEFAULT_PROFILE] ?? PROFILE_CONFIGS[DEFAULT_PROFILE];
-
-// ---------------------------------------------------------------------------
-// Metric value extraction from a trend point
-// ---------------------------------------------------------------------------
-
-const METRIC_EXTRACTORS: Record<ExerciseDetailMetric, (p: ExerciseTrendPoint) => number | null | undefined> = {
-  best_weight: (p) => p.best_weight_kg,
-  volume: (p) => (p.volume_kg > 0 ? p.volume_kg : null),
-  best_reps: (p) => p.best_reps,
-  effort: (p) => p.avg_effort,
-  e1rm: (p) => p.e1rm_kg,
-  top_set_weight: (p) => p.top_set_weight_kg,
-  total_reps: (p) => p.total_reps,
-};
-
-export const getMetricValue = (
-  point: ExerciseTrendPoint,
-  metricKey: ExerciseDetailMetric,
-): number | null | undefined => {
-  const extractor = METRIC_EXTRACTORS[metricKey];
-  return extractor ? extractor(point) : null;
+const METRIC_EXTRACTORS: Record<
+  ExerciseDetailMetric,
+  (point: ExerciseTrendPoint) => number | null | undefined
+> = {
+  best_weight: (point) => point.best_weight_kg,
+  volume: (point) => (point.volume_kg > 0 ? point.volume_kg : null),
+  best_reps: (point) => point.best_reps,
+  effort: (point) => point.avg_effort,
+  e1rm: (point) => point.e1rm_kg,
+  top_set_weight: (point) => point.top_set_weight_kg,
+  total_reps: (point) => point.total_reps,
 };
 
 const CONTEXTUAL_METRICS = new Set<ExerciseDetailMetric>([
@@ -107,6 +90,50 @@ const CONTEXTUAL_METRICS = new Set<ExerciseDetailMetric>([
   'e1rm',
   'top_set_weight',
 ]);
+
+const METRIC_LABELS: Record<ExerciseDetailMetric, string> = {
+  best_weight: 'Mejor carga',
+  volume: 'Volumen',
+  best_reps: 'Mejor reps',
+  effort: 'Esfuerzo',
+  e1rm: '1RM estimado',
+  top_set_weight: 'Top set',
+  total_reps: 'Total reps',
+};
+
+const METRIC_CHART_SUBTITLES: Record<ExerciseDetailMetric, string> = {
+  best_weight:
+    'La linea principal sigue la mejor carga registrada; las barras dejan ver el volumen por rango de reps.',
+  volume: 'Volumen total (reps x kg) por sesion a lo largo del tiempo.',
+  best_reps: 'Las repeticiones mas altas logradas en un set por sesion.',
+  effort:
+    'Esfuerzo promedio registrado (RIR/RPE) por sesion. Menor valor = mas cerca del fallo.',
+  e1rm: '1RM estimado (Epley) basado en el top set de cada sesion. Util como tendencia relativa.',
+  top_set_weight: 'Peso del top set (set con mayor carga) por sesion.',
+  total_reps: 'Total de repeticiones completadas por sesion.',
+};
+
+export type MetricContextVariant =
+  | 'list_compact'
+  | 'summary_compact'
+  | 'record_detail'
+  | 'chart_weight_meta'
+  | 'chart_default';
+
+const formatContextWeight = (weightKg: number): string =>
+  `${new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(weightKg)} kg`;
+
+export const getProfileConfig = (
+  profileId: AnalyticsProfileId | null | undefined,
+): ProfileConfig => PROFILE_CONFIGS[profileId ?? DEFAULT_PROFILE] ?? PROFILE_CONFIGS[DEFAULT_PROFILE];
+
+export const getMetricValue = (
+  point: ExerciseTrendPoint,
+  metricKey: ExerciseDetailMetric,
+): number | null | undefined => {
+  const extractor = METRIC_EXTRACTORS[metricKey];
+  return extractor ? extractor(point) : null;
+};
 
 export const getPointMetricContext = (
   point: ExerciseTrendPoint | null | undefined,
@@ -135,38 +162,49 @@ export const getSummaryMetricContext = (
 export const formatMetricContext = (
   metricKey: ExerciseDetailMetric,
   context: WorkoutAnalyticsMetricContext | null | undefined,
-  options?: { compact?: boolean },
+  options?: { variant?: MetricContextVariant },
 ): string | null => {
   if (!context?.reps_exact) {
     return null;
   }
 
-  const compact = options?.compact ?? false;
+  const variant = options?.variant ?? 'chart_default';
   const parts: string[] = [];
+  const weightKg = context.weight_kg;
+  const hasWeight =
+    metricKey === 'best_reps' &&
+    typeof weightKg === 'number' &&
+    weightKg > 0;
 
-  if (metricKey === 'best_reps' && context.weight_kg != null && context.weight_kg > 0) {
-    const weight = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(context.weight_kg);
-    parts.push(`${weight} kg`);
+  if (hasWeight) {
+    parts.push(formatContextWeight(weightKg));
+  }
+
+  if (variant === 'record_detail' && metricKey === 'best_reps') {
+    return parts.length ? parts.join(' · ') : null;
   }
 
   parts.push(`${context.reps_exact} reps`);
 
-  if (context.rep_bucket_label) {
-    parts.push(compact ? context.rep_bucket_label : `rango ${context.rep_bucket_label}`);
+  const shouldIncludeBucket =
+    Boolean(context.rep_bucket_label) &&
+    (
+      variant === 'list_compact' ||
+      variant === 'summary_compact' ||
+      (variant === 'chart_default' && metricKey !== 'best_reps')
+    );
+
+  if (shouldIncludeBucket && context.rep_bucket_label) {
+    parts.push(
+      variant === 'list_compact' || variant === 'summary_compact'
+        ? context.rep_bucket_label
+        : `rango ${context.rep_bucket_label}`,
+    );
   }
 
   return parts.join(' · ');
 };
 
-// ---------------------------------------------------------------------------
-// Dynamic metric options from backend response
-// ---------------------------------------------------------------------------
-
-/**
- * Returns the metric options the UI should present as pills.
- * Uses backend `available_metrics` if present (Phase 2), otherwise
- * falls back to the static EXERCISE_DETAIL_METRIC_OPTIONS (Phase 1).
- */
 export const getAvailableMetrics = (
   detail: ExerciseTrendDetail | null,
 ): AvailableMetric[] => {
@@ -174,7 +212,6 @@ export const getAvailableMetrics = (
     return detail.available_metrics;
   }
 
-  // Phase 1 fallback — static list
   return [
     { key: 'best_weight', label: 'Mejor carga', unit: 'kg', available: true },
     { key: 'volume', label: 'Volumen', unit: 'kg', available: true },
@@ -183,9 +220,6 @@ export const getAvailableMetrics = (
   ];
 };
 
-/**
- * Returns the default metric to show based on the backend response.
- */
 export const getDefaultMetric = (
   detail: ExerciseTrendDetail | null,
 ): ExerciseDetailMetric => {
@@ -195,32 +229,6 @@ export const getDefaultMetric = (
 
   const config = getProfileConfig(detail?.analytics_profile);
   return config.primaryMetric;
-};
-
-// ---------------------------------------------------------------------------
-// Metric label / chart subtitle helpers
-// ---------------------------------------------------------------------------
-
-const METRIC_LABELS: Record<ExerciseDetailMetric, string> = {
-  best_weight: 'Mejor carga',
-  volume: 'Volumen',
-  best_reps: 'Mejor reps',
-  effort: 'Esfuerzo',
-  e1rm: '1RM estimado',
-  top_set_weight: 'Top set',
-  total_reps: 'Total reps',
-};
-
-const METRIC_CHART_SUBTITLES: Record<ExerciseDetailMetric, string> = {
-  best_weight:
-    'La linea principal sigue la mejor carga registrada; las barras dejan ver el volumen por rango de reps.',
-  volume: 'Volumen total (reps × kg) por sesion a lo largo del tiempo.',
-  best_reps: 'Las repeticiones mas altas logradas en un set por sesion.',
-  effort:
-    'Esfuerzo promedio registrado (RIR/RPE) por sesion. Menor valor = mas cerca del fallo.',
-  e1rm: '1RM estimado (Epley) basado en el top set de cada sesion. Util como tendencia relativa.',
-  top_set_weight: 'Peso del top set (set con mayor carga) por sesion.',
-  total_reps: 'Total de repeticiones completadas por sesion.',
 };
 
 export const getMetricLabel = (metric: ExerciseDetailMetric): string =>
@@ -283,10 +291,6 @@ export const getPrimaryMetricPersonalBest = (
     context: bestContext,
   };
 };
-
-// ---------------------------------------------------------------------------
-// Format helpers for profile-aware display
-// ---------------------------------------------------------------------------
 
 export const formatMetricValue = (
   value: number | null | undefined,
