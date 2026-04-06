@@ -75,6 +75,7 @@ import { formatVolumeKg, formatWeightKg, getTrendStatusMeta } from '../../src/ut
 import {
   formatMetricValue,
   formatMetricContext,
+  getProfileConfig,
   getSummaryMetricContext,
 } from '../../src/utils/analyticsProfiles';
 import {
@@ -439,9 +440,14 @@ const ExerciseCard = ({
 }) => {
   const styles = useThemedStyles(createStyles);
   const trendMeta = getTrendStatusMeta(exercise.trend_status);
-  const primaryMetricContext = formatMetricContext(getSummaryMetricContext(exercise), {
-    compact: true,
-  });
+  const profileConfig = getProfileConfig(exercise.analytics_profile);
+  const primaryMetricContext = formatMetricContext(
+    profileConfig.primaryMetric,
+    getSummaryMetricContext(exercise),
+    {
+      compact: true,
+    },
+  );
 
   return (
     <TouchableOpacity style={styles.exerciseCard} activeOpacity={0.88} onPress={onPress}>

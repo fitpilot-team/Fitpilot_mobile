@@ -418,6 +418,7 @@ export interface RepRangeChartPoint {
 
 export interface WorkoutAnalyticsMetricContext {
   reps_exact: number;
+  weight_kg?: number | null;
   rep_bucket_id?: string | null;
   rep_bucket_label?: string | null;
 }

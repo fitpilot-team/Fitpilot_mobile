@@ -133,6 +133,7 @@ export const getSummaryMetricContext = (
 };
 
 export const formatMetricContext = (
+  metricKey: ExerciseDetailMetric,
   context: WorkoutAnalyticsMetricContext | null | undefined,
   options?: { compact?: boolean },
 ): string | null => {
@@ -141,7 +142,14 @@ export const formatMetricContext = (
   }
 
   const compact = options?.compact ?? false;
-  const parts = [`${context.reps_exact} reps`];
+  const parts: string[] = [];
+
+  if (metricKey === 'best_reps' && context.weight_kg != null && context.weight_kg > 0) {
+    const weight = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(context.weight_kg);
+    parts.push(`${weight} kg`);
+  }
+
+  parts.push(`${context.reps_exact} reps`);
 
   if (context.rep_bucket_label) {
     parts.push(compact ? context.rep_bucket_label : `rango ${context.rep_bucket_label}`);

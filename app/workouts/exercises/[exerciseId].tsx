@@ -174,7 +174,9 @@ export default function ExerciseTrendDetailScreen() {
       {
         label: `${primaryMetricPersonalBest.label} PR`,
         value: formatMetricValue(primaryMetricPersonalBest.value, primaryMetricPersonalBest.unit),
-        context: formatMetricContext(primaryMetricPersonalBest.context, { compact: false }),
+        context: formatMetricContext(profileConfig.primaryMetric, primaryMetricPersonalBest.context, {
+          compact: false,
+        }),
       },
       { label: 'Sesiones', value: `${detail.summary.total_sessions}`, context: null },
       {
@@ -194,7 +196,7 @@ export default function ExerciseTrendDetailScreen() {
     ];
 
     return base;
-  }, [detail, primaryMetricPersonalBest]);
+  }, [detail, primaryMetricPersonalBest, profileConfig.primaryMetric]);
 
   const chartSubtitle = getMetricChartSubtitle(selectedMetric);
   const metricLabel = getMetricLabel(selectedMetric);
@@ -322,6 +324,7 @@ export default function ExerciseTrendDetailScreen() {
                     label: primaryMetricLabel,
                     value: formatMetricValue(primaryMetricValue, profileConfig.primaryUnit),
                     context: formatMetricContext(
+                      profileConfig.primaryMetric,
                       getPointMetricContext(point, profileConfig.primaryMetric),
                       { compact: false },
                     ),
@@ -341,9 +344,13 @@ export default function ExerciseTrendDetailScreen() {
                         key: 'best_reps',
                         label: 'Mejor reps',
                         value: `${point.best_reps}`,
-                        context: formatMetricContext(getPointMetricContext(point, 'best_reps'), {
-                          compact: false,
-                        }),
+                        context: formatMetricContext(
+                          'best_reps',
+                          getPointMetricContext(point, 'best_reps'),
+                          {
+                            compact: false,
+                          },
+                        ),
                       }
                     : null,
                   point.total_reps != null &&
@@ -363,7 +370,7 @@ export default function ExerciseTrendDetailScreen() {
                         key: 'e1rm',
                         label: '1RM est.',
                         value: formatWeightKg(point.e1rm_kg),
-                        context: formatMetricContext(getPointMetricContext(point, 'e1rm'), {
+                        context: formatMetricContext('e1rm', getPointMetricContext(point, 'e1rm'), {
                           compact: false,
                         }),
                       }
