@@ -29,6 +29,16 @@ export type ThemeColors = {
   tabBarActiveBg: string;
   tabBarActiveTint: string;
   tabBarInactiveTint: string;
+  phoneNavShellBackground: string;
+  phoneNavShellBorder: string;
+  phoneNavShellBlurTint: 'light' | 'dark';
+  phoneNavIndicatorBackground: string;
+  phoneNavLabelActive: string;
+  phoneNavLabelInactive: string;
+  phoneNavIconActive: string;
+  phoneNavIconInactive: string;
+  systemNavigationBarBackground: string;
+  systemNavigationBarButtonStyle: 'light' | 'dark';
   overlay: string;
   skeletonBase: string;
   skeletonHighlight: string;
@@ -71,6 +81,16 @@ const lightTheme: AppTheme = {
     tabBarActiveBg: '#E8F0F8',
     tabBarActiveTint: brandColors.navy,
     tabBarInactiveTint: colors.gray[400],
+    phoneNavShellBackground: 'rgba(255, 251, 246, 0.92)',
+    phoneNavShellBorder: 'rgba(24, 47, 80, 0.12)',
+    phoneNavShellBlurTint: 'light',
+    phoneNavIndicatorBackground: 'rgba(24, 47, 80, 0.10)',
+    phoneNavLabelActive: brandColors.navy,
+    phoneNavLabelInactive: colors.gray[500],
+    phoneNavIconActive: brandColors.navy,
+    phoneNavIconInactive: colors.gray[500],
+    systemNavigationBarBackground: colors.background,
+    systemNavigationBarButtonStyle: 'dark',
     overlay: 'rgba(17, 24, 39, 0.45)',
     skeletonBase: colors.gray[200],
     skeletonHighlight: 'rgba(255,255,255,0.4)',
@@ -107,6 +127,16 @@ const darkTheme: AppTheme = {
     tabBarActiveBg: 'rgba(103, 182, 223, 0.16)',
     tabBarActiveTint: brandColors.sky,
     tabBarInactiveTint: '#64748b',
+    phoneNavShellBackground: 'rgba(11, 20, 35, 0.92)',
+    phoneNavShellBorder: 'rgba(255, 255, 255, 0.08)',
+    phoneNavShellBlurTint: 'dark',
+    phoneNavIndicatorBackground: 'rgba(255, 255, 255, 0.15)',
+    phoneNavLabelActive: colors.white,
+    phoneNavLabelInactive: '#94a3b8',
+    phoneNavIconActive: colors.white,
+    phoneNavIconInactive: '#94a3b8',
+    systemNavigationBarBackground: '#0b1423',
+    systemNavigationBarButtonStyle: 'light',
     overlay: 'rgba(2, 6, 23, 0.72)',
     skeletonBase: '#223042',
     skeletonHighlight: 'rgba(255,255,255,0.12)',
@@ -168,4 +198,3 @@ export const useThemedStyles = <T extends StyleSheet.NamedStyles<T>>(
   const { theme } = useAppTheme();
   return useMemo(() => StyleSheet.create(factory(theme)), [theme, factory]);
 };
-

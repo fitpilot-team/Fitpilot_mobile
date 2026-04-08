@@ -3,12 +3,14 @@ import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Polyline, Rect } from 'react-native-svg';
 import { borderRadius, fontSize, spacing } from '../../constants/colors';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
-import type { ExerciseTrendPoint, RepRangeBucket } from '../../types';
+import type { ExerciseDetailMetric, ExerciseTrendPoint, DisplayHints, RepRangeBucket } from '../../types';
 import { formatLocalDate } from '../../utils/date';
+import { formatMetricContext, getPointMetricContext } from '../../utils/analyticsProfiles';
 import {
   buildLineCoordinates,
   buildPolylinePoints,
   formatVolumeKg,
+  formatWeightKg,
   getRepRangeColor,
 } from '../../utils/workoutAnalytics';
 
@@ -16,71 +18,204 @@ interface ExerciseTrendChartProps {
   series: ExerciseTrendPoint[];
   repRanges: RepRangeBucket[];
   contentWidth?: number;
+  metric?: ExerciseDetailMetric;
+  displayHints?: DisplayHints | null;
 }
 
 const CHART_HEIGHT = 220;
 const CHART_PADDING = { top: 20, right: 16, bottom: 32, left: 16 };
 
+const METRIC_CONFIG: Record<ExerciseDetailMetric, {
+  lineLabel: string;
+  barLabel: string;
+  showBars: boolean;
+  emptyText: string;
+  formatValue: (v: number | null | undefined) => string;
+}> = {
+  best_weight: {
+    lineLabel: 'Mejor carga',
+    barLabel: 'Volumen',
+    showBars: true,
+    emptyText: 'No hay registros de carga en este rango.',
+    formatValue: (v) => formatWeightKg(v),
+  },
+  volume: {
+    lineLabel: 'Volumen total',
+    barLabel: '',
+    showBars: false,
+    emptyText: 'No hay volumen registrado en este rango.',
+    formatValue: (v) => formatVolumeKg(v ?? 0),
+  },
+  best_reps: {
+    lineLabel: 'Mejor reps',
+    barLabel: '',
+    showBars: false,
+    emptyText: 'No hay repeticiones registradas en este rango.',
+    formatValue: (v) => (v != null ? `${Math.round(v)} reps` : '-- reps'),
+  },
+  effort: {
+    lineLabel: 'Esfuerzo prom.',
+    barLabel: '',
+    showBars: false,
+    emptyText: 'No hay datos de esfuerzo registrados en este rango.',
+    formatValue: (v) => (v != null ? `${v.toFixed(1)}` : '--'),
+  },
+  e1rm: {
+    lineLabel: '1RM estimado',
+    barLabel: '',
+    showBars: false,
+    emptyText: 'No hay datos suficientes para estimar 1RM.',
+    formatValue: (v) => formatWeightKg(v),
+  },
+  top_set_weight: {
+    lineLabel: 'Top set',
+    barLabel: '',
+    showBars: false,
+    emptyText: 'No hay top sets registrados.',
+    formatValue: (v) => formatWeightKg(v),
+  },
+  total_reps: {
+    lineLabel: 'Total reps',
+    barLabel: '',
+    showBars: false,
+    emptyText: 'No hay repeticiones registradas.',
+    formatValue: (v) => (v != null ? `${Math.round(v)} reps` : '-- reps'),
+  },
+};
+
+const extractMetricValue = (point: ExerciseTrendPoint, metric: ExerciseDetailMetric): number | null => {
+  switch (metric) {
+    case 'best_weight':
+      return point.best_weight_kg ?? null;
+    case 'volume':
+      return point.volume_kg;
+    case 'best_reps':
+      return point.best_reps ?? null;
+    case 'effort':
+      return point.avg_effort ?? null;
+    case 'e1rm':
+      return point.e1rm_kg ?? null;
+    case 'top_set_weight':
+      return point.top_set_weight_kg ?? null;
+    case 'total_reps':
+      return point.total_reps ?? null;
+    default:
+      return point.best_weight_kg ?? null;
+  }
+};
+
 export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
   series,
   repRanges,
   contentWidth = 360,
+  metric = 'best_weight',
+  displayHints,
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const config = METRIC_CONFIG[metric] ?? METRIC_CONFIG.best_weight;
 
-  if (!series.length) {
+  // displayHints can override bar visibility
+  const shouldShowBars = displayHints
+    ? displayHints.show_volume_bars && config.showBars
+    : config.showBars;
+
+  const lineValues = series.map((point) => extractMetricValue(point, metric) ?? 0);
+  const hasData = lineValues.some((v) => v !== 0);
+
+  if (!series.length || !hasData) {
     return (
       <View style={styles.emptyState}>
-        <Text style={styles.emptyText}>No hay registros del ejercicio en este rango.</Text>
+        <Text style={styles.emptyText}>{config.emptyText}</Text>
       </View>
     );
   }
 
   const chartWidth = Math.max(contentWidth - spacing.lg * 2, 280);
-  const weightValues = series.map((point) => point.best_weight_kg ?? 0);
-  const volumeValues = series.map((point) => point.volume_kg);
-  const linePoints = buildLineCoordinates(weightValues, chartWidth, CHART_HEIGHT, CHART_PADDING);
-  const maxVolume = Math.max(...volumeValues, 1);
+  const linePoints = buildLineCoordinates(lineValues, chartWidth, CHART_HEIGHT, CHART_PADDING);
   const chartBottom = CHART_HEIGHT - CHART_PADDING.bottom;
   const barAreaHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
   const slotWidth =
     series.length === 1 ? 0 : (chartWidth - CHART_PADDING.left - CHART_PADDING.right) / (series.length - 1);
+
+  const volumeValues = series.map((point) => {
+    const bucketTotal = Object.values(point.rep_bucket_totals ?? {}).reduce((sum, value) => sum + value, 0);
+    return bucketTotal > 0 ? bucketTotal : point.volume_kg;
+  });
+  const maxVolume = Math.max(...volumeValues, 1);
+
+  const lastPoint = series[series.length - 1];
+  const lastValue = extractMetricValue(lastPoint, metric);
+  const lastMetricContext = formatMetricContext(metric, getPointMetricContext(lastPoint, metric), {
+    variant:
+      metric === 'best_weight'
+        ? 'chart_weight_meta'
+        : metric === 'best_reps'
+          ? 'chart_reps_meta'
+          : 'chart_default',
+  });
 
   return (
     <View>
       <View style={styles.legendRow}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.legendLineDot]} />
-          <Text style={styles.legendLabel}>Mejor carga</Text>
+          <Text style={styles.legendLabel}>{config.lineLabel}</Text>
         </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.legendBarDot]} />
-          <Text style={styles.legendLabel}>Volumen</Text>
-        </View>
+        {shouldShowBars ? (
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, styles.legendBarDot]} />
+            <Text style={styles.legendLabel}>{config.barLabel}</Text>
+          </View>
+        ) : null}
       </View>
 
       <Svg width={chartWidth} height={CHART_HEIGHT}>
-        {series.map((point, index) => {
-          const x =
-            series.length === 1 ? chartWidth / 2 : CHART_PADDING.left + slotWidth * index;
-          const barHeight = (point.volume_kg / maxVolume) * (barAreaHeight * 0.45);
-          const barColor =
-            repRanges.find((bucket) => bucket.id === point.reps_bucket_id)?.color_token ?? 'sky';
+        {shouldShowBars
+          ? series.map((point, index) => {
+              const x =
+                series.length === 1 ? chartWidth / 2 : CHART_PADDING.left + slotWidth * index;
+              const bucketTotals = point.rep_bucket_totals ?? {};
+              const totalVolume = Object.values(bucketTotals).reduce((sum, value) => sum + value, 0) || point.volume_kg;
+              let stackedOffsetY = chartBottom;
 
-          return (
-            <Rect
-              key={`${point.performed_on_date}-volume`}
-              x={x - 10}
-              y={chartBottom - barHeight}
-              width={20}
-              height={barHeight}
-              rx={6}
-              fill={getRepRangeColor(barColor)}
-              fillOpacity={theme.isDark ? 0.3 : 0.24}
-            />
-          );
-        })}
+              if (totalVolume <= 0) {
+                return null;
+              }
+
+              return (
+                <React.Fragment key={`${point.performed_on_date}-volume`}>
+                  {repRanges.map((bucket, bucketIndex) => {
+                    const bucketValue =
+                      Object.keys(bucketTotals).length > 0
+                        ? bucketTotals[bucket.id] || 0
+                        : bucketIndex === 0
+                          ? totalVolume
+                          : 0;
+                    const segmentHeight = (bucketValue / maxVolume) * (barAreaHeight * 0.45);
+
+                    if (segmentHeight <= 0) {
+                      return null;
+                    }
+
+                    stackedOffsetY -= segmentHeight;
+                    return (
+                      <Rect
+                        key={`${point.performed_on_date}-${bucket.id}`}
+                        x={x - 10}
+                        y={stackedOffsetY}
+                        width={20}
+                        height={segmentHeight}
+                        rx={6}
+                        fill={getRepRangeColor(bucket.color_token)}
+                        fillOpacity={theme.isDark ? 0.34 : 0.28}
+                      />
+                    );
+                  })}
+                </React.Fragment>
+              );
+            })
+          : null}
 
         <Polyline
           fill="none"
@@ -118,10 +253,17 @@ export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
           </Text>
         </View>
         <View style={styles.metaColumn}>
-          <Text style={styles.metaLabel}>Volumen reciente</Text>
-          <Text style={styles.metaValue}>{formatVolumeKg(series[series.length - 1].volume_kg)}</Text>
+          <Text style={styles.metaLabel}>{config.lineLabel} reciente</Text>
+          <Text style={styles.metaValue}>{config.formatValue(lastValue)}</Text>
+          {lastMetricContext ? <Text style={styles.metaContext}>{lastMetricContext}</Text> : null}
         </View>
       </View>
+
+      {shouldShowBars ? (
+        <Text style={styles.chartHint}>
+          Las barras apiladas muestran como se repartio el volumen de la sesion entre los rangos de reps que tocaste ese dia.
+        </Text>
+      ) : null}
     </View>
   );
 };
@@ -178,6 +320,12 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       color: theme.colors.textPrimary,
     },
+    metaContext: {
+      marginTop: 4,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      lineHeight: 16,
+    },
     emptyState: {
       borderRadius: borderRadius.lg,
       backgroundColor: theme.colors.surfaceAlt,
@@ -191,6 +339,12 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
       textAlign: 'center',
+    },
+    chartHint: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      lineHeight: 18,
     },
   });
 

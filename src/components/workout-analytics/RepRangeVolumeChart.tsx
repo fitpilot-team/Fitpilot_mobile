@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { borderRadius, fontSize, spacing } from '../../constants/colors';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
@@ -11,6 +11,8 @@ interface RepRangeVolumeChartProps {
   points: RepRangeChartPoint[];
   repRanges: RepRangeBucket[];
   contentWidth?: number;
+  selectedBucketId?: string | null;
+  onSelectBucket?: (bucketId: string | null) => void;
 }
 
 const CHART_HEIGHT = 160;
@@ -23,6 +25,8 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
   points,
   repRanges,
   contentWidth = 360,
+  selectedBucketId = null,
+  onSelectBucket,
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -30,7 +34,9 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
   if (!points.length || repRanges.length === 0) {
     return (
       <View style={styles.emptyState}>
-        <Text style={styles.emptyText}>No hay volumen con carga en este rango.</Text>
+        <Text style={styles.emptyText}>
+          No hay volumen con carga en este rango. Completa sesiones con peso para ver la distribucion semanal.
+        </Text>
       </View>
     );
   }
@@ -47,10 +53,19 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
     <View>
       <View style={styles.legendRow}>
         {repRanges.map((bucket) => (
-          <View key={bucket.id} style={styles.legendItem}>
+          <TouchableOpacity
+            key={bucket.id}
+            style={[
+              styles.legendItem,
+              selectedBucketId === bucket.id ? styles.legendItemSelected : null,
+              selectedBucketId && selectedBucketId !== bucket.id ? styles.legendItemInactive : null,
+            ]}
+            activeOpacity={0.86}
+            onPress={() => onSelectBucket?.(selectedBucketId === bucket.id ? null : bucket.id)}
+          >
             <View style={[styles.legendDot, { backgroundColor: getRepRangeColor(bucket.color_token) }]} />
             <Text style={styles.legendLabel}>{bucket.label}</Text>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
 
@@ -81,6 +96,8 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
                         height={segmentHeight}
                         rx={6}
                         fill={getRepRangeColor(bucket.color_token)}
+                        opacity={selectedBucketId && selectedBucketId !== bucket.id ? 0.22 : 1}
+                        onPress={() => onSelectBucket?.(selectedBucketId === bucket.id ? null : bucket.id)}
                       />
                     );
                   })}
@@ -109,6 +126,11 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
           </View>
         </View>
       </ScrollView>
+
+      <Text style={styles.chartHint}>
+        Cada columna resume el volumen semanal con carga. Los colores indican en que rangos de reps estuvo repartido.
+        Toca un rango para filtrar.
+      </Text>
     </View>
   );
 };
@@ -131,6 +153,13 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.surfaceAlt,
       borderWidth: 1,
       borderColor: theme.colors.border,
+    },
+    legendItemSelected: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.isDark ? 'rgba(59, 130, 246, 0.14)' : '#eff6ff',
+    },
+    legendItemInactive: {
+      opacity: 0.48,
     },
     legendDot: {
       width: 10,
@@ -165,6 +194,12 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
       textAlign: 'center',
+    },
+    chartHint: {
+      marginTop: spacing.sm,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      lineHeight: 18,
     },
   });
 

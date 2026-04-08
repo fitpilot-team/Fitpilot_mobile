@@ -92,6 +92,7 @@ const TabletTabBar: React.FC<TabletTabBarProps> = ({
 
 const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
   const { state, descriptors, navigation } = props;
+  const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -153,8 +154,8 @@ const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
       ]}
     >
       <BlurView
-        intensity={Platform.OS === 'ios' ? 45 : 90}
-        tint="dark"
+        intensity={Platform.OS === 'ios' ? (theme.isDark ? 45 : 60) : 90}
+        tint={theme.colors.phoneNavShellBlurTint}
         style={styles.customTabBarBlur}
       >
         <View style={styles.customTabBarContainer}>
@@ -190,11 +191,15 @@ const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
                 <AnimatedTabIcon
                   focused={isFocused}
                   icon={options.tabBarIcon as TabBarIconRenderer | undefined}
+                  activeColor={theme.colors.phoneNavIconActive}
+                  inactiveColor={theme.colors.phoneNavIconInactive}
                   styles={styles}
                 />
                 <AnimatedLabel
                   focused={isFocused}
                   label={label === 'index' ? 'Inicio' : label}
+                  activeColor={theme.colors.phoneNavLabelActive}
+                  inactiveColor={theme.colors.phoneNavLabelInactive}
                   styles={styles}
                 />
               </Pressable>
@@ -209,10 +214,18 @@ const PhoneTabBar: React.FC<PhoneTabBarProps> = ({ props }) => {
 type AnimatedTabIconProps = {
   focused: boolean;
   icon?: TabBarIconRenderer;
+  activeColor: string;
+  inactiveColor: string;
   styles: TabLayoutStyles;
 };
 
-const AnimatedTabIcon: React.FC<AnimatedTabIconProps> = ({ focused, icon, styles }) => {
+const AnimatedTabIcon: React.FC<AnimatedTabIconProps> = ({
+  focused,
+  icon,
+  activeColor,
+  inactiveColor,
+  styles,
+}) => {
   const scale = useSharedValue(focused ? 1.15 : 1);
   const opacity = useSharedValue(focused ? 1 : 0.7);
 
@@ -233,7 +246,7 @@ const AnimatedTabIcon: React.FC<AnimatedTabIconProps> = ({ focused, icon, styles
     <Animated.View style={[styles.customTabIconWrapper, animatedStyle]}>
       {icon?.({
         focused,
-        color: '#FFFFFF',
+        color: focused ? activeColor : inactiveColor,
         size: 24,
       })}
     </Animated.View>
@@ -243,10 +256,18 @@ const AnimatedTabIcon: React.FC<AnimatedTabIconProps> = ({ focused, icon, styles
 type AnimatedLabelProps = {
   focused: boolean;
   label: string;
+  activeColor: string;
+  inactiveColor: string;
   styles: TabLayoutStyles;
 };
 
-const AnimatedLabel: React.FC<AnimatedLabelProps> = ({ focused, label, styles }) => {
+const AnimatedLabel: React.FC<AnimatedLabelProps> = ({
+  focused,
+  label,
+  activeColor,
+  inactiveColor,
+  styles,
+}) => {
   const scale = useSharedValue(focused ? 1 : 0.92);
   const opacity = useSharedValue(focused ? 1 : 0.7);
 
@@ -269,6 +290,7 @@ const AnimatedLabel: React.FC<AnimatedLabelProps> = ({ focused, label, styles })
       style={[
         styles.customTabText,
         focused && styles.customTabTextActive,
+        { color: focused ? activeColor : inactiveColor },
         animatedStyle,
       ]}
     >
@@ -442,9 +464,14 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     customTabBarBlur: {
       borderRadius: 35,
       overflow: 'hidden',
-      backgroundColor: 'rgba(24, 47, 80, 0.85)',
+      backgroundColor: theme.colors.phoneNavShellBackground,
       borderWidth: 1,
-      borderColor: 'rgba(255, 255, 255, 0.08)',
+      borderColor: theme.colors.phoneNavShellBorder,
+      shadowColor: theme.colors.phoneNavIconActive,
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: theme.isDark ? 0.18 : 0.12,
+      shadowRadius: theme.isDark ? 20 : 18,
+      elevation: theme.isDark ? 12 : 10,
     },
     customTabBarContainer: {
       flexDirection: 'row',
@@ -468,7 +495,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginBottom: 4,
     },
     customTabIconWrapperActive: {
-      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      backgroundColor: theme.colors.phoneNavIndicatorBackground,
     },
     slidingIndicator: {
       position: 'absolute',
@@ -477,10 +504,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     customTabText: {
       fontSize: 10,
       fontWeight: '500',
-      color: '#94a3b8',
     },
     customTabTextActive: {
-      color: '#FFFFFF',
       fontWeight: '600',
     },
     phoneTabBarLabel: {

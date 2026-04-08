@@ -20,8 +20,9 @@ interface DietMenuSelectorModalProps {
   menus: ClientDietMenu[];
   getMenuLabel: (menu: ClientDietMenu, index: number) => string;
   visibleMenuId: number | null;
-  assignedMenuId: number | null;
-  primaryMenuId: number | null;
+  persistedMenuId: number | null;
+  suggestedMenuId: number | null;
+  previewMenuId: number | null;
   isLoading: boolean;
   error?: string | null;
   onClose: () => void;
@@ -35,8 +36,9 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
   menus,
   getMenuLabel,
   visibleMenuId,
-  assignedMenuId,
-  primaryMenuId,
+  persistedMenuId,
+  suggestedMenuId,
+  previewMenuId,
   isLoading,
   error = null,
   onClose,
@@ -64,7 +66,7 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
               <Text style={styles.title}>Menus del pool</Text>
               <Text style={styles.subtitle}>{dateLabel}</Text>
               <Text style={styles.supportingText}>
-                El menu asignado marca el arranque semanal. Esta seleccion solo cambia la vista.
+                Toca un menu para revisarlo en pantalla antes de confirmar el cambio.
               </Text>
             </View>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
@@ -106,8 +108,9 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
             >
               {menus.map((menu, index) => {
                 const isVisible = menu.menuId === visibleMenuId;
-                const isAssigned = menu.menuId === assignedMenuId;
-                const isPrimary = menu.menuId === primaryMenuId;
+                const isPersisted = menu.menuId === persistedMenuId;
+                const isSuggested = menu.menuId === suggestedMenuId;
+                const isPreview = menu.menuId === previewMenuId;
 
                 return (
                   <TouchableOpacity
@@ -145,19 +148,19 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
                     </View>
 
                     <View style={styles.badgeRow}>
-                      {isAssigned ? (
+                      {isPersisted ? (
                         <View style={[styles.badge, styles.assignedBadge]}>
-                          <Text style={[styles.badgeText, styles.assignedBadgeText]}>Asignado</Text>
+                          <Text style={[styles.badgeText, styles.assignedBadgeText]}>Elegido</Text>
                         </View>
                       ) : null}
-                      {isPrimary ? (
+                      {isSuggested ? (
                         <View style={[styles.badge, styles.primaryBadge]}>
-                          <Text style={[styles.badgeText, styles.primaryBadgeText]}>Principal</Text>
+                          <Text style={[styles.badgeText, styles.primaryBadgeText]}>Sugerido</Text>
                         </View>
                       ) : null}
-                      {isVisible && menu.menuId !== primaryMenuId ? (
+                      {isPreview ? (
                         <View style={[styles.badge, styles.previewBadge]}>
-                          <Text style={[styles.badgeText, styles.previewBadgeText]}>Vista previa</Text>
+                          <Text style={[styles.badgeText, styles.previewBadgeText]}>Previsualizando</Text>
                         </View>
                       ) : null}
                     </View>
@@ -340,7 +343,7 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.isDark ? 'rgba(37, 99, 235, 0.18)' : `${brandColors.navy}16`,
     },
     previewBadge: {
-      backgroundColor: theme.isDark ? 'rgba(103, 182, 223, 0.18)' : `${brandColors.sky}16`,
+      backgroundColor: theme.isDark ? 'rgba(56, 189, 248, 0.18)' : `${brandColors.sky}16`,
     },
     badgeText: {
       fontSize: fontSize.xs,
@@ -355,7 +358,7 @@ const createStyles = (theme: AppTheme) =>
       color: theme.isDark ? colors.white : brandColors.navy,
     },
     previewBadgeText: {
-      color: brandColors.sky,
+      color: theme.isDark ? colors.white : brandColors.sky,
     },
   });
 

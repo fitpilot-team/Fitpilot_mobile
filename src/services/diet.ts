@@ -12,7 +12,6 @@ import type {
   ClientRecipeSummary,
 } from '../types';
 import {
-  compareDateKeys,
   getLocalWeekDateKeys,
   getStartOfLocalWeekDateKey,
   getTodayDateKey,
@@ -150,11 +149,24 @@ type NutritionDailyBatchResponseItem = NutritionMenuResponse & {
   menu_id_selected_client?: number | null;
 };
 
+type NutritionMenuPoolResponseItem = NutritionMenuResponse & {
+  assigned_date?: string | null;
+  assignment_start_date?: string | null;
+  assignment_end_date?: string | null;
+  menu_id_selected_client?: number | null;
+};
+
 type NutritionMenuCalendarResponseItem = NutritionMenuResponse & {
   assigned_date?: string | null;
   assignment_start_date?: string | null;
   assignment_end_date?: string | null;
   menu_id_selected_client?: number | null;
+};
+
+type NutritionDailyPrimarySelectionResponse = {
+  success: boolean;
+  date: string;
+  menu_id: number;
 };
 
 type RecipeGroupAccumulator = {
@@ -733,6 +745,25 @@ export const resetDietStandaloneFoodSwap = async (
 
 export const getTodayDietDateKey = getTodayDateKey;
 
+export const updateClientDailyPrimarySelection = async (
+  date: string,
+  menuId: number,
+): Promise<NutritionDailyPrimarySelectionResponse> => {
+  const targetDate = normalizeDateKey(date);
+
+  if (!targetDate || !Number.isInteger(menuId)) {
+    throw new Error('No se pudo guardar el menu elegido para este dia.');
+  }
+
+  return nutritionClient.patch<NutritionDailyPrimarySelectionResponse>(
+    '/menus/daily/primary-selection',
+    {
+      date: targetDate,
+      menu_id: menuId,
+    },
+  );
+};
+
 export const getClientDietCalendar = async (
   clientId: string,
   date: string = getTodayDateKey(),
@@ -778,7 +809,8 @@ export const getClientDietCalendar = async (
       id: assignedDate,
       assignedDate,
       isToday: assignedDate === todayDate,
-      assignedMenuId: assignedMenu?.menuId ?? null,
+      backendPrimaryMenuId: assignedMenu?.menuId ?? null,
+      rotationMenuOptions: [],
       menuOptions: assignedMenu ? [assignedMenu] : [],
     };
   });
@@ -822,7 +854,7 @@ export const getClientDietMenuCalendar = async (
   return Object.fromEntries(
     Array.from(menusByDate.entries()).map(([assignedDate, menus]) => [
       assignedDate,
-      Array.from(menus.values()).sort((left, right) => compareDateKeys(left.assignedDate, right.assignedDate) || left.menuId - right.menuId),
+      Array.from(menus.values()),
     ]),
   );
 };
@@ -838,14 +870,14 @@ export const getClientDietMenuPool = async (
     throw new Error('No se pudo resolver el cliente autenticado para cargar el pool de menus.');
   }
 
-  const poolMenus = await nutritionClient.get<NutritionDailyBatchResponseItem[]>(
+  const poolMenus = await nutritionClient.get<NutritionMenuPoolResponseItem[]>(
     `/menus/pool?client_id=${numericClientId}&date=${targetDate}`,
     { skipErrorLogging: true },
   );
 
   const dedupedPoolMenus = Array.from(
     new Map(poolMenus.map((menu) => [menu.id, menu])).values(),
-  ).sort((left, right) => compareDateKeys(left.assigned_date ?? targetDate, right.assigned_date ?? targetDate));
+  );
 
   const recipeSummaryMap = await buildRecipeSummaryMap(dedupedPoolMenus);
 

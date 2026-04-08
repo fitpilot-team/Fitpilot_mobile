@@ -1,9 +1,38 @@
 import type {
+  ExerciseDetailMetric,
+  ExerciseTrendStatus,
   RepRangeBucket,
   WorkoutAnalyticsColorToken,
   WorkoutAnalyticsRange,
 } from '../types';
 import { WORKOUT_ANALYTICS_COLOR_MAP, WORKOUT_ANALYTICS_RANGE_OPTIONS } from '../constants/workoutAnalytics';
+
+export type TrendStatusMeta = {
+  icon: string;
+  color: string;
+  label: string;
+};
+
+const TREND_STATUS_META: Record<ExerciseTrendStatus, TrendStatusMeta> = {
+  rising: { icon: 'trending-up', color: '#22c55e', label: 'Subiendo' },
+  stable: { icon: 'remove-outline', color: '#f59e0b', label: 'Estable' },
+  declining: { icon: 'trending-down', color: '#ef4444', label: 'Bajando' },
+  insufficient: { icon: 'ellipsis-horizontal', color: '#94a3b8', label: 'Pocos datos' },
+};
+
+export const getTrendStatusMeta = (status: ExerciseTrendStatus | null | undefined): TrendStatusMeta =>
+  TREND_STATUS_META[status ?? 'insufficient'] ?? TREND_STATUS_META.insufficient;
+
+export const EXERCISE_DETAIL_METRIC_OPTIONS: {
+  value: ExerciseDetailMetric;
+  label: string;
+  unit: string;
+}[] = [
+  { value: 'best_weight', label: 'Mejor carga', unit: 'kg' },
+  { value: 'volume', label: 'Volumen', unit: 'kg' },
+  { value: 'best_reps', label: 'Mejor reps', unit: 'reps' },
+  { value: 'effort', label: 'Esfuerzo', unit: 'RIR/RPE' },
+];
 
 export type RepRangeDraft = {
   id: string;
@@ -32,7 +61,7 @@ export const isWorkoutAnalyticsRange = (value: string | undefined | null): value
 
 export const normalizeWorkoutAnalyticsRange = (
   value: string | undefined | null,
-  fallback: WorkoutAnalyticsRange = '12w',
+  fallback: WorkoutAnalyticsRange = '2w',
 ): WorkoutAnalyticsRange => (isWorkoutAnalyticsRange(value) ? value : fallback);
 
 export const formatVolumeKg = (value: number) => `${integerFormatter.format(Math.round(value))} kg`;
@@ -165,6 +194,7 @@ export const buildLineCoordinates = (
   width: number,
   height: number,
   padding: { top: number; right: number; bottom: number; left: number },
+  domain?: { min: number; max: number },
 ): ChartCoordinate[] => {
   if (!values.length) {
     return [];
@@ -172,8 +202,8 @@ export const buildLineCoordinates = (
 
   const usableWidth = Math.max(width - padding.left - padding.right, 1);
   const usableHeight = Math.max(height - padding.top - padding.bottom, 1);
-  const maxValue = Math.max(...values);
-  const minValue = Math.min(...values);
+  const maxValue = domain?.max ?? Math.max(...values);
+  const minValue = domain?.min ?? Math.min(...values);
   const valueRange = maxValue === minValue ? Math.max(maxValue, 1) : maxValue - minValue;
 
   return values.map((value, index) => {

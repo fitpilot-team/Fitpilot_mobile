@@ -1,9 +1,6 @@
 import type { ClientDietMenu, ClientDietWeekDay } from '../types';
 import { getCalendarDayDiff, getStartOfLocalWeekDateKey } from './date';
 
-const sortDietMenus = (menus: ClientDietMenu[]) =>
-  [...menus].sort((left, right) => left.menuId - right.menuId);
-
 const hasSwappableRecipeIngredients = (menu: ClientDietMenu) =>
   menu.meals.some((meal) =>
     meal.recipes.some((recipe) =>
@@ -27,26 +24,6 @@ const selectPreferredDietMenu = (
   return incomingMenu;
 };
 
-const orderDietMenusForRotation = (
-  menus: ClientDietMenu[],
-  assignedMenuId: number | null,
-) => {
-  const orderedMenus = sortDietMenus(dedupeDietMenus(menus));
-  if (assignedMenuId === null) {
-    return orderedMenus;
-  }
-
-  const assignedMenu = orderedMenus.find((menu) => menu.menuId === assignedMenuId);
-  if (!assignedMenu) {
-    return orderedMenus;
-  }
-
-  return [
-    assignedMenu,
-    ...orderedMenus.filter((menu) => menu.menuId !== assignedMenuId),
-  ];
-};
-
 export const dedupeDietMenus = (menus: ClientDietMenu[]) =>
   Array.from(
     menus.reduce((menuMap, menu) => {
@@ -64,8 +41,31 @@ export const dedupeDietMenus = (menus: ClientDietMenu[]) =>
 export const mergeDietMenuOptions = (
   currentMenus: ClientDietMenu[],
   incomingMenus: ClientDietMenu[],
-  assignedMenuId: number | null,
-) => orderDietMenusForRotation([...currentMenus, ...incomingMenus], assignedMenuId);
+) => dedupeDietMenus([...currentMenus, ...incomingMenus]);
+
+export const applyDietRotationMenuOptions = (
+  days: ClientDietWeekDay[],
+  rotationMenus: ClientDietMenu[],
+) => {
+  const nextRotationMenus = dedupeDietMenus(rotationMenus);
+
+  return days.map((day) => {
+    const nextMenuOptions = mergeDietMenuOptions(nextRotationMenus, day.menuOptions);
+    const didChange =
+      nextMenuOptions.length !== day.menuOptions.length ||
+      nextMenuOptions.some((menu, index) => menu !== day.menuOptions[index]) ||
+      nextRotationMenus.length !== day.rotationMenuOptions.length ||
+      nextRotationMenus.some((menu, index) => menu !== day.rotationMenuOptions[index]);
+
+    return !didChange
+      ? day
+      : {
+          ...day,
+          rotationMenuOptions: nextRotationMenus,
+          menuOptions: nextMenuOptions,
+        };
+  });
+};
 
 export const mergeDietMenuOptionsByDate = (
   days: ClientDietWeekDay[],
@@ -77,11 +77,7 @@ export const mergeDietMenuOptionsByDate = (
       return day;
     }
 
-    const nextMenuOptions = mergeDietMenuOptions(
-      day.menuOptions,
-      incomingMenus,
-      day.assignedMenuId,
-    );
+    const nextMenuOptions = mergeDietMenuOptions(day.menuOptions, incomingMenus);
     const didChange =
       nextMenuOptions.length !== day.menuOptions.length ||
       nextMenuOptions.some((menu, index) => menu !== day.menuOptions[index]);
@@ -94,7 +90,28 @@ export const mergeDietMenuOptionsByDate = (
         };
   });
 
-export const resolvePrimaryDietMenu = (
+export const getDietSelectableMenus = (
+  day: ClientDietWeekDay | null | undefined,
+): ClientDietMenu[] => {
+  if (!day || day.menuOptions.length === 0) {
+    return [];
+  }
+
+  return dedupeDietMenus(day.menuOptions);
+};
+
+export const getDietMenuRotationOrder = (
+  day: ClientDietWeekDay | null | undefined,
+): ClientDietMenu[] => {
+  if (!day) {
+    return [];
+  }
+
+  const rotationMenus = dedupeDietMenus(day.rotationMenuOptions);
+  return rotationMenus.length > 0 ? rotationMenus : getDietSelectableMenus(day);
+};
+
+export const resolveRotatedDietMenu = (
   day: ClientDietWeekDay | null | undefined,
 ): ClientDietMenu | null => {
   const rotationOrder = getDietMenuRotationOrder(day);
@@ -109,33 +126,39 @@ export const resolvePrimaryDietMenu = (
   return rotationOrder[normalizedOffset] ?? rotationOrder[0] ?? null;
 };
 
-export const resolvePrimaryDietMenuId = (day: ClientDietWeekDay | null | undefined) =>
-  resolvePrimaryDietMenu(day)?.menuId ?? null;
+export const resolveRotatedDietMenuId = (day: ClientDietWeekDay | null | undefined) =>
+  resolveRotatedDietMenu(day)?.menuId ?? null;
 
-export const getDietMenuRotationOrder = (
+export const resolveDietSelectableMenuById = (
   day: ClientDietWeekDay | null | undefined,
-): ClientDietMenu[] => {
-  if (!day || day.menuOptions.length === 0) {
-    return [];
+  menuId: number | null,
+) => {
+  if (!day || menuId === null) {
+    return null;
   }
 
-  return orderDietMenusForRotation(day.menuOptions, day.assignedMenuId);
+  return getDietSelectableMenus(day).find((menu) => menu.menuId === menuId) ?? null;
 };
 
 export const resolveVisibleDietMenu = (
   day: ClientDietWeekDay | null | undefined,
-  previewMenuId: number | null,
+  previewMenuId: number | null = null,
 ) => {
   if (!day) {
     return null;
   }
 
-  if (previewMenuId !== null) {
-    const previewMenu = day.menuOptions.find((menu) => menu.menuId === previewMenuId);
-    if (previewMenu) {
-      return previewMenu;
-    }
+  const previewMenu = resolveDietSelectableMenuById(day, previewMenuId);
+  if (previewMenu) {
+    return previewMenu;
   }
 
-  return resolvePrimaryDietMenu(day);
+  const rotatedMenu = resolveRotatedDietMenu(day);
+  const persistedMenu = resolveDietSelectableMenuById(day, day.backendPrimaryMenuId);
+
+  if (persistedMenu && (!rotatedMenu || persistedMenu.menuId !== rotatedMenu.menuId)) {
+    return persistedMenu;
+  }
+
+  return rotatedMenu ?? persistedMenu ?? getDietSelectableMenus(day)[0] ?? null;
 };

@@ -8,6 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '../src/store/authStore';
 import { StartupBrandIntro } from '../src/components/common';
 import { buildNavigationTheme, useAppTheme, useThemedStyles } from '../src/theme';
+import { useSystemNavigationBarTheme } from '../src/hooks/useSystemNavigationBarTheme';
 
 // Configurar Reanimated logger para suprimir mensajes de strict mode
 configureReanimatedLogger({
@@ -23,6 +24,8 @@ export default function RootLayout() {
   const [showStartupIntro, setShowStartupIntro] = useState(false);
   const [isNativeSplashHidden, setIsNativeSplashHidden] = useState(false);
   const isReady = isInitialized && isHydrated;
+
+  useSystemNavigationBarTheme(theme, isReady && !showStartupIntro);
 
   useEffect(() => {
     void initialize();
@@ -89,19 +92,24 @@ export default function RootLayout() {
           {/* Login screen outside of tabs */}
           <Stack.Screen name="login" />
 
-          {/* Profile detail screens outside of tabs */}
-          <Stack.Screen name="profile/personal-info" />
-          <Stack.Screen name="profile/change-password" />
-          <Stack.Screen name="profile/notifications-settings" />
-          <Stack.Screen name="profile/help" />
-          <Stack.Screen name="profile/contact-support" />
-          <Stack.Screen name="profile/legal/[document]" />
-          <Stack.Screen name="profile/theme-settings" />
-          <Stack.Screen name="measurements/weight-progress" />
-          <Stack.Screen name="measurements/progress/[metric]" />
           <Stack.Screen
-            name="recipes/[recipeId]"
+            name="profile"
             options={{
+              headerShown: false,
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="measurements"
+            options={{
+              headerShown: false,
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
+            name="recipes"
+            options={{
+              headerShown: false,
               presentation: 'card',
               animation: 'slide_from_right',
             }}
@@ -116,15 +124,17 @@ export default function RootLayout() {
 
           {/* Workout session as modal over tabs */}
           <Stack.Screen
-            name="workout/[id]"
+            name="workout"
             options={{
+              headerShown: false,
               presentation: 'card',
               animation: 'slide_from_bottom',
             }}
           />
           <Stack.Screen
-            name="workouts/exercises/[exerciseId]"
+            name="workouts"
             options={{
+              headerShown: false,
               presentation: 'card',
               animation: 'slide_from_right',
             }}

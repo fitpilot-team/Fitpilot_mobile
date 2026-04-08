@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -30,6 +31,7 @@ import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/ho
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import {
   getClientDietCalendar,
+  getClientDietMenuPool,
   getClientDietMenuCalendar,
   getFoodsByExchangeGroup,
   resetDietRecipeIngredientSwap,
@@ -37,6 +39,7 @@ import {
   swapDietRecipeIngredient,
   swapDietStandaloneFood,
   getTodayDietDateKey,
+  updateClientDailyPrimarySelection,
 } from '../../src/services/diet';
 import {
   getDashboardContentWidth,
@@ -44,10 +47,11 @@ import {
   isTabletLayout,
 } from '../../src/utils/layout';
 import {
-  getDietMenuRotationOrder,
+  applyDietRotationMenuOptions,
+  getDietSelectableMenus,
   mergeDietMenuOptionsByDate,
-  resolvePrimaryDietMenu,
-  resolvePrimaryDietMenuId,
+  resolveDietSelectableMenuById,
+  resolveRotatedDietMenuId,
   resolveVisibleDietMenu,
 } from '../../src/utils/dietMenuSelection';
 import {
@@ -214,6 +218,7 @@ export default function DietScreen() {
   const [menuOptionsLoadingByDate, setMenuOptionsLoadingByDate] = useState<Record<string, boolean>>({});
   const [menuOptionsErrorByDate, setMenuOptionsErrorByDate] = useState<Record<string, string | null>>({});
   const [isMenuSelectorVisible, setIsMenuSelectorVisible] = useState(false);
+  const [isPersistingMenuSelection, setIsPersistingMenuSelection] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -229,6 +234,62 @@ export default function DietScreen() {
   const isTablet = isTabletLayout(width, height);
 
   const selectedIngredient = selectedSwapTarget?.ingredient ?? null;
+
+  const clearPreviewMenuCandidates = useCallback(() => {
+    setPreviewMenuIdByDate((currentState) => (
+      Object.keys(currentState).length === 0 ? currentState : {}
+    ));
+  }, []);
+
+  const clearPreviewMenuForDate = useCallback((dateKey: string) => {
+    setPreviewMenuIdByDate((currentState) => {
+      if (!(dateKey in currentState)) {
+        return currentState;
+      }
+
+      const nextState = { ...currentState };
+      delete nextState[dateKey];
+      return nextState;
+    });
+  }, []);
+
+  const loadRotationMenuPool = useCallback(
+    async (
+      resolvedAnchorDate: string,
+      preferredSelectedDate: string,
+      baseDays: ClientDietWeekDay[],
+    ) => {
+      if (!user) {
+        return [] as ClientDietMenu[];
+      }
+
+      const candidateDates = Array.from(
+        new Set(
+          [
+            preferredSelectedDate,
+            resolvedAnchorDate,
+            ...baseDays
+              .filter((day) => day.backendPrimaryMenuId !== null)
+              .map((day) => day.assignedDate),
+          ].filter(Boolean),
+        ),
+      );
+
+      for (const candidateDate of candidateDates) {
+        try {
+          const poolMenus = await getClientDietMenuPool(user.id, candidateDate);
+          if (poolMenus.length > 0) {
+            return poolMenus;
+          }
+        } catch {
+          // Fall back to the next candidate date and keep the week usable without rotation.
+        }
+      }
+
+      return [];
+    },
+    [user],
+  );
 
   const loadDiet = useCallback(
     async ({
@@ -249,15 +310,21 @@ export default function DietScreen() {
       }
 
       try {
-        const days = await getClientDietCalendar(user.id, resolvedAnchorDate);
         const preferredSelectedDate = requestedSelectedDate ?? resolvedAnchorDate;
+        const baseDays = await getClientDietCalendar(user.id, resolvedAnchorDate);
+        const rotationMenus = await loadRotationMenuPool(
+          resolvedAnchorDate,
+          preferredSelectedDate,
+          baseDays,
+        );
+        const days = applyDietRotationMenuOptions(baseDays, rotationMenus);
 
         setDietDays(days);
         setAnchorDate(resolvedAnchorDate);
+        setPreviewMenuIdByDate({});
         setMenuOptionsHydratedByDate({});
         setMenuOptionsLoadingByDate({});
         setMenuOptionsErrorByDate({});
-        setPreviewMenuIdByDate({});
         setError(null);
         setIsMenuSelectorVisible(false);
         setIsDatePickerVisible(false);
@@ -274,10 +341,10 @@ export default function DietScreen() {
         );
       } catch (loadError: any) {
         setDietDays([]);
+        setPreviewMenuIdByDate({});
         setMenuOptionsHydratedByDate({});
         setMenuOptionsLoadingByDate({});
         setMenuOptionsErrorByDate({});
-        setPreviewMenuIdByDate({});
         setError(loadError?.message || 'No se pudo cargar tu dieta.');
         setIsDatePickerVisible(false);
         setIsSwapModalVisible(false);
@@ -290,7 +357,7 @@ export default function DietScreen() {
         }
       }
     },
-    [user],
+    [loadRotationMenuPool, user],
   );
 
   const loadMenuCalendar = useCallback(
@@ -386,22 +453,31 @@ export default function DietScreen() {
   }, [loadMenuCalendar, selectedDate, selectedDay]);
 
   const selectorMenus = useMemo(
-    () => getDietMenuRotationOrder(selectedDay),
+    () => getDietSelectableMenus(selectedDay),
     [selectedDay],
   );
 
   const selectedPreviewMenuId = previewMenuIdByDate[selectedDate] ?? null;
-  const primaryMenu = useMemo(() => resolvePrimaryDietMenu(selectedDay), [selectedDay]);
-  const primaryMenuId = useMemo(() => resolvePrimaryDietMenuId(selectedDay), [selectedDay]);
+  const suggestedMenuId = useMemo(() => resolveRotatedDietMenuId(selectedDay), [selectedDay]);
   const visibleMenu = useMemo(
     () => resolveVisibleDietMenu(selectedDay, selectedPreviewMenuId),
     [selectedDay, selectedPreviewMenuId],
   );
-
-  const isPreviewMenu = Boolean(
+  const previewMenu = useMemo(
+    () => resolveDietSelectableMenuById(selectedDay, selectedPreviewMenuId),
+    [selectedDay, selectedPreviewMenuId],
+  );
+  const isPreviewingMenu = Boolean(
+    previewMenu &&
     visibleMenu &&
-    primaryMenu &&
-    visibleMenu.menuId !== primaryMenu.menuId,
+    previewMenu.menuId === visibleMenu.menuId,
+  );
+  const hasPersistedOverride = Boolean(
+    !isPreviewingMenu &&
+    visibleMenu &&
+    selectedDay?.backendPrimaryMenuId !== null &&
+    visibleMenu.menuId === selectedDay?.backendPrimaryMenuId &&
+    visibleMenu.menuId !== suggestedMenuId,
   );
   const menuLabelsById = useMemo(
     () => new Map(selectorMenus.map((menu, index) => [menu.menuId, buildDietMenuLabel(index)])),
@@ -413,21 +489,28 @@ export default function DietScreen() {
 
   const hasHydratedOptionsForSelectedDate = Boolean(menuOptionsHydratedByDate[selectedDate]);
   const hasAvailableMenuOptions = Boolean(selectedDay) && (
-    selectorMenus.length > 0 || Boolean(selectedDay?.assignedMenuId) || !hasHydratedOptionsForSelectedDate
+    selectorMenus.length > 0 || Boolean(selectedDay?.backendPrimaryMenuId) || !hasHydratedOptionsForSelectedDate
   );
   const selectorSubtitle = !selectedDay
     ? 'No hay menus disponibles para esta fecha.'
-    : isPreviewMenu
-      ? 'Vista previa local.'
-      : menuOptionsErrorByDate[selectedDate]
+    : isPreviewingMenu
+        ? 'Estas revisando un cambio pendiente para este dia.'
+    : menuOptionsErrorByDate[selectedDate]
         ? menuOptionsErrorByDate[selectedDate] || 'No se pudieron cargar los menus.'
-        : menuOptionsLoadingByDate[selectedDate]
+      : menuOptionsLoadingByDate[selectedDate]
           ? 'Cargando menus visibles.'
-          : hasHydratedOptionsForSelectedDate
+        : hasHydratedOptionsForSelectedDate
             ? selectorMenus.length > 0
-              ? `${selectorMenus.length} menu${selectorMenus.length === 1 ? '' : 's'} visible${selectorMenus.length === 1 ? '' : 's'}`
+              ? `${selectorMenus.length} opcion${selectorMenus.length === 1 ? '' : 'es'} disponible${selectorMenus.length === 1 ? '' : 's'}`
               : 'Sin menus visibles para este dia.'
             : 'Cargando menus visibles.';
+  const previewBannerDateLabel = selectedDay ? formatLongDate(selectedDay.assignedDate) : '';
+  useEffect(() => {
+    if (selectedPreviewMenuId !== null && !previewMenu) {
+      clearPreviewMenuForDate(selectedDate);
+    }
+  }, [clearPreviewMenuForDate, previewMenu, selectedDate, selectedPreviewMenuId]);
+
   const navigatorDays = useMemo<SharedWeeklyCalendarDay[]>(
     () =>
       dietDays.map((day) => ({
@@ -440,9 +523,13 @@ export default function DietScreen() {
         isDisabled: false,
         statusText: day.isToday ? 'Hoy' : '',
         variant: 'diet',
-        onPress: () => setSelectedDate(day.assignedDate),
+        onPress: () => {
+          clearPreviewMenuCandidates();
+          setIsMenuSelectorVisible(false);
+          setSelectedDate(day.assignedDate);
+        },
       })),
-    [dietDays, selectedDate],
+    [clearPreviewMenuCandidates, dietDays, selectedDate],
   );
   const currentWeekLabel = useMemo(() => {
     const firstDate = dietDays[0]?.assignedDate;
@@ -478,11 +565,12 @@ export default function DietScreen() {
       return;
     }
 
+    clearPreviewMenuCandidates();
     void loadDiet({
       anchorDate: nextAnchorDate,
       selectedDate: nextSelectedDate ?? nextAnchorDate,
     });
-  }, [anchorDate, loadDiet, selectedDate]);
+  }, [anchorDate, clearPreviewMenuCandidates, loadDiet, selectedDate]);
 
   const handleOpenDatePicker = useCallback(() => {
     setIsDatePickerVisible(true);
@@ -500,11 +588,12 @@ export default function DietScreen() {
     }
 
     setIsDatePickerVisible(false);
+    clearPreviewMenuCandidates();
     void loadDiet({
       anchorDate: nextDateKey,
       selectedDate: nextDateKey,
     });
-  }, [loadDiet]);
+  }, [clearPreviewMenuCandidates, loadDiet]);
 
   const handleOpenMenuSelector = useCallback(async () => {
     if (!selectedDay) {
@@ -525,25 +614,72 @@ export default function DietScreen() {
     await loadMenuCalendar(selectedDate);
   }, [loadMenuCalendar, selectedDate]);
 
-  const handleSelectPreviewMenu = useCallback((menu: ClientDietMenu) => {
+  const persistSelectedMenu = useCallback(async (menu: ClientDietMenu) => {
     if (!selectedDay) {
       return;
     }
 
-    setPreviewMenuIdByDate((currentState) => {
-      const nextState = { ...currentState };
+    setIsPersistingMenuSelection(true);
 
-      if (menu.menuId === primaryMenuId) {
-        delete nextState[selectedDay.assignedDate];
-      } else {
-        nextState[selectedDay.assignedDate] = menu.menuId;
-      }
+    try {
+      await updateClientDailyPrimarySelection(selectedDay.assignedDate, menu.menuId);
+      setDietDays((currentDays) =>
+        currentDays.map((day) => (
+          day.assignedDate !== selectedDay.assignedDate
+            ? day
+            : {
+                ...day,
+                backendPrimaryMenuId: menu.menuId,
+                menuOptions: day.menuOptions.some((option) => option.menuId === menu.menuId)
+                  ? day.menuOptions
+                  : [...day.menuOptions, menu],
+              }
+        )),
+      );
+      setMenuOptionsErrorByDate((currentState) => ({
+        ...currentState,
+        [selectedDay.assignedDate]: null,
+      }));
+      clearPreviewMenuForDate(selectedDay.assignedDate);
+      setError(null);
+      setIsMenuSelectorVisible(false);
+      setRenderVersion((currentValue) => currentValue + 1);
+    } catch (saveError) {
+      const apiError = saveError as ApiError;
+      Alert.alert(
+        'Error',
+        apiError.message || 'No fue posible guardar el menu elegido para este dia.',
+      );
+    } finally {
+      setIsPersistingMenuSelection(false);
+    }
+  }, [clearPreviewMenuForDate, selectedDay]);
 
-      return nextState;
-    });
+  const handleCancelPreviewMenu = useCallback(() => {
+    if (!selectedDay || isPersistingMenuSelection) {
+      return;
+    }
+
+    clearPreviewMenuForDate(selectedDay.assignedDate);
+  }, [clearPreviewMenuForDate, isPersistingMenuSelection, selectedDay]);
+
+  const handleSelectMenu = useCallback((menu: ClientDietMenu) => {
+    if (!selectedDay || isPersistingMenuSelection) {
+      return;
+    }
+
+    if (menu.menuId === selectedDay.backendPrimaryMenuId) {
+      clearPreviewMenuForDate(selectedDay.assignedDate);
+      setIsMenuSelectorVisible(false);
+      return;
+    }
+
+    setPreviewMenuIdByDate((currentState) => ({
+      ...currentState,
+      [selectedDay.assignedDate]: menu.menuId,
+    }));
     setIsMenuSelectorVisible(false);
-    setRenderVersion((currentValue) => currentValue + 1);
-  }, [primaryMenuId, selectedDay]);
+  }, [clearPreviewMenuForDate, isPersistingMenuSelection, selectedDay]);
 
   const loadSwapFoods = useCallback(async (ingredient: ClientDietIngredientRow | null) => {
     if (!ingredient?.exchangeGroupId) {
@@ -742,11 +878,14 @@ export default function DietScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => void loadDiet({
-                mode: 'refresh',
-                anchorDate,
-                selectedDate,
-              })}
+              onRefresh={() => {
+                clearPreviewMenuCandidates();
+                void loadDiet({
+                  mode: 'refresh',
+                  anchorDate,
+                  selectedDate,
+                });
+              }}
               tintColor={brandColors.navy}
             />
           }
@@ -794,7 +933,7 @@ export default function DietScreen() {
                     menuLabel={visibleMenuLabel}
                     assignedDate={selectedDay.assignedDate}
                     isToday={selectedDay.isToday}
-                    isPreview={isPreviewMenu}
+                    isPreview={isPreviewingMenu}
                   />
                 </Animated.View>
               ) : null}
@@ -817,7 +956,13 @@ export default function DietScreen() {
                     <Text style={styles.selectorTitle}>
                       {visibleMenuLabel}
                     </Text>
-                    <Text numberOfLines={2} style={styles.selectorSubtitle}>{selectorSubtitle}</Text>
+                    <Text numberOfLines={2} style={styles.selectorSubtitle}>
+                      {isPreviewingMenu
+                        ? 'Estas revisando este menu antes de confirmarlo.'
+                        : hasPersistedOverride
+                          ? 'Elegiste una opcion distinta para este dia.'
+                          : selectorSubtitle}
+                    </Text>
                   </View>
 
                   <View style={styles.selectorAction}>
@@ -840,7 +985,9 @@ export default function DietScreen() {
                     <Text style={styles.sectionTitle}>Comidas del dia</Text>
                     <Text style={styles.sectionSubtitle}>
                       {visibleMenu
-                        ? `${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} organizados para ti`
+                        ? isPreviewingMenu
+                          ? `Estas revisando ${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} antes de confirmar el cambio`
+                          : `${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} organizados para ti`
                         : 'No hay comidas programadas para esta fecha'}
                     </Text>
                   </View>
@@ -856,9 +1003,11 @@ export default function DietScreen() {
                         >
                           <DietMealCard
                             meal={meal}
-                            onRecipeIngredientPress={handleOpenRecipeIngredientSwap}
+                            onRecipeIngredientPress={
+                              isPreviewingMenu ? undefined : handleOpenRecipeIngredientSwap
+                            }
                             onStandaloneFoodPress={
-                              visibleMenu
+                              !isPreviewingMenu && visibleMenu
                                 ? (food) => handleOpenStandaloneFoodSwap(visibleMenu, food)
                                 : undefined
                             }
@@ -929,15 +1078,54 @@ export default function DietScreen() {
           dateLabel={selectedDay ? formatLongDate(selectedDay.assignedDate) : ''}
           menus={selectorMenus}
           getMenuLabel={(menu, index) => menuLabelsById.get(menu.menuId) ?? buildDietMenuLabel(index)}
-          visibleMenuId={visibleMenu?.menuId ?? primaryMenuId ?? null}
-          assignedMenuId={selectedDay?.assignedMenuId ?? null}
-          primaryMenuId={primaryMenuId}
+          visibleMenuId={visibleMenu?.menuId ?? suggestedMenuId ?? null}
+          persistedMenuId={selectedDay?.backendPrimaryMenuId ?? null}
+          suggestedMenuId={suggestedMenuId}
+          previewMenuId={selectedPreviewMenuId}
           isLoading={Boolean(menuOptionsLoadingByDate[selectedDate])}
           error={menuOptionsErrorByDate[selectedDate]}
           onClose={handleCloseMenuSelector}
           onRetry={handleRetryMenuOptions}
-          onSelect={handleSelectPreviewMenu}
+          onSelect={handleSelectMenu}
         />
+
+        {selectedDay && previewMenu ? (
+          <View
+            style={[
+              styles.previewActionBar,
+              {
+                paddingHorizontal: horizontalPadding,
+                paddingBottom: Math.max(contentInsetBottom, spacing.lg),
+              },
+            ]}
+          >
+            <View style={styles.previewActionCard}>
+              <View style={styles.previewActionCopy}>
+                <Text style={styles.previewActionEyebrow}>Previsualizacion</Text>
+                <Text style={styles.previewActionTitle}>{previewMenu.title}</Text>
+                <Text style={styles.previewActionText}>
+                  Revisa lo que comerias el {previewBannerDateLabel} y confirma si quieres cambiar a este menu.
+                </Text>
+              </View>
+
+              <View style={styles.previewActionButtons}>
+                <Button
+                  title="Cancelar"
+                  onPress={handleCancelPreviewMenu}
+                  variant="secondary"
+                  disabled={isPersistingMenuSelection}
+                  style={styles.previewSecondaryButton}
+                />
+                <Button
+                  title="Confirmar"
+                  onPress={() => void persistSelectedMenu(previewMenu)}
+                  isLoading={isPersistingMenuSelection}
+                  style={styles.previewPrimaryButton}
+                />
+              </View>
+            </View>
+          </View>
+        ) : null}
 
         <RecipeIngredientSwapModal
           visible={isSwapModalVisible}
@@ -1063,6 +1251,50 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     mealList: {
       gap: spacing.md,
+    },
+    previewActionBar: {
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+      paddingTop: spacing.md,
+    },
+    previewActionCard: {
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.primarySoft,
+      padding: spacing.md,
+    },
+    previewActionCopy: {
+      gap: spacing.xs,
+    },
+    previewActionEyebrow: {
+      color: nutritionTheme.accentStrong,
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    previewActionTitle: {
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.base,
+      fontWeight: '800',
+    },
+    previewActionText: {
+      color: theme.colors.textMuted,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+    },
+    previewActionButtons: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+    previewSecondaryButton: {
+      flex: 1,
+    },
+    previewPrimaryButton: {
+      flex: 1,
     },
     emptyStateWrapper: {
       flex: 1,
