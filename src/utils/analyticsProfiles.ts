@@ -118,6 +118,7 @@ export type MetricContextVariant =
   | 'summary_compact'
   | 'record_detail'
   | 'chart_weight_meta'
+  | 'chart_reps_meta'
   | 'chart_default';
 
 const formatContextWeight = (weightKg: number): string =>
@@ -176,12 +177,23 @@ export const formatMetricContext = (
     typeof weightKg === 'number' &&
     weightKg > 0;
 
+  if (variant === 'record_detail' && metricKey === 'e1rm') {
+    return null;
+  }
+
   if (hasWeight) {
     parts.push(formatContextWeight(weightKg));
   }
 
-  if (variant === 'record_detail' && metricKey === 'best_reps') {
+  if (
+    (variant === 'record_detail' || variant === 'chart_reps_meta') &&
+    metricKey === 'best_reps'
+  ) {
     return parts.length ? parts.join(' · ') : null;
+  }
+
+  if (variant === 'chart_weight_meta' && metricKey === 'best_weight') {
+    return `${context.reps_exact} reps`;
   }
 
   parts.push(`${context.reps_exact} reps`);

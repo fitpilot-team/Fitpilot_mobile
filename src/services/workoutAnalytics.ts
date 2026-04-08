@@ -26,6 +26,7 @@ export const getWorkoutAnalyticsDashboard = (
 export const getWorkoutAnalyticsModules = ({
   scopeKind,
   range,
+  repBucketId,
   anchorDate,
   macrocycleId,
   mesocycleId,
@@ -33,6 +34,7 @@ export const getWorkoutAnalyticsModules = ({
 }: {
   scopeKind: WorkoutAnalyticsScopeKind;
   range: WorkoutAnalyticsRange;
+  repBucketId?: string | null;
   anchorDate?: string;
   macrocycleId?: string | null;
   mesocycleId?: string | null;
@@ -42,6 +44,7 @@ export const getWorkoutAnalyticsModules = ({
     params: {
       scope_kind: scopeKind,
       ...(scopeKind === 'range' ? { range } : {}),
+      ...(scopeKind === 'range' && repBucketId ? { rep_bucket_id: repBucketId } : {}),
       ...(anchorDate ? { anchor_date: anchorDate } : {}),
       ...(macrocycleId ? { macrocycle_id: macrocycleId } : {}),
       ...(mesocycleId ? { mesocycle_id: mesocycleId } : {}),
@@ -72,6 +75,7 @@ export const getWorkoutAnalyticsExerciseDetail = (
   anchorDate?: string,
   options?: {
     scopeKind?: WorkoutAnalyticsScopeKind;
+    repBucketId?: string | null;
     macrocycleId?: string | null;
     mesocycleId?: string | null;
     microcycleId?: string | null;
@@ -81,6 +85,7 @@ export const getWorkoutAnalyticsExerciseDetail = (
     params: {
       range,
       scope_kind: options?.scopeKind ?? 'range',
+      ...(options?.scopeKind === 'range' && options?.repBucketId ? { rep_bucket_id: options.repBucketId } : {}),
       ...(anchorDate ? { anchor_date: anchorDate } : {}),
       ...(options?.macrocycleId ? { macrocycle_id: options.macrocycleId } : {}),
       ...(options?.mesocycleId ? { mesocycle_id: options.mesocycleId } : {}),
@@ -94,6 +99,7 @@ export const getWorkoutAnalyticsPreferences = () =>
 export const getWorkoutAnalyticsHistory = ({
   scopeKind = 'range',
   range,
+  repBucketId,
   status,
   skip = 0,
   limit = 20,
@@ -104,6 +110,7 @@ export const getWorkoutAnalyticsHistory = ({
 }: {
   scopeKind?: WorkoutAnalyticsScopeKind;
   range: WorkoutAnalyticsRange;
+  repBucketId?: string | null;
   status: WorkoutAnalyticsHistoryStatusFilter;
   skip?: number;
   limit?: number;
@@ -116,6 +123,7 @@ export const getWorkoutAnalyticsHistory = ({
     params: {
       scope_kind: scopeKind,
       range,
+      ...(scopeKind === 'range' && repBucketId ? { rep_bucket_id: repBucketId } : {}),
       status,
       skip,
       limit,

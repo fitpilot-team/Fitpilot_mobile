@@ -147,7 +147,12 @@ export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
   const lastPoint = series[series.length - 1];
   const lastValue = extractMetricValue(lastPoint, metric);
   const lastMetricContext = formatMetricContext(metric, getPointMetricContext(lastPoint, metric), {
-    variant: metric === 'best_weight' ? 'chart_weight_meta' : 'chart_default',
+    variant:
+      metric === 'best_weight'
+        ? 'chart_weight_meta'
+        : metric === 'best_reps'
+          ? 'chart_reps_meta'
+          : 'chart_default',
   });
 
   return (

@@ -68,6 +68,7 @@ export default function ExerciseTrendDetailScreen() {
     exerciseId,
     range: rangeParam,
     scopeKind: scopeKindParam,
+    repBucketId,
     macrocycleId,
     mesocycleId,
     microcycleId,
@@ -75,6 +76,7 @@ export default function ExerciseTrendDetailScreen() {
     exerciseId: string;
     range?: string;
     scopeKind?: string;
+    repBucketId?: string;
     macrocycleId?: string;
     mesocycleId?: string;
     microcycleId?: string;
@@ -93,6 +95,7 @@ export default function ExerciseTrendDetailScreen() {
       : 'range';
   const [selectedMetric, setSelectedMetric] = useState<ExerciseDetailMetric>('best_weight');
   const [detail, setDetail] = useState<ExerciseTrendDetail | null>(null);
+  const [effectiveRepBucketId, setEffectiveRepBucketId] = useState<string | null>(repBucketId ?? null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,6 +103,10 @@ export default function ExerciseTrendDetailScreen() {
   useEffect(() => {
     setRange(normalizeWorkoutAnalyticsRange(rangeParam, DEFAULT_WORKOUT_ANALYTICS_RANGE));
   }, [rangeParam]);
+
+  useEffect(() => {
+    setEffectiveRepBucketId(repBucketId ?? null);
+  }, [repBucketId]);
 
   const loadDetail = useCallback(
     async (options?: { refresh?: boolean }) => {
@@ -117,6 +124,7 @@ export default function ExerciseTrendDetailScreen() {
       try {
         const response = await getWorkoutAnalyticsExerciseDetail(exerciseId, range, undefined, {
           scopeKind,
+          repBucketId: scopeKind === 'range' ? effectiveRepBucketId : null,
           macrocycleId: macrocycleId ?? null,
           mesocycleId: mesocycleId ?? null,
           microcycleId: microcycleId ?? null,
@@ -126,13 +134,18 @@ export default function ExerciseTrendDetailScreen() {
         setSelectedMetric(getDefaultMetric(response));
       } catch (loadError) {
         const apiError = loadError as ApiError;
+        if (apiError.status === 422 && effectiveRepBucketId) {
+          setEffectiveRepBucketId(null);
+          setError(null);
+          return;
+        }
         setError(apiError.message || 'No fue posible cargar este ejercicio.');
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
       }
     },
-    [exerciseId, macrocycleId, mesocycleId, microcycleId, range, scopeKind],
+    [effectiveRepBucketId, exerciseId, macrocycleId, mesocycleId, microcycleId, range, scopeKind],
   );
 
   useEffect(() => {
@@ -146,6 +159,13 @@ export default function ExerciseTrendDetailScreen() {
     ]);
     return Object.fromEntries(entries);
   }, [detail?.preferences.rep_ranges]);
+  const selectedRepBucketLabel = useMemo(() => {
+    if (!effectiveRepBucketId) {
+      return null;
+    }
+
+    return (detail?.preferences.rep_ranges ?? []).find((bucket) => bucket.id === effectiveRepBucketId)?.label ?? null;
+  }, [detail?.preferences.rep_ranges, effectiveRepBucketId]);
 
   const hasEffortData = useMemo(
     () => (detail?.series ?? []).some((point) => point.avg_effort != null),
@@ -226,7 +246,9 @@ export default function ExerciseTrendDetailScreen() {
           <Text style={styles.title}>{detail?.exercise_name ?? 'Ejercicio'}</Text>
           <Text style={styles.subtitle}>
             {scopeKind === 'range'
-              ? `Evolucion de ${metricLabel.toLowerCase()} a lo largo del tiempo`
+              ? effectiveRepBucketId && selectedRepBucketLabel
+                ? `Evolucion de ${metricLabel.toLowerCase()} en ${selectedRepBucketLabel} a lo largo del tiempo`
+                : `Evolucion de ${metricLabel.toLowerCase()} a lo largo del tiempo`
               : `Evolucion de ${metricLabel.toLowerCase()} dentro del ${scopeLabel.toLowerCase()} seleccionado`}
           </Text>
         </View>
@@ -257,6 +279,16 @@ export default function ExerciseTrendDetailScreen() {
             </Text>
           </View>
         )}
+
+        {scopeKind === 'range' && effectiveRepBucketId && selectedRepBucketLabel ? (
+          <View style={styles.scopeCard}>
+            <Text style={styles.scopeEyebrow}>Filtro</Text>
+            <Text style={styles.scopeTitle}>{selectedRepBucketLabel} reps</Text>
+            <Text style={styles.scopeText}>
+              Tendencia y registros muestran solo matches del rango seleccionado desde Entrenamientos.
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.metricSelectorWrap}>
           <Text style={styles.metricSelectorLabel}>Metrica</Text>
@@ -295,7 +327,11 @@ export default function ExerciseTrendDetailScreen() {
 
         <Card style={styles.chartCard}>
           <Text style={styles.sectionTitle}>Tendencia de {metricLabel.toLowerCase()}</Text>
-          <Text style={styles.sectionSubtitle}>{chartSubtitle}</Text>
+          <Text style={styles.sectionSubtitle}>
+            {effectiveRepBucketId && selectedRepBucketLabel
+              ? `${chartSubtitle} Solo considera sets en ${selectedRepBucketLabel}.`
+              : chartSubtitle}
+          </Text>
           <Text style={styles.profileHint}>{profileContextCopy}</Text>
           <ExerciseTrendChart
             series={detail?.series ?? []}
@@ -309,7 +345,9 @@ export default function ExerciseTrendDetailScreen() {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Registros</Text>
           <Text style={styles.sectionSubtitleSmall}>
-            Historial detallado de cada sesion en el periodo seleccionado.
+            {effectiveRepBucketId && selectedRepBucketLabel
+              ? `Historial filtrado por ${selectedRepBucketLabel} dentro del periodo seleccionado.`
+              : 'Historial detallado de cada sesion en el periodo seleccionado.'}
           </Text>
           {detail?.series.length ? (
             detail.series
@@ -471,7 +509,9 @@ export default function ExerciseTrendDetailScreen() {
               <Ionicons name="analytics-outline" size={40} color={theme.colors.iconMuted} />
               <Text style={styles.emptyTitle}>Sin registros en este rango</Text>
               <Text style={styles.emptyText}>
-                Cambia la ventana temporal para revisar mas sesiones de este ejercicio.
+                {selectedRepBucketLabel
+                  ? `No hay registros de este ejercicio en ${selectedRepBucketLabel}. Limpia el filtro o cambia la ventana temporal.`
+                  : 'Cambia la ventana temporal para revisar mas sesiones de este ejercicio.'}
               </Text>
             </Card>
           )}
