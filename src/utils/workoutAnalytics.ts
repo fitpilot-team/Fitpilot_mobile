@@ -32,6 +32,9 @@ export const EXERCISE_DETAIL_METRIC_OPTIONS: {
   { value: 'volume', label: 'Volumen', unit: 'kg' },
   { value: 'best_reps', label: 'Mejor reps', unit: 'reps' },
   { value: 'effort', label: 'Esfuerzo', unit: 'RIR/RPE' },
+  { value: 'duration', label: 'Duracion', unit: 'min' },
+  { value: 'calories', label: 'Calorias', unit: 'cal' },
+  { value: 'distance', label: 'Distancia', unit: 'm' },
 ];
 
 export type RepRangeDraft = {
@@ -66,12 +69,32 @@ export const normalizeWorkoutAnalyticsRange = (
 
 export const formatVolumeKg = (value: number) => `${integerFormatter.format(Math.round(value))} kg`;
 
+export const formatCalories = (value: number | null | undefined) => {
+  if (value == null || Number.isNaN(value)) {
+    return '-- cal';
+  }
+
+  return `${integerFormatter.format(Math.round(value))} cal`;
+};
+
 export const formatWeightKg = (value: number | null | undefined) => {
   if (value == null || Number.isNaN(value)) {
     return '-- kg';
   }
 
   return `${decimalFormatter.format(value)} kg`;
+};
+
+export const formatDistance = (value: number | null | undefined) => {
+  if (value == null || Number.isNaN(value)) {
+    return '-- m';
+  }
+
+  if (value >= 1000) {
+    return `${decimalFormatter.format(value / 1000)} km`;
+  }
+
+  return `${decimalFormatter.format(value)} m`;
 };
 
 export const formatDeltaKg = (value: number | null | undefined) => {

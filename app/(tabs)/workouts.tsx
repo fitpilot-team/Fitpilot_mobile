@@ -71,7 +71,7 @@ import {
   getPrimaryScreenHorizontalPadding,
   isTabletLayout,
 } from '../../src/utils/layout';
-import { formatVolumeKg } from '../../src/utils/workoutAnalytics';
+import { formatCalories, formatDistance, formatVolumeKg } from '../../src/utils/workoutAnalytics';
 import {
   areSelectionsEqual,
   buildHistoricalProgramsCatalog,
@@ -161,6 +161,35 @@ const getHistoryStatusMeta = (
   }
 };
 
+const getSessionKindMeta = (
+  sessionKind: RecentWorkoutHistoryItem['session_kind'],
+  theme: AppTheme,
+) => {
+  switch (sessionKind) {
+    case 'cardio':
+      return {
+        icon: 'heart-outline',
+        label: 'Cardio',
+        color: theme.colors.warning,
+        background: theme.isDark ? 'rgba(245, 158, 11, 0.16)' : '#fef3c7',
+      };
+    case 'mixed':
+      return {
+        icon: 'swap-horizontal-outline',
+        label: 'Mixta',
+        color: theme.colors.primary,
+        background: theme.isDark ? 'rgba(59, 130, 246, 0.16)' : '#dbeafe',
+      };
+    default:
+      return {
+        icon: 'barbell-outline',
+        label: 'Fuerza',
+        color: theme.colors.iconMuted,
+        background: theme.isDark ? 'rgba(148, 163, 184, 0.16)' : '#f1f5f9',
+      };
+  }
+};
+
 const normalizeSearchValue = (value: string) =>
   value
     .trim()
@@ -173,6 +202,9 @@ const compareExercisesBySort = (
   right: ExerciseTrendSummary,
   sort: ExerciseSortOption,
 ) => {
+  const leftDelta = left.primary_metric_delta ?? left.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY;
+  const rightDelta = right.primary_metric_delta ?? right.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY;
+
   if (sort === 'progress') {
     const leftPriority = TREND_STATUS_SORT_PRIORITY[left.trend_status ?? 'insufficient'] ?? 0;
     const rightPriority = TREND_STATUS_SORT_PRIORITY[right.trend_status ?? 'insufficient'] ?? 0;
@@ -188,9 +220,7 @@ const compareExercisesBySort = (
       return scoreDiff;
     }
 
-    const deltaDiff =
-      (right.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY) -
-      (left.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY);
+    const deltaDiff = rightDelta - leftDelta;
     if (deltaDiff !== 0) {
       return deltaDiff;
     }
@@ -218,9 +248,7 @@ const compareExercisesBySort = (
   }
 
   if (sort !== 'progress') {
-    const deltaDiff =
-      (right.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY) -
-      (left.best_weight_delta_kg ?? Number.NEGATIVE_INFINITY);
+    const deltaDiff = rightDelta - leftDelta;
     if (deltaDiff !== 0) {
       return deltaDiff;
     }
@@ -330,6 +358,12 @@ const buildOverviewEmptyState = (
       emptyMessage ??
       'Todavia no hay suficientes sesiones en la ventana seleccionada para construir analytics utiles.',
   };
+};
+
+type HistoryMetricItem = {
+  id: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  text: string;
 };
 
 const SearchField = ({
@@ -518,6 +552,55 @@ const HistoryCard = ({
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const statusMeta = getHistoryStatusMeta(workout.status, theme);
+  const sessionKindMeta = getSessionKindMeta(workout.session_kind, theme);
+  const cardioStats: HistoryMetricItem[] = [];
+  if (workout.cardio_duration_minutes != null && workout.cardio_duration_minutes > 0) {
+    cardioStats.push({
+      id: 'cardio-duration',
+      icon: 'time-outline',
+      text: formatDuration(Math.max(1, Math.round(workout.cardio_duration_minutes))),
+    });
+  }
+  if (workout.cardio_calories_burned != null && workout.cardio_calories_burned > 0) {
+    cardioStats.push({
+      id: 'cardio-calories',
+      icon: 'flame-outline',
+      text: formatCalories(workout.cardio_calories_burned),
+    });
+  }
+  if (workout.cardio_distance_meters != null && workout.cardio_distance_meters > 0) {
+    cardioStats.push({
+      id: 'cardio-distance',
+      icon: 'walk-outline',
+      text: formatDistance(workout.cardio_distance_meters),
+    });
+  }
+  const standardStats: HistoryMetricItem[] = [
+    {
+      id: 'duration',
+      icon: 'time-outline' as const,
+      text:
+        workout.duration_minutes != null
+          ? formatDuration(Math.max(1, Math.round(workout.duration_minutes)))
+          : 'Sin duracion',
+    },
+    {
+      id: 'exercises',
+      icon: 'fitness-outline' as const,
+      text: `${workout.exercises_count} ejercicios`,
+    },
+    ...(workout.session_kind === 'cardio'
+      ? []
+      : [
+          {
+            id: 'volume',
+            icon: 'trending-up-outline' as const,
+            text: formatVolumeKg(workout.volume_kg),
+          },
+        ]),
+  ];
+  const showCardioPrimary = workout.session_kind === 'cardio' && cardioStats.length > 0;
+  const showStandardStats = workout.session_kind !== 'cardio' || cardioStats.length === 0;
 
   return (
     <TouchableOpacity style={styles.historyCard} activeOpacity={0.88} onPress={onPress}>
@@ -542,32 +625,60 @@ const HistoryCard = ({
                   'es-MX',
                 )}
           </Text>
+          <View
+            style={[
+              styles.historyKindBadge,
+              { backgroundColor: sessionKindMeta.background },
+            ]}
+          >
+            <Ionicons
+              name={sessionKindMeta.icon as keyof typeof Ionicons.glyphMap}
+              size={12}
+              color={sessionKindMeta.color}
+            />
+            <Text style={[styles.historyKindBadgeText, { color: sessionKindMeta.color }]}>
+              {sessionKindMeta.label}
+            </Text>
+          </View>
         </View>
         </View>
 
         <Text style={[styles.historyStatus, { color: statusMeta.color }]}>{statusMeta.label}</Text>
       </View>
 
-      <View style={styles.historyStatsRow}>
-        <View style={styles.historyStat}>
-          <Ionicons name="time-outline" size={14} color={theme.colors.iconMuted} />
-          <Text style={styles.historyStatText}>
-            {workout.duration_minutes != null
-              ? formatDuration(Math.max(1, Math.round(workout.duration_minutes)))
-              : 'Sin duracion'}
-          </Text>
+      {showStandardStats ? (
+        <View style={styles.historyStatsRow}>
+          {standardStats.map((item) => (
+            <View key={item.id} style={styles.historyStat}>
+              <Ionicons name={item.icon} size={14} color={theme.colors.iconMuted} />
+              <Text style={styles.historyStatText}>{item.text}</Text>
+            </View>
+          ))}
         </View>
+      ) : null}
 
-        <View style={styles.historyStat}>
-          <Ionicons name="fitness-outline" size={14} color={theme.colors.iconMuted} />
-          <Text style={styles.historyStatText}>{workout.exercises_count} ejercicios</Text>
-        </View>
+      {cardioStats.length ? (
+        <View
+          style={[
+            styles.historyCardioBlock,
+            showCardioPrimary ? styles.historyCardioBlockPrimary : null,
+          ]}
+        >
+          <View style={styles.historyCardioHeader}>
+            <Ionicons name="heart-outline" size={14} color={theme.colors.warning} />
+            <Text style={styles.historyCardioTitle}>Cardio ejecutado</Text>
+          </View>
 
-        <View style={styles.historyStat}>
-          <Ionicons name="trending-up-outline" size={14} color={theme.colors.iconMuted} />
-          <Text style={styles.historyStatText}>{formatVolumeKg(workout.volume_kg)}</Text>
+          <View style={styles.historyCardioStatsRow}>
+            {cardioStats.map((item) => (
+              <View key={item.id} style={styles.historyStat}>
+                <Ionicons name={item.icon} size={14} color={theme.colors.iconMuted} />
+                <Text style={styles.historyStatText}>{item.text}</Text>
+              </View>
+            ))}
+          </View>
         </View>
-      </View>
+      ) : null}
     </TouchableOpacity>
   );
 };
@@ -2145,6 +2256,21 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textMuted,
       textTransform: 'capitalize',
     },
+    historyKindBadge: {
+      marginTop: spacing.xs,
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      borderRadius: borderRadius.full,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+    },
+    historyKindBadgeText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+    },
     historyStatus: {
       fontSize: fontSize.xs,
       fontWeight: '700',
@@ -2166,6 +2292,33 @@ const createStyles = (theme: AppTheme) =>
     historyStatText: {
       fontSize: fontSize.xs,
       color: theme.colors.textMuted,
+    },
+    historyCardioBlock: {
+      gap: spacing.sm,
+      paddingTop: spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+    historyCardioBlockPrimary: {
+      paddingTop: 0,
+      borderTopWidth: 0,
+    },
+    historyCardioHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    historyCardioTitle: {
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    historyCardioStatsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.md,
     },
     emptyCard: {
       alignItems: 'center',

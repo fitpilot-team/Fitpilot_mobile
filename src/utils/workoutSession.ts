@@ -1,8 +1,10 @@
 import { getWorkoutSetTypeDefinition, validateSegmentedWeightFlow } from '../constants/workoutSetTypes';
 import type {
+  CardioBlockLog,
   CurrentWorkoutState,
   DayExercise,
   ExerciseProgress,
+  MovementBlockLog,
   TrainingDay,
   WorkoutSetGroup,
   WorkoutSetSegmentInput,
@@ -11,7 +13,10 @@ import {
   clampEffortValue,
   getCardioEffectiveSets,
   isCardioExercise,
+  isMovementExercise,
+  isPlyometricExercise,
   isEditableEffortType,
+  isMobilityOrWarmupExercise,
   shouldShowStrengthEffort,
 } from './formatters';
 
@@ -22,31 +27,129 @@ export type WorkoutSetSegmentDraft = {
   effort_value: number | null;
 };
 
-export type WorkoutExerciseDraft = {
+export type WorkoutExecutionKey = {
+  dayExerciseId: string;
+  setNumber: number;
+};
+
+type WorkoutExecutionDraftBase = {
+  key: WorkoutExecutionKey;
   currentExerciseIndex: number;
   currentSetNumber: number;
+  restSeconds: number;
+};
+
+export type StrengthExecutionDraft = WorkoutExecutionDraftBase & {
+  kind: 'strength';
+  currentSegments: WorkoutSetSegmentDraft[];
+};
+
+export type CardioExecutionDraft = WorkoutExecutionDraftBase & {
+  kind: 'cardio';
+  durationSeconds: number;
+  caloriesBurned: number | null;
+  distanceMeters: number | null;
+  effortValue: number | null;
+};
+
+export type MovementExecutionDraft = WorkoutExecutionDraftBase & {
+  kind: 'movement';
+  durationSeconds: number | null;
+  contactsCompleted: number | null;
+  heightCm: number | null;
+  distanceCm: number | null;
+  metricType: 'height_cm' | 'distance_cm' | null;
+};
+
+export type WorkoutExecutionDraft = StrengthExecutionDraft | CardioExecutionDraft | MovementExecutionDraft;
+
+type StrengthDraftValues = {
   currentSegments: WorkoutSetSegmentDraft[];
   restSeconds: number;
 };
 
-type ExerciseDraftValues = {
-  segments: WorkoutSetSegmentDraft[];
+type CardioDraftValues = {
+  durationSeconds: number;
+  caloriesBurned: number | null;
+  distanceMeters: number | null;
+  effortValue: number | null;
   restSeconds: number;
 };
 
-const DEFAULT_SEGMENT_DRAFT: WorkoutSetSegmentDraft = {
-  segment_index: 1,
-  reps_completed: 12,
-  weight_kg: 0,
-  effort_value: null,
+type MovementDraftValues = {
+  durationSeconds: number | null;
+  contactsCompleted: number | null;
+  heightCm: number | null;
+  distanceCm: number | null;
+  metricType: 'height_cm' | 'distance_cm' | null;
+  restSeconds: number;
 };
 
-export const DEFAULT_WORKOUT_EXERCISE_DRAFT: WorkoutExerciseDraft = {
-  currentExerciseIndex: 0,
-  currentSetNumber: 1,
-  currentSegments: [DEFAULT_SEGMENT_DRAFT],
-  restSeconds: 90,
+export type WorkoutCardioBlockInput = {
+  dayExerciseId: string;
+  setNumber: number;
+  durationSeconds: number;
+  caloriesBurned?: number | null;
+  distanceMeters?: number | null;
+  effortValue?: number | null;
 };
+
+export type WorkoutMovementBlockInput = {
+  dayExerciseId: string;
+  setNumber: number;
+  durationSeconds?: number | null;
+  contactsCompleted?: number | null;
+  heightCm?: number | null;
+  distanceCm?: number | null;
+};
+
+export type WorkoutExecutionTarget = {
+  dayExerciseId?: string;
+  exerciseIndex?: number;
+  setNumber?: number;
+};
+
+const getPlannedCardioDurationSeconds = (dayExercise: DayExercise | undefined): number => {
+  if (!dayExercise) {
+    return 60;
+  }
+
+  if (dayExercise.duration_seconds != null && dayExercise.duration_seconds > 0) {
+    return dayExercise.duration_seconds;
+  }
+
+  if ((dayExercise.intervals ?? 0) > 0 && (dayExercise.work_seconds ?? 0) > 0) {
+    return (dayExercise.intervals ?? 0) * (dayExercise.work_seconds ?? 0);
+  }
+
+  return 60;
+};
+
+const getPlannedMovementDurationSeconds = (dayExercise: DayExercise | undefined): number | null => {
+  if (!dayExercise || !isMobilityOrWarmupExercise(dayExercise)) {
+    return null;
+  }
+
+  if (dayExercise.duration_seconds != null && dayExercise.duration_seconds > 0) {
+    return dayExercise.duration_seconds;
+  }
+
+  return null;
+};
+
+export const isStrengthExecutionDraft = (
+  draft: WorkoutExecutionDraft | null | undefined,
+): draft is StrengthExecutionDraft => draft?.kind === 'strength';
+
+export const isCardioExecutionDraft = (
+  draft: WorkoutExecutionDraft | null | undefined,
+): draft is CardioExecutionDraft => draft?.kind === 'cardio';
+
+export const isMovementExecutionDraft = (
+  draft: WorkoutExecutionDraft | null | undefined,
+): draft is MovementExecutionDraft => draft?.kind === 'movement';
+
+export const getExecutionKeyString = (key: WorkoutExecutionKey) => `${key.dayExerciseId}:${key.setNumber}`;
 
 export const getExerciseEffortDefault = (dayExercise?: DayExercise): number | null => {
   if (!shouldShowStrengthEffort(dayExercise) || dayExercise?.effort_value == null) {
@@ -65,6 +168,11 @@ export const getDayExerciseByProgress = (
   progress?: ExerciseProgress,
 ): DayExercise | undefined =>
   trainingDay?.exercises.find((exercise) => exercise.id === progress?.day_exercise_id);
+
+export const findExerciseIndexByDayExerciseId = (
+  workoutState: CurrentWorkoutState,
+  dayExerciseId: string,
+) => workoutState.exercises_progress.findIndex((exercise) => exercise.day_exercise_id === dayExerciseId);
 
 export const getExerciseTargetSetNumber = (
   dayExercise?: DayExercise,
@@ -95,15 +203,12 @@ const buildBaseSegmentDraft = (
     weight_kg?: number | null;
     effort_value?: number | null;
   } | null,
-): WorkoutSetSegmentDraft => {
-  const isCardio = isCardioExercise(dayExercise);
-  return {
-    segment_index: 1,
-    reps_completed: sourceSegment?.reps_completed ?? (isCardio ? 1 : dayExercise?.reps_min ?? 12),
-    weight_kg: isCardio ? 0 : sourceSegment?.weight_kg ?? 0,
-    effort_value: sourceSegment?.effort_value ?? getExerciseEffortDefault(dayExercise),
-  };
-};
+): WorkoutSetSegmentDraft => ({
+  segment_index: 1,
+  reps_completed: sourceSegment?.reps_completed ?? (dayExercise?.reps_min ?? 12),
+  weight_kg: sourceSegment?.weight_kg ?? 0,
+  effort_value: sourceSegment?.effort_value ?? getExerciseEffortDefault(dayExercise),
+});
 
 const normalizeSegmentDrafts = (
   dayExercise: DayExercise | undefined,
@@ -121,7 +226,7 @@ const normalizeSegmentDrafts = (
     .map((segment, index) => ({
       segment_index: index + 1,
       reps_completed: segment.reps_completed ?? (dayExercise?.reps_min ?? 12),
-      weight_kg: isCardioExercise(dayExercise) ? 0 : segment.weight_kg ?? 0,
+      weight_kg: segment.weight_kg ?? 0,
       effort_value: segment.effort_value ?? getExerciseEffortDefault(dayExercise),
     }));
 
@@ -145,56 +250,188 @@ const normalizeSegmentDrafts = (
   return normalizedSegments.map((segment, index) => cloneSegmentDraft(segment, index + 1));
 };
 
-export const getExerciseDraftValues = (
+export const getStrengthDraftValues = (
   dayExercise?: DayExercise,
   progress?: ExerciseProgress,
   targetSetNumber?: number,
-): ExerciseDraftValues => {
+): StrengthDraftValues => {
   const preferredSet = targetSetNumber
     ? progress?.sets_data?.find((setGroup) => setGroup.set_number === targetSetNumber)
     : undefined;
   const templateSegments = preferredSet?.segments ?? null;
 
   return {
-    segments: normalizeSegmentDrafts(dayExercise, templateSegments),
+    currentSegments: normalizeSegmentDrafts(dayExercise, templateSegments),
     restSeconds: dayExercise?.interval_rest_seconds || dayExercise?.rest_seconds || 90,
   };
 };
 
-export const createWorkoutExerciseDraft = (
-  workoutState: CurrentWorkoutState,
-  options?: { exerciseIndex?: number; targetSetNumber?: number },
-): WorkoutExerciseDraft => {
-  const safeIndex = Math.max(
-    0,
-    Math.min(
-      options?.exerciseIndex ?? workoutState.exercises_progress.findIndex((exercise) => !exercise.is_completed),
-      Math.max(workoutState.exercises_progress.length - 1, 0),
-    ),
-  );
-  const currentExerciseIndex = safeIndex < 0 ? 0 : safeIndex;
-  const currentExercise = workoutState.exercises_progress[currentExerciseIndex];
-  const dayExercise = getDayExerciseByProgress(workoutState.training_day, currentExercise);
-  const currentSetNumber = getExerciseTargetSetNumber(dayExercise, currentExercise, options?.targetSetNumber);
-  const defaults = getExerciseDraftValues(dayExercise, currentExercise, currentSetNumber);
+export const getCardioDraftValues = (
+  dayExercise?: DayExercise,
+  progress?: ExerciseProgress,
+  targetSetNumber?: number,
+): CardioDraftValues => {
+  const cardioBlock = targetSetNumber ? getCardioBlockByNumber(progress, targetSetNumber) : undefined;
 
   return {
-    currentExerciseIndex,
-    currentSetNumber,
-    currentSegments: defaults.segments,
-    restSeconds: defaults.restSeconds,
+    durationSeconds: Math.max(
+      1,
+      Math.round(cardioBlock?.duration_seconds ?? getPlannedCardioDurationSeconds(dayExercise)),
+    ),
+    caloriesBurned: cardioBlock?.calories_burned ?? dayExercise?.target_calories ?? null,
+    distanceMeters: cardioBlock?.distance_meters ?? dayExercise?.distance_meters ?? null,
+    effortValue: cardioBlock?.effort_value ?? dayExercise?.effort_value ?? null,
+    restSeconds: dayExercise?.interval_rest_seconds || dayExercise?.rest_seconds || 90,
   };
 };
 
-export const toWorkoutSetSegmentInputs = (
-  segments: WorkoutSetSegmentDraft[],
-): WorkoutSetSegmentInput[] =>
+export const getMovementDraftValues = (
+  dayExercise?: DayExercise,
+  progress?: ExerciseProgress,
+  targetSetNumber?: number,
+): MovementDraftValues => {
+  const movementBlock = targetSetNumber ? getMovementBlockByNumber(progress, targetSetNumber) : undefined;
+  const metricType = isPlyometricExercise(dayExercise)
+    ? (dayExercise?.plyometric_metric_type ?? 'height_cm')
+    : null;
+
+  if (isPlyometricExercise(dayExercise)) {
+    return {
+      durationSeconds: null,
+      contactsCompleted: movementBlock?.contacts_completed ?? dayExercise?.reps_min ?? 8,
+      heightCm: movementBlock?.height_cm ?? null,
+      distanceCm: movementBlock?.distance_cm ?? null,
+      metricType,
+      restSeconds: dayExercise?.interval_rest_seconds || dayExercise?.rest_seconds || 90,
+    };
+  }
+
+  return {
+    durationSeconds: movementBlock?.duration_seconds ?? getPlannedMovementDurationSeconds(dayExercise),
+    contactsCompleted: null,
+    heightCm: null,
+    distanceCm: null,
+    metricType: null,
+    restSeconds: dayExercise?.interval_rest_seconds || dayExercise?.rest_seconds || 60,
+  };
+};
+
+export const createWorkoutExecutionDraft = (
+  workoutState: CurrentWorkoutState,
+  target?: WorkoutExecutionTarget,
+): WorkoutExecutionDraft | null => {
+  const safeIndex = target?.dayExerciseId
+    ? findExerciseIndexByDayExerciseId(workoutState, target.dayExerciseId)
+    : (target?.exerciseIndex ?? workoutState.exercises_progress.findIndex((exercise) => !exercise.is_completed));
+  const currentExerciseIndex = Math.max(
+    0,
+    Math.min(
+      safeIndex < 0 ? 0 : safeIndex,
+      Math.max(workoutState.exercises_progress.length - 1, 0),
+    ),
+  );
+
+  const currentProgress = workoutState.exercises_progress[currentExerciseIndex];
+  if (!currentProgress) {
+    return null;
+  }
+
+  const dayExercise = getDayExerciseByProgress(workoutState.training_day, currentProgress);
+  if (!dayExercise) {
+    return null;
+  }
+
+  const currentSetNumber = getExerciseTargetSetNumber(dayExercise, currentProgress, target?.setNumber);
+  const key = {
+    dayExerciseId: currentProgress.day_exercise_id,
+    setNumber: currentSetNumber,
+  };
+
+  if (isMovementExercise(dayExercise)) {
+    const movementDefaults = getMovementDraftValues(dayExercise, currentProgress, currentSetNumber);
+    return {
+      kind: 'movement',
+      key,
+      currentExerciseIndex,
+      currentSetNumber,
+      restSeconds: movementDefaults.restSeconds,
+      durationSeconds: movementDefaults.durationSeconds,
+      contactsCompleted: movementDefaults.contactsCompleted,
+      heightCm: movementDefaults.heightCm,
+      distanceCm: movementDefaults.distanceCm,
+      metricType: movementDefaults.metricType,
+    };
+  }
+
+  if (isCardioExercise(dayExercise)) {
+    const cardioDefaults = getCardioDraftValues(dayExercise, currentProgress, currentSetNumber);
+    return {
+      kind: 'cardio',
+      key,
+      currentExerciseIndex,
+      currentSetNumber,
+      restSeconds: cardioDefaults.restSeconds,
+      durationSeconds: cardioDefaults.durationSeconds,
+      caloriesBurned: cardioDefaults.caloriesBurned,
+      distanceMeters: cardioDefaults.distanceMeters,
+      effortValue: cardioDefaults.effortValue,
+    };
+  }
+
+  const strengthDefaults = getStrengthDraftValues(dayExercise, currentProgress, currentSetNumber);
+  return {
+    kind: 'strength',
+    key,
+    currentExerciseIndex,
+    currentSetNumber,
+    restSeconds: strengthDefaults.restSeconds,
+    currentSegments: strengthDefaults.currentSegments,
+  };
+};
+
+export const hydrateWorkoutExecutionDraft = (
+  workoutState: CurrentWorkoutState,
+  draft: WorkoutExecutionDraft | null | undefined,
+): WorkoutExecutionDraft | null => {
+  if (!draft) {
+    return createWorkoutExecutionDraft(workoutState);
+  }
+
+  return createWorkoutExecutionDraft(workoutState, {
+    dayExerciseId: draft.key.dayExerciseId,
+    setNumber: draft.key.setNumber,
+  });
+};
+
+export const toWorkoutSetSegmentInputs = (segments: WorkoutSetSegmentDraft[]): WorkoutSetSegmentInput[] =>
   segments.map((segment, index) => ({
     segment_index: index + 1,
     reps_completed: Math.max(0, Math.round(segment.reps_completed)),
     weight_kg: segment.weight_kg > 0 ? segment.weight_kg : 0,
     effort_value: segment.effort_value ?? undefined,
   }));
+
+export const toWorkoutCardioBlockInput = (
+  draft: CardioExecutionDraft,
+): WorkoutCardioBlockInput => ({
+  dayExerciseId: draft.key.dayExerciseId,
+  setNumber: draft.key.setNumber,
+  durationSeconds: Math.max(1, Math.round(draft.durationSeconds)),
+  caloriesBurned: draft.caloriesBurned,
+  distanceMeters: draft.distanceMeters,
+  effortValue: draft.effortValue,
+});
+
+export const toWorkoutMovementBlockInput = (
+  draft: MovementExecutionDraft,
+): WorkoutMovementBlockInput => ({
+  dayExerciseId: draft.key.dayExerciseId,
+  setNumber: draft.key.setNumber,
+  durationSeconds: draft.durationSeconds,
+  contactsCompleted: draft.contactsCompleted,
+  heightCm: draft.heightCm,
+  distanceCm: draft.distanceCm,
+});
 
 export const createNextSegmentDraft = (
   dayExercise: DayExercise | undefined,
@@ -225,14 +462,43 @@ export const getSetGroupByNumber = (
   progress: ExerciseProgress | undefined,
   setNumber: number,
 ): WorkoutSetGroup | undefined =>
-  progress?.sets_data.find((setGroup) => setGroup.set_number === setNumber);
+  progress?.sets_data?.find((setGroup) => setGroup.set_number === setNumber);
 
-/**
- * Find the next incomplete exercise index starting from `currentIndex + 1`.
- * Wraps around circularly so exercises before `currentIndex` are also
- * considered if nothing is found after it. Returns `currentIndex` when
- * every exercise is already completed.
- */
+export const getCardioBlockByNumber = (
+  progress: ExerciseProgress | undefined,
+  setNumber: number,
+): CardioBlockLog | undefined =>
+  progress?.cardio_blocks_data?.find((cardioBlock) => cardioBlock.set_number === setNumber);
+
+export const getMovementBlockByNumber = (
+  progress: ExerciseProgress | undefined,
+  setNumber: number,
+): MovementBlockLog | undefined =>
+  progress?.movement_blocks_data?.find((movementBlock) => movementBlock.set_number === setNumber);
+
+export const hasCompletedCardioExecution = (
+  progress: ExerciseProgress | undefined,
+  setNumber: number,
+): boolean => {
+  if (!progress) {
+    return false;
+  }
+
+  if ((progress.cardio_blocks_data?.length ?? 0) > 0) {
+    return (progress.cardio_blocks_data ?? []).some(
+      (cardioBlock) => cardioBlock.set_number === setNumber,
+    );
+  }
+
+  return (progress.sets_data ?? []).some((setGroup) => setGroup.set_number === setNumber);
+};
+
+export const hasCompletedMovementExecution = (
+  progress: ExerciseProgress | undefined,
+  setNumber: number,
+): boolean =>
+  (progress?.movement_blocks_data ?? []).some((movementBlock) => movementBlock.set_number === setNumber);
+
 export const findNextIncompleteExerciseIndex = (
   exercisesProgress: ExerciseProgress[],
   currentIndex: number,
@@ -242,7 +508,7 @@ export const findNextIncompleteExerciseIndex = (
     return currentIndex;
   }
 
-  for (let offset = 1; offset < count; offset++) {
+  for (let offset = 1; offset < count; offset += 1) {
     const candidateIndex = (currentIndex + offset) % count;
     if (!exercisesProgress[candidateIndex]?.is_completed) {
       return candidateIndex;

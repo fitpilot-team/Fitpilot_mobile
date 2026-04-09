@@ -84,6 +84,7 @@ export type ExerciseClass =
   | 'conditioning'
   | 'balance';
 export type CardioSubclass = 'liss' | 'hiit' | 'miss';
+export type PlyometricMetricType = 'height_cm' | 'distance_cm';
 
 export interface Exercise {
   id: string;
@@ -128,6 +129,7 @@ export interface DayExercise {
   intervals?: number | null;
   work_seconds?: number | null;
   interval_rest_seconds?: number | null;
+  plyometric_metric_type?: PlyometricMetricType | null;
   notes?: string | null;
 }
 
@@ -235,6 +237,30 @@ export interface WorkoutSetGroup {
   segments: ExerciseSetLog[];
 }
 
+export interface CardioBlockLog {
+  id: string;
+  workout_log_id: string;
+  day_exercise_id: string;
+  set_number: number;
+  duration_seconds: number;
+  calories_burned?: number | null;
+  distance_meters?: number | null;
+  effort_value?: number | null;
+  completed_at?: string | null;
+}
+
+export interface MovementBlockLog {
+  id: string;
+  workout_log_id: string;
+  day_exercise_id: string;
+  set_number: number;
+  duration_seconds?: number | null;
+  contacts_completed?: number | null;
+  height_cm?: number | null;
+  distance_cm?: number | null;
+  completed_at?: string | null;
+}
+
 export interface WorkoutSetSegmentInput {
   segment_index: number;
   reps_completed: number;
@@ -256,6 +282,8 @@ export interface WorkoutLog {
   abandon_notes?: string | null;
   rescheduled_to_date?: string | null;
   exercise_sets: ExerciseSetLog[];
+  cardio_blocks: CardioBlockLog[];
+  movement_blocks: MovementBlockLog[];
 }
 
 // Missed workout types
@@ -278,6 +306,8 @@ export interface ExerciseProgress {
   completed_sets: number;
   is_completed: boolean;
   sets_data: WorkoutSetGroup[];
+  cardio_blocks_data: CardioBlockLog[];
+  movement_blocks_data: MovementBlockLog[];
 }
 
 export interface CurrentWorkoutState {
@@ -377,6 +407,7 @@ export type WorkoutAnalyticsScopeKind = 'range' | 'microcycle' | 'mesocycle' | '
 export type WorkoutAnalyticsAvailability = 'available' | 'partial' | 'unavailable';
 export type WorkoutAnalyticsOrigin = 'measured' | 'derived';
 export type WorkoutAnalyticsTrendVariant = 'stacked_rep_ranges' | 'line';
+export type WorkoutSessionKind = 'strength' | 'cardio' | 'mixed';
 export type ExerciseDetailMetric =
   | 'best_weight'
   | 'volume'
@@ -384,12 +415,16 @@ export type ExerciseDetailMetric =
   | 'effort'
   | 'e1rm'
   | 'top_set_weight'
-  | 'total_reps';
+  | 'total_reps'
+  | 'duration'
+  | 'calories'
+  | 'distance';
 export type AnalyticsProfileId =
   | 'double_progression_hypertrophy'
   | 'percentage_1rm_strength'
   | 'rpe_strength'
-  | 'bodyweight_progression';
+  | 'bodyweight_progression'
+  | 'cardio_progression';
 
 export interface RepRangeBucket {
   id: string;
@@ -437,8 +472,11 @@ export interface ExerciseTrendSummary {
   // Phase 2
   analytics_profile?: AnalyticsProfileId | null;
   primary_metric_value?: number | null;
+  primary_metric_delta?: number | null;
   primary_metric_unit?: string | null;
   progress_score?: number | null;
+  total_calories_burned?: number | null;
+  total_distance_meters?: number | null;
   primary_metric_context?: WorkoutAnalyticsMetricContext | null;
   personal_best_context?: WorkoutAnalyticsMetricContext | null;
 }
@@ -447,7 +485,11 @@ export interface RecentWorkoutHistoryItem {
   workout_log_id: string;
   training_day_name: string;
   performed_on_date: string;
+  session_kind: WorkoutSessionKind;
   duration_minutes?: number | null;
+  cardio_duration_minutes?: number | null;
+  cardio_calories_burned?: number | null;
+  cardio_distance_meters?: number | null;
   exercises_count: number;
   volume_kg: number;
   status: WorkoutStatus;
@@ -603,6 +645,9 @@ export interface ExerciseTrendPoint {
   performed_on_date: string;
   best_weight_kg?: number | null;
   volume_kg: number;
+  duration_minutes?: number | null;
+  calories_burned?: number | null;
+  distance_meters?: number | null;
   reps_bucket_id?: string | null;
   rep_bucket_totals: Record<string, number>;
   best_reps?: number | null;
@@ -637,7 +682,13 @@ export interface DisplayHints {
 
 export interface ExerciseTrendDetailSummary {
   personal_best_kg?: number | null;
+  personal_best_value?: number | null;
+  personal_best_unit?: string | null;
+  personal_best_label?: string | null;
   total_sessions: number;
+  total_duration_minutes?: number | null;
+  total_calories_burned?: number | null;
+  total_distance_meters?: number | null;
   first_logged_at?: string | null;
   last_logged_at?: string | null;
 }

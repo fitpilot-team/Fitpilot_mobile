@@ -29,6 +29,8 @@ import type {
 } from '../../../src/types';
 import { formatLocalDate } from '../../../src/utils/date';
 import {
+  formatCalories,
+  formatDistance,
   formatVolumeKg,
   formatWeightKg,
   normalizeWorkoutAnalyticsRange,
@@ -62,6 +64,21 @@ const getPointBucketEntries = (
       label: repRangeMap[bucketId] ?? bucketId,
       value,
     }));
+
+type SummaryCardItem = {
+  label: string;
+  value: string;
+  context: string | null;
+};
+
+type RecordMetricItem = {
+  key: string;
+  label: string;
+  value: string;
+  context: string | null;
+};
+
+const isPresent = <T,>(value: T | null): value is T => value !== null;
 
 export default function ExerciseTrendDetailScreen() {
   const {
@@ -185,6 +202,9 @@ export default function ExerciseTrendDetailScreen() {
     [detail],
   );
   const profileConfig = getProfileConfig(detail?.analytics_profile);
+  const supportsRepRangeBuckets =
+    detail?.display_hints?.show_rep_range_buckets ?? profileConfig.showRepRangeBuckets;
+  const activeRepBucketLabel = supportsRepRangeBuckets ? selectedRepBucketLabel : null;
   const profileContextCopy = getProfileContextCopy(detail?.analytics_profile);
   const primaryMetricLabel = getProfilePrimaryMetricLabel(detail?.analytics_profile);
 
@@ -193,7 +213,48 @@ export default function ExerciseTrendDetailScreen() {
       return [];
     }
 
-    const base = [
+    if (profileConfig.id === 'cardio_progression') {
+      const cards: (SummaryCardItem | null)[] = [
+        {
+          label: `${primaryMetricPersonalBest.label} PR`,
+          value: formatMetricValue(primaryMetricPersonalBest.value, primaryMetricPersonalBest.unit),
+          context: null,
+        },
+        { label: 'Sesiones', value: `${detail.summary.total_sessions}`, context: null },
+        detail.summary.total_duration_minutes != null && detail.summary.total_duration_minutes > 0
+          ? {
+              label: 'Duracion total',
+              value: formatMetricValue(detail.summary.total_duration_minutes, 'min'),
+              context: null,
+            }
+          : null,
+        detail.summary.total_calories_burned != null && detail.summary.total_calories_burned > 0
+          ? {
+              label: 'Calorias',
+              value: formatCalories(detail.summary.total_calories_burned),
+              context: null,
+            }
+          : null,
+        detail.summary.total_distance_meters != null && detail.summary.total_distance_meters > 0
+          ? {
+              label: 'Distancia',
+              value: formatDistance(detail.summary.total_distance_meters),
+              context: null,
+            }
+          : null,
+        {
+          label: 'Ultima',
+          value: detail.summary.last_logged_at
+            ? formatLocalDate(detail.summary.last_logged_at, { day: 'numeric', month: 'short' })
+            : '--',
+          context: null,
+        },
+      ];
+
+      return cards.filter(isPresent);
+    }
+
+    const base: SummaryCardItem[] = [
       {
         label: `${primaryMetricPersonalBest.label} PR`,
         value: formatMetricValue(primaryMetricPersonalBest.value, primaryMetricPersonalBest.unit),
@@ -219,7 +280,7 @@ export default function ExerciseTrendDetailScreen() {
     ];
 
     return base;
-  }, [detail, primaryMetricPersonalBest, profileConfig.primaryMetric]);
+  }, [detail, primaryMetricPersonalBest, profileConfig.id, profileConfig.primaryMetric]);
 
   const chartSubtitle = getMetricChartSubtitle(selectedMetric);
   const metricLabel = getMetricLabel(selectedMetric);
@@ -246,8 +307,8 @@ export default function ExerciseTrendDetailScreen() {
           <Text style={styles.title}>{detail?.exercise_name ?? 'Ejercicio'}</Text>
           <Text style={styles.subtitle}>
             {scopeKind === 'range'
-              ? effectiveRepBucketId && selectedRepBucketLabel
-                ? `Evolucion de ${metricLabel.toLowerCase()} en ${selectedRepBucketLabel} a lo largo del tiempo`
+              ? effectiveRepBucketId && activeRepBucketLabel
+                ? `Evolucion de ${metricLabel.toLowerCase()} en ${activeRepBucketLabel} a lo largo del tiempo`
                 : `Evolucion de ${metricLabel.toLowerCase()} a lo largo del tiempo`
               : `Evolucion de ${metricLabel.toLowerCase()} dentro del ${scopeLabel.toLowerCase()} seleccionado`}
           </Text>
@@ -280,10 +341,10 @@ export default function ExerciseTrendDetailScreen() {
           </View>
         )}
 
-        {scopeKind === 'range' && effectiveRepBucketId && selectedRepBucketLabel ? (
+        {scopeKind === 'range' && effectiveRepBucketId && activeRepBucketLabel ? (
           <View style={styles.scopeCard}>
             <Text style={styles.scopeEyebrow}>Filtro</Text>
-            <Text style={styles.scopeTitle}>{selectedRepBucketLabel} reps</Text>
+            <Text style={styles.scopeTitle}>{activeRepBucketLabel} reps</Text>
             <Text style={styles.scopeText}>
               Tendencia y registros muestran solo matches del rango seleccionado desde Entrenamientos.
             </Text>
@@ -328,8 +389,8 @@ export default function ExerciseTrendDetailScreen() {
         <Card style={styles.chartCard}>
           <Text style={styles.sectionTitle}>Tendencia de {metricLabel.toLowerCase()}</Text>
           <Text style={styles.sectionSubtitle}>
-            {effectiveRepBucketId && selectedRepBucketLabel
-              ? `${chartSubtitle} Solo considera sets en ${selectedRepBucketLabel}.`
+            {effectiveRepBucketId && activeRepBucketLabel
+              ? `${chartSubtitle} Solo considera sets en ${activeRepBucketLabel}.`
               : chartSubtitle}
           </Text>
           <Text style={styles.profileHint}>{profileContextCopy}</Text>
@@ -345,8 +406,8 @@ export default function ExerciseTrendDetailScreen() {
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Registros</Text>
           <Text style={styles.sectionSubtitleSmall}>
-            {effectiveRepBucketId && selectedRepBucketLabel
-              ? `Historial filtrado por ${selectedRepBucketLabel} dentro del periodo seleccionado.`
+            {effectiveRepBucketId && activeRepBucketLabel
+              ? `Historial filtrado por ${activeRepBucketLabel} dentro del periodo seleccionado.`
               : 'Historial detallado de cada sesion en el periodo seleccionado.'}
           </Text>
           {detail?.series.length ? (
@@ -355,113 +416,151 @@ export default function ExerciseTrendDetailScreen() {
               .reverse()
               .map((point) => {
                 const bucketEntries = getPointBucketEntries(point.rep_bucket_totals, repRangeMap);
-                const recordBucketLabel =
-                  bucketEntries.length > 1
+                const recordBucketLabel = supportsRepRangeBuckets
+                  ? bucketEntries.length > 1
                     ? 'Mixta'
                     : bucketEntries.length === 1
                       ? bucketEntries[0].label
                       : point.reps_bucket_id
                         ? repRangeMap[point.reps_bucket_id] || 'Sin bucket'
-                        : 'Sin bucket';
+                        : 'Sin bucket'
+                  : null;
                 const primaryMetricValue = getMetricValue(point, profileConfig.primaryMetric);
-                const recordMetricItems = [
-                  {
-                    key: 'primary',
-                    label: primaryMetricLabel,
-                    value: formatMetricValue(primaryMetricValue, profileConfig.primaryUnit),
-                    context: formatMetricContext(
-                      profileConfig.primaryMetric,
-                      getPointMetricContext(point, profileConfig.primaryMetric),
-                      { variant: 'record_detail' },
-                    ),
-                  },
-                  point.volume_kg > 0 && profileConfig.primaryMetric !== 'volume'
-                    ? {
-                        key: 'volume',
-                        label: 'Volumen',
-                        value: formatVolumeKg(point.volume_kg),
+                const recordMetricItems: RecordMetricItem[] = (profileConfig.id === 'cardio_progression'
+                  ? [
+                      {
+                        key: 'primary',
+                        label: primaryMetricLabel,
+                        value: formatMetricValue(primaryMetricValue, profileConfig.primaryUnit),
                         context: null,
-                      }
-                    : null,
-                  point.best_reps != null &&
-                  point.best_reps > 0 &&
-                  profileConfig.primaryMetric !== 'best_reps'
-                    ? {
-                        key: 'best_reps',
-                        label: 'Mejor reps',
-                        value: `${point.best_reps}`,
+                      },
+                      point.calories_burned != null &&
+                      point.calories_burned > 0 &&
+                      profileConfig.primaryMetric !== 'calories'
+                        ? {
+                            key: 'calories',
+                            label: 'Calorias',
+                            value: formatCalories(point.calories_burned),
+                            context: null,
+                          }
+                        : null,
+                      point.distance_meters != null &&
+                      point.distance_meters > 0 &&
+                      profileConfig.primaryMetric !== 'distance'
+                        ? {
+                            key: 'distance',
+                            label: 'Distancia',
+                            value: formatDistance(point.distance_meters),
+                            context: null,
+                          }
+                        : null,
+                      point.avg_effort != null
+                        ? {
+                            key: 'effort',
+                            label: 'Esfuerzo',
+                            value: point.avg_effort.toFixed(1),
+                            context: null,
+                          }
+                        : null,
+                    ].filter(isPresent)
+                  : [
+                      {
+                        key: 'primary',
+                        label: primaryMetricLabel,
+                        value: formatMetricValue(primaryMetricValue, profileConfig.primaryUnit),
                         context: formatMetricContext(
-                          'best_reps',
-                          getPointMetricContext(point, 'best_reps'),
-                          {
-                            variant: 'record_detail',
-                          },
+                          profileConfig.primaryMetric,
+                          getPointMetricContext(point, profileConfig.primaryMetric),
+                          { variant: 'record_detail' },
                         ),
-                      }
-                    : null,
-                  point.total_reps != null &&
-                  point.total_reps > 0 &&
-                  profileConfig.primaryMetric !== 'total_reps'
-                    ? {
-                        key: 'total_reps',
-                        label: 'Total reps',
-                        value: `${point.total_reps}`,
-                        context: null,
-                      }
-                    : null,
-                  point.e1rm_kg != null &&
-                  point.e1rm_kg > 0 &&
-                  profileConfig.primaryMetric !== 'e1rm'
-                    ? {
-                        key: 'e1rm',
-                        label: '1RM est.',
-                        value: formatWeightKg(point.e1rm_kg),
-                        context: formatMetricContext('e1rm', getPointMetricContext(point, 'e1rm'), {
-                          variant: 'record_detail',
-                        }),
-                      }
-                    : null,
-                  point.relative_intensity_pct != null
-                    ? {
-                        key: 'relative_intensity',
-                        label: 'Intensidad rel.',
-                        value: `${point.relative_intensity_pct.toFixed(1)}%`,
-                        context: null,
-                      }
-                    : null,
-                  point.avg_effort != null
-                    ? {
-                        key: 'effort',
-                        label: 'Esfuerzo',
-                        value: point.avg_effort.toFixed(1),
-                        context: null,
-                      }
-                    : null,
-                  point.adherence_ratio != null
-                    ? {
-                        key: 'adherence',
-                        label: 'Adherencia',
-                        value: `${point.adherence_ratio.toFixed(2)}x`,
-                        context: null,
-                      }
-                    : null,
-                  point.top_set_backoff_delta_kg != null
-                    ? {
-                        key: 'top_vs_backoff',
-                        label: 'Top vs backoff',
-                        value: formatWeightKg(point.top_set_backoff_delta_kg),
-                        context: null,
-                      }
-                    : null,
-                  point.backoff_volume_kg != null && point.backoff_volume_kg > 0
-                    ? {
-                        key: 'backoff_volume',
-                        label: 'Vol. backoff',
-                        value: formatVolumeKg(point.backoff_volume_kg),
-                        context: null,
-                      }
-                    : null,
-                ].filter((item): item is { key: string; label: string; value: string; context: string | null } => Boolean(item));
+                      },
+                      point.volume_kg > 0 && profileConfig.primaryMetric !== 'volume'
+                        ? {
+                            key: 'volume',
+                            label: 'Volumen',
+                            value: formatVolumeKg(point.volume_kg),
+                            context: null,
+                          }
+                        : null,
+                      point.best_reps != null &&
+                      point.best_reps > 0 &&
+                      profileConfig.primaryMetric !== 'best_reps'
+                        ? {
+                            key: 'best_reps',
+                            label: 'Mejor reps',
+                            value: `${point.best_reps} reps`,
+                            context: formatMetricContext(
+                              'best_reps',
+                              getPointMetricContext(point, 'best_reps'),
+                              {
+                                variant: 'record_detail',
+                              },
+                            ),
+                          }
+                        : null,
+                      point.total_reps != null &&
+                      point.total_reps > 0 &&
+                      profileConfig.primaryMetric !== 'total_reps'
+                        ? {
+                            key: 'total_reps',
+                            label: 'Total reps',
+                            value: `${point.total_reps} reps`,
+                            context: null,
+                          }
+                        : null,
+                      point.e1rm_kg != null &&
+                      point.e1rm_kg > 0 &&
+                      profileConfig.primaryMetric !== 'e1rm'
+                        ? {
+                            key: 'e1rm',
+                            label: '1RM est.',
+                            value: formatWeightKg(point.e1rm_kg),
+                            context: formatMetricContext('e1rm', getPointMetricContext(point, 'e1rm'), {
+                              variant: 'record_detail',
+                            }),
+                          }
+                        : null,
+                      point.relative_intensity_pct != null
+                        ? {
+                            key: 'relative_intensity',
+                            label: 'Intensidad rel.',
+                            value: `${point.relative_intensity_pct.toFixed(1)}%`,
+                            context: null,
+                          }
+                        : null,
+                      point.avg_effort != null
+                        ? {
+                            key: 'effort',
+                            label: 'Esfuerzo',
+                            value: point.avg_effort.toFixed(1),
+                            context: null,
+                          }
+                        : null,
+                      point.adherence_ratio != null
+                        ? {
+                            key: 'adherence',
+                            label: 'Adherencia',
+                            value: `${point.adherence_ratio.toFixed(2)}x`,
+                            context: null,
+                          }
+                        : null,
+                      point.top_set_backoff_delta_kg != null
+                        ? {
+                            key: 'top_vs_backoff',
+                            label: 'Top vs backoff',
+                            value: formatWeightKg(point.top_set_backoff_delta_kg),
+                            context: null,
+                          }
+                        : null,
+                      point.backoff_volume_kg != null && point.backoff_volume_kg > 0
+                        ? {
+                            key: 'backoff_volume',
+                            label: 'Vol. backoff',
+                            value: formatVolumeKg(point.backoff_volume_kg),
+                            context: null,
+                          }
+                        : null,
+                    ].filter(isPresent)) as RecordMetricItem[];
 
                 return (
                   <View key={point.performed_on_date} style={styles.recordCard}>
@@ -473,12 +572,14 @@ export default function ExerciseTrendDetailScreen() {
                           month: 'short',
                         })}
                       </Text>
-                      <View style={styles.recordBucket}>
-                        <Text style={styles.recordBucketText}>{recordBucketLabel}</Text>
-                      </View>
+                      {recordBucketLabel ? (
+                        <View style={styles.recordBucket}>
+                          <Text style={styles.recordBucketText}>{recordBucketLabel}</Text>
+                        </View>
+                      ) : null}
                     </View>
 
-                    {bucketEntries.length ? (
+                    {supportsRepRangeBuckets && bucketEntries.length ? (
                       <View style={styles.recordBucketsRow}>
                         {bucketEntries.map((bucket) => (
                           <View key={`${point.performed_on_date}-${bucket.bucketId}`} style={styles.recordBucketChip}>
@@ -509,8 +610,8 @@ export default function ExerciseTrendDetailScreen() {
               <Ionicons name="analytics-outline" size={40} color={theme.colors.iconMuted} />
               <Text style={styles.emptyTitle}>Sin registros en este rango</Text>
               <Text style={styles.emptyText}>
-                {selectedRepBucketLabel
-                  ? `No hay registros de este ejercicio en ${selectedRepBucketLabel}. Limpia el filtro o cambia la ventana temporal.`
+                {activeRepBucketLabel
+                  ? `No hay registros de este ejercicio en ${activeRepBucketLabel}. Limpia el filtro o cambia la ventana temporal.`
                   : 'Cambia la ventana temporal para revisar mas sesiones de este ejercicio.'}
               </Text>
             </Card>
