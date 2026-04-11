@@ -1,13 +1,9 @@
 import type {
-  ActualSessionStatus,
-  Macrocycle,
-  Mesocycle,
-  Microcycle,
+  DashboardTimeline,
+  DashboardTimelineDay,
+  DashboardTimelineSession,
+  DashboardTrainingDaySummary,
   MicrocycleMode,
-  MicrocycleSessionProgress,
-  TrainingDay,
-  WorkoutLog,
-  WorkoutStatus,
 } from '../types';
 import {
   addDaysToDateKey,
@@ -18,20 +14,10 @@ import {
   getLocalWeekDateKeys,
   getStartOfLocalWeekDateKey,
   getTodayDateKey,
-  toLocalDateKey,
 } from './date';
 
 export type ProgramTimelineVariant = 'default' | 'partial' | 'complete' | 'rest' | 'missed';
-
-export interface ProgramTimelineSession extends MicrocycleSessionProgress {
-  trainingDay: TrainingDay;
-  position: number;
-  totalSessions: number;
-  scheduledDateKey: string;
-  performedDateKey: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-}
+export type ProgramTimelineSession = DashboardTimelineSession;
 
 export interface ProgramTimelineDay {
   dateKey: string;
@@ -50,7 +36,7 @@ export interface ProgramTimelineCardSessionState {
   kind: 'session';
   dateKey: string;
   dateLabel: string;
-  trainingDay: TrainingDay;
+  trainingDay: DashboardTrainingDaySummary;
   session: ProgramTimelineSession;
   sessions: ProgramTimelineSession[];
   hasMultipleSessions: boolean;
@@ -85,7 +71,7 @@ export interface ProgramTimelineView {
   focusedDay: ProgramTimelineDay | null;
   cardState: ProgramTimelineCardState;
   highlightedSession: ProgramTimelineSession | null;
-  highlightedTrainingDay: TrainingDay | null;
+  highlightedTrainingDay: DashboardTrainingDaySummary | null;
   workoutPosition: number | null;
   workoutTotal: number | null;
   allCompleted: boolean;
@@ -118,182 +104,30 @@ export interface ProgramTimelineModel {
   allCompleted: boolean;
 }
 
-const getWorkoutStatus = (status: WorkoutLog['status'] | ActualSessionStatus | undefined | null) =>
-  (status ?? 'not_started') as ActualSessionStatus | WorkoutStatus;
+const buildEmptyModel = (): ProgramTimelineModel => ({
+  plannedDaysByDateKey: new Map(),
+  actualDaysByDateKey: new Map(),
+  orderedPlannedSessions: [],
+  actualAdherenceMetrics: {
+    onSchedule: 0,
+    rescheduled: 0,
+    overdue: 0,
+  },
+  initialFocusedDateKey: null,
+  calendarStartDateKey: null,
+  calendarEndDateKey: null,
+  firstWeekStartDateKey: null,
+  lastWeekStartDateKey: null,
+  totalSessions: 0,
+  allCompleted: false,
+});
 
-const getTrainingDayTotalSets = (trainingDay: TrainingDay) =>
-  trainingDay.exercises.reduce((sum, exercise) => sum + (exercise.sets || 0), 0);
-
-const getCompletedWorkoutSetCount = (workoutLog: WorkoutLog) => {
-  const completedSetIds = new Set<string>();
-
-  workoutLog.exercise_sets.forEach((setLog) => {
-    completedSetIds.add(`${setLog.day_exercise_id}:${setLog.set_number}`);
-  });
-
-  return completedSetIds.size;
-};
-
-const roundPercentage = (value: number) => {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-
-  return Math.max(0, Math.min(100, Math.round(value)));
-};
-
-const calculateSessionCompletionPercentage = (
-  trainingDay: TrainingDay,
-  workoutLog: WorkoutLog | null,
-) => {
-  if (!workoutLog) {
-    return 0;
-  }
-
-  if (workoutLog.status === 'completed') {
-    return 100;
-  }
-
-  const totalSets = getTrainingDayTotalSets(trainingDay);
-  if (totalSets <= 0) {
-    return 0;
-  }
-
-  return roundPercentage((getCompletedWorkoutSetCount(workoutLog) / totalSets) * 100);
-};
-
-const resolvePlannedStatus = (
-  actualStatus: ActualSessionStatus,
-  completionPercentage: number,
-): MicrocycleSessionProgress['planned_status'] => {
-  if (actualStatus === 'completed') {
-    return 'completed';
-  }
-
-  if (actualStatus === 'in_progress' || actualStatus === 'abandoned' || completionPercentage > 0) {
-    return 'partial';
-  }
-
-  return 'pending';
-};
-
-const compareDayId = (left: TrainingDay, right: TrainingDay) => {
-  const leftId = Number.parseInt(left.id, 10);
-  const rightId = Number.parseInt(right.id, 10);
-
-  if (Number.isFinite(leftId) && Number.isFinite(rightId)) {
-    return leftId - rightId;
-  }
-
-  return left.id.localeCompare(right.id);
-};
-
-const compareMesocycleId = (left: Mesocycle, right: Mesocycle) => {
-  const leftId = Number.parseInt(left.id, 10);
-  const rightId = Number.parseInt(right.id, 10);
-
-  if (Number.isFinite(leftId) && Number.isFinite(rightId)) {
-    return leftId - rightId;
-  }
-
-  return left.id.localeCompare(right.id);
-};
-
-const compareMicrocycleId = (left: Microcycle, right: Microcycle) => {
-  const leftId = Number.parseInt(left.id, 10);
-  const rightId = Number.parseInt(right.id, 10);
-
-  if (Number.isFinite(leftId) && Number.isFinite(rightId)) {
-    return leftId - rightId;
-  }
-
-  return left.id.localeCompare(right.id);
-};
-
-const flattenOrderedTrainingDays = (macrocycle: Macrocycle) => {
-  return [...(macrocycle.mesocycles ?? [])]
-    .sort((left, right) => left.block_number - right.block_number || compareMesocycleId(left, right))
-    .flatMap((mesocycle) =>
-      [...(mesocycle.microcycles ?? [])]
-        .sort((left, right) => left.week_number - right.week_number || compareMicrocycleId(left, right))
-        .flatMap((microcycle) =>
-          [...(microcycle.training_days ?? [])].sort(
-            (left, right) =>
-              (left.day_number ?? 0) - (right.day_number ?? 0) ||
-              left.session_index - right.session_index ||
-              compareDayId(left, right),
-          ),
-        ),
-    );
-};
-
-const getWorkoutLogSortKey = (workoutLog: WorkoutLog) =>
-  workoutLog.completed_at ?? workoutLog.started_at ?? workoutLog.performed_on_date ?? '';
-
-const buildWorkoutLogMap = (workoutLogs: WorkoutLog[]) => {
-  const logsByTrainingDayId = new Map<string, WorkoutLog>();
-
-  for (const workoutLog of workoutLogs) {
-    const existing = logsByTrainingDayId.get(workoutLog.training_day_id);
-    if (!existing || getWorkoutLogSortKey(workoutLog).localeCompare(getWorkoutLogSortKey(existing)) > 0) {
-      logsByTrainingDayId.set(workoutLog.training_day_id, workoutLog);
-    }
-  }
-
-  return logsByTrainingDayId;
-};
-
-const clampDateKeyToRange = (
-  dateKey: string | null,
-  minDateKey: string | null,
-  maxDateKey: string | null,
-) => {
-  if (!dateKey || !minDateKey || !maxDateKey) {
-    return null;
-  }
-
-  if (compareDateKeys(dateKey, minDateKey) < 0) {
-    return minDateKey;
-  }
-
-  if (compareDateKeys(dateKey, maxDateKey) > 0) {
-    return maxDateKey;
-  }
-
-  return dateKey;
-};
-
-const minDateKey = (left: string, right: string) =>
-  compareDateKeys(left, right) <= 0 ? left : right;
-
-const maxDateKey = (left: string, right: string) =>
-  compareDateKeys(left, right) >= 0 ? left : right;
-
-const createDayEntryMap = (
-  rangeStartDateKey: string,
-  rangeEndDateKey: string,
-  programStartDateKey: string,
-  programEndDateKey: string,
-) => {
-  const daysByDateKey = new Map<string, ProgramTimelineDayEntry>();
-
-  for (
-    let currentDateKey: string | null = rangeStartDateKey;
-    currentDateKey && compareDateKeys(currentDateKey, rangeEndDateKey) <= 0;
-    currentDateKey = addDaysToDateKey(currentDateKey, 1)
-  ) {
-    daysByDateKey.set(currentDateKey, {
-      dateKey: currentDateKey,
-      isInProgramRange:
-        compareDateKeys(currentDateKey, programStartDateKey) >= 0 &&
-        compareDateKeys(currentDateKey, programEndDateKey) <= 0,
-      hasRestMarker: false,
-      sessions: [],
-    });
-  }
-
-  return daysByDateKey;
-};
+const toDayEntry = (day: DashboardTimelineDay): ProgramTimelineDayEntry => ({
+  dateKey: day.date_key,
+  isInProgramRange: day.is_in_program_range,
+  hasRestMarker: day.has_rest_marker,
+  sessions: Array.isArray(day.sessions) ? day.sessions : [],
+});
 
 const buildEmptyCardState = (
   reason: ProgramTimelineCardEmptyState['reason'],
@@ -390,10 +224,10 @@ const getDailyCompliancePercentage = (sessions: ProgramTimelineSession[]) => {
       return sum;
     }
 
-    return sum + roundPercentage(session.completion_percentage);
+    return sum + Math.max(0, Math.min(100, Math.round(session.completion_percentage)));
   }, 0);
 
-  return roundPercentage(total / sessions.length);
+  return Math.max(0, Math.min(100, Math.round(total / sessions.length)));
 };
 
 const getDayVariant = (
@@ -451,30 +285,13 @@ const getDayVariant = (
   return 'default';
 };
 
-const comparePlannedSessions = (left: ProgramTimelineSession, right: ProgramTimelineSession) =>
-  left.session_index - right.session_index ||
-  left.position - right.position ||
-  left.training_day_id.localeCompare(right.training_day_id);
-
-const compareActualSessions = (left: ProgramTimelineSession, right: ProgramTimelineSession) => {
-  const leftSortKey = left.completedAt ?? left.startedAt ?? left.performedDateKey ?? '';
-  const rightSortKey = right.completedAt ?? right.startedAt ?? right.performedDateKey ?? '';
-
-  return (
-    leftSortKey.localeCompare(rightSortKey) ||
-    left.position - right.position ||
-    left.session_index - right.session_index ||
-    left.training_day_id.localeCompare(right.training_day_id)
-  );
-};
-
 const getDayEntryForMode = (model: ProgramTimelineModel, mode: MicrocycleMode, dateKey: string) =>
   (mode === 'planned' ? model.plannedDaysByDateKey : model.actualDaysByDateKey).get(dateKey) ?? null;
 
 const findOverdueSession = (sessions: ProgramTimelineSession[], todayDateKey: string) =>
   sessions.find(
     (session) =>
-      compareDateKeys(session.scheduledDateKey, todayDateKey) < 0 &&
+      compareDateKeys(session.scheduled_date_key, todayDateKey) < 0 &&
       session.actual_status !== 'completed',
   ) ?? null;
 
@@ -500,227 +317,48 @@ const buildSessionCardState = ({
     month: 'short',
     day: 'numeric',
   }),
-  trainingDay: session.trainingDay,
+  trainingDay: session.training_day,
   session,
   sessions: daySessions,
   hasMultipleSessions: showSessionPicker && daySessions.length > 1,
   position: session.position,
-  total: session.totalSessions,
+  total: session.total_sessions,
   actionLabel: getSessionActionLabel(session),
   recommendation,
   sourceMode: mode,
-  scheduledDateKey: session.scheduledDateKey,
+  scheduledDateKey: session.scheduled_date_key,
 });
 
-const buildActualAdherenceMetrics = (
-  sessions: ProgramTimelineSession[],
-  todayDateKey: string,
-): ProgramTimelineActualAdherenceMetrics =>
-  sessions.reduce<ProgramTimelineActualAdherenceMetrics>(
-    (metrics, session) => {
-      const hasLog = session.actual_status !== 'not_started' && Boolean(session.performedDateKey);
-
-      if (hasLog) {
-        if (session.performedDateKey === session.scheduledDateKey) {
-          metrics.onSchedule += 1;
-        } else {
-          metrics.rescheduled += 1;
-        }
-      }
-
-      if (
-        compareDateKeys(session.scheduledDateKey, todayDateKey) < 0 &&
-        session.actual_status !== 'completed'
-      ) {
-        metrics.overdue += 1;
-      }
-
-      return metrics;
-    },
-    {
-      onSchedule: 0,
-      rescheduled: 0,
-      overdue: 0,
-    },
-  );
-
 export const buildProgramTimelineModel = (
-  activeMacrocycle: Macrocycle | null,
-  workoutLogs: WorkoutLog[],
+  timeline: DashboardTimeline | null | undefined,
 ): ProgramTimelineModel => {
-  if (!activeMacrocycle) {
-    return {
-      plannedDaysByDateKey: new Map(),
-      actualDaysByDateKey: new Map(),
-      orderedPlannedSessions: [],
-      actualAdherenceMetrics: {
-        onSchedule: 0,
-        rescheduled: 0,
-        overdue: 0,
-      },
-      initialFocusedDateKey: null,
-      calendarStartDateKey: null,
-      calendarEndDateKey: null,
-      firstWeekStartDateKey: null,
-      lastWeekStartDateKey: null,
-      totalSessions: 0,
-      allCompleted: false,
-    };
+  if (!timeline) {
+    return buildEmptyModel();
   }
 
-  const orderedTrainingDays = flattenOrderedTrainingDays(activeMacrocycle);
-  const trainingDayDateKeys = orderedTrainingDays
-    .map((trainingDay) => toLocalDateKey(trainingDay.date))
-    .filter((dateKey): dateKey is string => Boolean(dateKey));
-
-  const programStartDateKey =
-    toLocalDateKey(activeMacrocycle.start_date) ?? trainingDayDateKeys[0] ?? null;
-  const programEndDateKey =
-    toLocalDateKey(activeMacrocycle.end_date) ??
-    trainingDayDateKeys[trainingDayDateKeys.length - 1] ??
-    null;
-
-  if (!programStartDateKey || !programEndDateKey || orderedTrainingDays.length === 0) {
-    return {
-      plannedDaysByDateKey: new Map(),
-      actualDaysByDateKey: new Map(),
-      orderedPlannedSessions: [],
-      actualAdherenceMetrics: {
-        onSchedule: 0,
-        rescheduled: 0,
-        overdue: 0,
-      },
-      initialFocusedDateKey: null,
-      calendarStartDateKey: null,
-      calendarEndDateKey: null,
-      firstWeekStartDateKey: null,
-      lastWeekStartDateKey: null,
-      totalSessions: 0,
-      allCompleted: false,
-    };
-  }
-
-  const todayDateKey = getTodayDateKey();
-  const currentWeekStartDateKey = getStartOfLocalWeekDateKey(todayDateKey) ?? todayDateKey;
-  const currentWeekEndDateKey = addDaysToDateKey(currentWeekStartDateKey, 6) ?? todayDateKey;
-  const firstProgramWeekStartDateKey =
-    getStartOfLocalWeekDateKey(programStartDateKey) ?? programStartDateKey;
-  const lastProgramWeekStartDateKey =
-    getStartOfLocalWeekDateKey(programEndDateKey) ?? programEndDateKey;
-  const programCalendarEndDateKey =
-    addDaysToDateKey(lastProgramWeekStartDateKey, 6) ?? programEndDateKey;
-
-  const firstWeekStartDateKey = minDateKey(firstProgramWeekStartDateKey, currentWeekStartDateKey);
-  const lastWeekStartDateKey = maxDateKey(lastProgramWeekStartDateKey, currentWeekStartDateKey);
-  const calendarStartDateKey = firstWeekStartDateKey;
-  const calendarEndDateKey = maxDateKey(programCalendarEndDateKey, currentWeekEndDateKey);
-
-  const plannedDaysByDateKey = createDayEntryMap(
-    calendarStartDateKey,
-    calendarEndDateKey,
-    programStartDateKey,
-    programEndDateKey,
+  const plannedDaysByDateKey = new Map(
+    (timeline.planned_days ?? []).map((day) => [day.date_key, toDayEntry(day)]),
   );
-  const actualDaysByDateKey = createDayEntryMap(
-    calendarStartDateKey,
-    calendarEndDateKey,
-    programStartDateKey,
-    programEndDateKey,
+  const actualDaysByDateKey = new Map(
+    (timeline.actual_days ?? []).map((day) => [day.date_key, toDayEntry(day)]),
   );
-
-  const workoutLogMap = buildWorkoutLogMap(workoutLogs);
-  const nonRestTrainingDays = orderedTrainingDays.filter((trainingDay) => !trainingDay.rest_day);
-  const totalSessions = nonRestTrainingDays.length;
-  const orderedPlannedSessions: ProgramTimelineSession[] = [];
-
-  nonRestTrainingDays.forEach((trainingDay, index) => {
-    const scheduledDateKey = toLocalDateKey(trainingDay.date);
-    if (!scheduledDateKey) {
-      return;
-    }
-
-    const plannedDayEntry = plannedDaysByDateKey.get(scheduledDateKey);
-    if (!plannedDayEntry) {
-      return;
-    }
-
-    const workoutLog = workoutLogMap.get(trainingDay.id) ?? null;
-    const actualStatus = getWorkoutStatus(workoutLog?.status) as ActualSessionStatus;
-    const completionPercentage = calculateSessionCompletionPercentage(trainingDay, workoutLog);
-    const performedDateKey = toLocalDateKey(workoutLog?.performed_on_date ?? null);
-
-    const timelineSession: ProgramTimelineSession = {
-      training_day_id: trainingDay.id,
-      workout_log_id: workoutLog?.id ?? null,
-      session_index: trainingDay.session_index,
-      session_label: trainingDay.session_label,
-      name: trainingDay.name,
-      focus: trainingDay.focus,
-      planned_status: resolvePlannedStatus(actualStatus, completionPercentage),
-      actual_status: actualStatus,
-      completion_percentage: completionPercentage,
-      performed_on_date: workoutLog?.performed_on_date ?? null,
-      trainingDay,
-      position: index + 1,
-      totalSessions,
-      scheduledDateKey,
-      performedDateKey,
-      startedAt: workoutLog?.started_at ?? null,
-      completedAt: workoutLog?.completed_at ?? null,
-    };
-
-    plannedDayEntry.sessions.push(timelineSession);
-    orderedPlannedSessions.push(timelineSession);
-
-    if (performedDateKey) {
-      const actualDayEntry = actualDaysByDateKey.get(performedDateKey);
-      if (actualDayEntry) {
-        actualDayEntry.sessions.push(timelineSession);
-      }
-    }
-  });
-
-  orderedTrainingDays
-    .filter((trainingDay) => trainingDay.rest_day)
-    .forEach((trainingDay) => {
-      const dateKey = toLocalDateKey(trainingDay.date);
-      if (!dateKey) {
-        return;
-      }
-
-      const dayEntry = plannedDaysByDateKey.get(dateKey);
-      if (dayEntry) {
-        dayEntry.hasRestMarker = true;
-      }
-    });
-
-  for (const dayEntry of plannedDaysByDateKey.values()) {
-    dayEntry.sessions.sort(comparePlannedSessions);
-  }
-
-  for (const dayEntry of actualDaysByDateKey.values()) {
-    dayEntry.hasRestMarker = false;
-    dayEntry.sessions.sort(compareActualSessions);
-  }
-
-  const initialFocusedDateKey =
-    clampDateKeyToRange(todayDateKey, calendarStartDateKey, calendarEndDateKey) ?? todayDateKey;
-  const actualAdherenceMetrics = buildActualAdherenceMetrics(orderedPlannedSessions, todayDateKey);
-  const allCompleted =
-    totalSessions > 0 && orderedPlannedSessions.every((session) => session.actual_status === 'completed');
 
   return {
     plannedDaysByDateKey,
     actualDaysByDateKey,
-    orderedPlannedSessions,
-    actualAdherenceMetrics,
-    initialFocusedDateKey,
-    calendarStartDateKey,
-    calendarEndDateKey,
-    firstWeekStartDateKey,
-    lastWeekStartDateKey,
-    totalSessions,
-    allCompleted,
+    orderedPlannedSessions: (timeline.planned_days ?? []).flatMap((day) => day.sessions ?? []),
+    actualAdherenceMetrics: {
+      onSchedule: timeline.actual_adherence_metrics?.on_schedule ?? 0,
+      rescheduled: timeline.actual_adherence_metrics?.rescheduled ?? 0,
+      overdue: timeline.actual_adherence_metrics?.overdue ?? 0,
+    },
+    initialFocusedDateKey: timeline.initial_focused_date_key ?? null,
+    calendarStartDateKey: timeline.calendar_start_date_key ?? null,
+    calendarEndDateKey: timeline.calendar_end_date_key ?? null,
+    firstWeekStartDateKey: timeline.first_week_start_date_key ?? null,
+    lastWeekStartDateKey: timeline.last_week_start_date_key ?? null,
+    totalSessions: timeline.total_sessions ?? 0,
+    allCompleted: timeline.all_completed ?? false,
   };
 };
 
@@ -733,15 +371,17 @@ export const shiftProgramTimelineFocusByWeek = (
     return null;
   }
 
-  const baseDateKey =
-    clampDateKeyToRange(
-      focusedDateKey ?? model.initialFocusedDateKey,
-      model.calendarStartDateKey,
-      model.calendarEndDateKey,
-    ) ?? model.calendarStartDateKey;
+  const baseDateKey = focusedDateKey ?? model.initialFocusedDateKey ?? model.calendarStartDateKey;
   const nextDateKey = addDaysToDateKey(baseDateKey, direction * 7) ?? baseDateKey;
 
-  return clampDateKeyToRange(nextDateKey, model.calendarStartDateKey, model.calendarEndDateKey);
+  if (compareDateKeys(nextDateKey, model.calendarStartDateKey) < 0) {
+    return model.calendarStartDateKey;
+  }
+  if (compareDateKeys(nextDateKey, model.calendarEndDateKey) > 0) {
+    return model.calendarEndDateKey;
+  }
+
+  return nextDateKey;
 };
 
 export const buildProgramTimelineView = (
@@ -774,12 +414,13 @@ export const buildProgramTimelineView = (
   }
 
   const todayDateKey = getTodayDateKey();
+  const unclampedFocusedDateKey = focusedDateKey ?? model.initialFocusedDateKey;
   const effectiveFocusedDateKey =
-    clampDateKeyToRange(
-      focusedDateKey ?? model.initialFocusedDateKey,
-      model.calendarStartDateKey,
-      model.calendarEndDateKey,
-    ) ?? model.initialFocusedDateKey;
+    compareDateKeys(unclampedFocusedDateKey, model.calendarStartDateKey) < 0
+      ? model.calendarStartDateKey
+      : compareDateKeys(unclampedFocusedDateKey, model.calendarEndDateKey) > 0
+        ? model.calendarEndDateKey
+        : unclampedFocusedDateKey;
   const currentWeekStartDateKey =
     getStartOfLocalWeekDateKey(effectiveFocusedDateKey) ?? model.firstWeekStartDateKey;
   const weekDateKeys = getLocalWeekDateKeys(currentWeekStartDateKey);
@@ -813,7 +454,7 @@ export const buildProgramTimelineView = (
 
   let cardState: ProgramTimelineCardState;
   let highlightedSession: ProgramTimelineSession | null = null;
-  let highlightedTrainingDay: TrainingDay | null = null;
+  let highlightedTrainingDay: DashboardTrainingDaySummary | null = null;
   let workoutPosition: number | null = null;
 
   if (mode === 'actual') {
@@ -826,7 +467,7 @@ export const buildProgramTimelineView = (
         cardState = buildEmptyCardState('no-executed', effectiveFocusedDateKey);
       } else {
         highlightedSession = latestExecutedSession;
-        highlightedTrainingDay = latestExecutedSession.trainingDay;
+        highlightedTrainingDay = latestExecutedSession.training_day;
         workoutPosition = latestExecutedSession.position;
         cardState = buildSessionCardState({
           session: latestExecutedSession,
@@ -843,20 +484,20 @@ export const buildProgramTimelineView = (
 
     if (overdueSession) {
       const overdueDaySessions =
-        overdueSession.scheduledDateKey === effectiveFocusedDateKey
-          ? getDayEntryForMode(model, 'planned', overdueSession.scheduledDateKey)?.sessions ?? [overdueSession]
+        overdueSession.scheduled_date_key === effectiveFocusedDateKey
+          ? getDayEntryForMode(model, 'planned', overdueSession.scheduled_date_key)?.sessions ?? [overdueSession]
           : [overdueSession];
 
       highlightedSession = overdueSession;
-      highlightedTrainingDay = overdueSession.trainingDay;
+      highlightedTrainingDay = overdueSession.training_day;
       workoutPosition = overdueSession.position;
       cardState = buildSessionCardState({
         session: overdueSession,
-        dateKey: overdueSession.scheduledDateKey,
+        dateKey: overdueSession.scheduled_date_key,
         mode,
         recommendation: 'overdue',
         daySessions: overdueDaySessions,
-        showSessionPicker: overdueSession.scheduledDateKey === effectiveFocusedDateKey,
+        showSessionPicker: overdueSession.scheduled_date_key === effectiveFocusedDateKey,
       });
     } else if (!focusedEntry) {
       cardState = buildEmptyCardState('no-scheduled', effectiveFocusedDateKey);
@@ -872,7 +513,7 @@ export const buildProgramTimelineView = (
         cardState = buildEmptyCardState('no-pending', effectiveFocusedDateKey);
       } else {
         highlightedSession = nextSession;
-        highlightedTrainingDay = nextSession.trainingDay;
+        highlightedTrainingDay = nextSession.training_day;
         workoutPosition = nextSession.position;
         cardState = buildSessionCardState({
           session: nextSession,

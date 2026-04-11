@@ -13,6 +13,7 @@ import { LinearGradient as ExpoGradient } from 'expo-linear-gradient';
 import { colors, brandColors, spacing, fontSize, borderRadius, shadows } from '../../constants/colors';
 import { ChartSkeleton } from '../common/Skeleton';
 import type { MuscleVolumeResponse } from '../../types';
+import { useAppTheme } from '../../theme';
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const MAX_MUSCLES_SHOWN = 6;
@@ -46,12 +47,20 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
   contentWidth = 390,
   horizontalPadding = spacing.md,
 }) => {
+  const { theme } = useAppTheme();
   const animationProgress = useSharedValue(0);
   const containerWidth = Math.max(320, contentWidth - horizontalPadding * 2);
   const chartWidth = Math.max(220, containerWidth - spacing.lg * 2);
   const labelWidth = chartWidth >= 720 ? 128 : chartWidth >= 560 ? 112 : 96;
   const valueWidth = 48;
   const barAreaWidth = Math.max(80, chartWidth - labelWidth - valueWidth - spacing.md);
+
+  // Lighter gradient matching MetricsSummary card style for Light Mode, original for Dark Mode
+  const gradientColors = theme.isDark
+    ? ([brandColors.navy, brandColors.sky] as const)
+    : ([`${brandColors.sky}22`, `${brandColors.navy}14`] as const);
+  const textColor = theme.isDark ? colors.white : brandColors.navy;
+  const subtextColor = theme.isDark ? 'rgba(255,255,255,0.72)' : `${brandColors.navy}AA`;
 
   useEffect(() => {
     if (muscleVolume && !isLoading) {
@@ -80,48 +89,48 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
 
   if (!muscleVolume || muscles.length === 0) {
     return (
-      <View style={[styles.container, { width: containerWidth, alignSelf: 'center' }]}>
+      <View style={[styles.container, { width: containerWidth, alignSelf: 'center', borderWidth: 1, borderColor: theme.isDark ? theme.colors.borderStrong : theme.colors.border }]}>
         <ExpoGradient
-          colors={[brandColors.navy, brandColors.sky]}
+          colors={gradientColors}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <Text style={styles.title}>Volumen de entrenamiento por sesión</Text>
+        <Text style={[styles.title, { color: textColor }]}>Volumen de entrenamiento por sesión</Text>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Sin datos de volumen</Text>
+          <Text style={[styles.emptyText, { color: subtextColor }]}>Sin datos de volumen</Text>
         </View>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { width: containerWidth, alignSelf: 'center' }]}>
+    <View style={[styles.container, { width: containerWidth, alignSelf: 'center', borderWidth: theme.isDark ? 0 : 1, borderColor: theme.colors.border }]}>
       <ExpoGradient
-        colors={[brandColors.navy, brandColors.sky]}
+        colors={gradientColors}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
       <View style={styles.header}>
-        <Text style={styles.title}>Volumen del entrenamiento</Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{totalSets} series</Text>
+        <Text style={[styles.title, { color: textColor }]}>Volumen del entrenamiento</Text>
+        <View style={[styles.badge, { backgroundColor: theme.isDark ? 'rgba(255,255,255,0.2)' : `${brandColors.sky}22` }]}>
+          <Text style={[styles.badgeText, { color: textColor }]}>{totalSets} series</Text>
         </View>
       </View>
 
       <View style={styles.toggleRow}>
-        <Text style={styles.toggleLabel}>Contar volumen de sinergistas(0.5x)</Text>
+        <Text style={[styles.toggleLabel, { color: subtextColor }]}>Contar volumen de sinergistas(0.5x)</Text>
         <Switch
           value={countSecondaryMuscles}
           onValueChange={onToggleSecondary}
-          trackColor={{ false: 'rgba(255,255,255,0.3)', true: 'rgba(255,255,255,0.6)' }}
-          thumbColor={countSecondaryMuscles ? colors.white : colors.gray[300]}
+          trackColor={{ false: theme.isDark ? 'rgba(255,255,255,0.3)' : `${brandColors.sky}44`, true: theme.isDark ? 'rgba(255,255,255,0.6)' : brandColors.sky }}
+          thumbColor={countSecondaryMuscles ? (theme.isDark ? colors.white : brandColors.navy) : colors.gray[300]}
         />
       </View>
 
-      <Text style={styles.rangeLegend}>
+      <Text style={[styles.rangeLegend, { color: subtextColor }]}>
         Rango RP por sesion: {SESSION_LANDMARK_MIN}-{SESSION_LANDMARK_MAX} series efectivas
       </Text>
 
@@ -134,6 +143,9 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
             valueWidth={valueWidth}
             barAreaWidth={barAreaWidth}
             animationProgress={animationProgress}
+            textColor={textColor}
+            barFill={theme.isDark ? 'rgba(255,255,255,0.9)' : brandColors.navy}
+            barBg={theme.isDark ? 'rgba(255,255,255,0.15)' : `${brandColors.sky}30`}
           />
         ))}
       </View>
@@ -147,6 +159,9 @@ interface MuscleBarProps {
   valueWidth: number;
   barAreaWidth: number;
   animationProgress: SharedValue<number>;
+  textColor?: string;
+  barFill?: string;
+  barBg?: string;
 }
 
 const MuscleBar: React.FC<MuscleBarProps> = ({
@@ -155,6 +170,9 @@ const MuscleBar: React.FC<MuscleBarProps> = ({
   valueWidth,
   barAreaWidth,
   animationProgress,
+  textColor = colors.white,
+  barFill = colors.white,
+  barBg = 'rgba(255,255,255,0.15)',
 }) => {
   const barWidth = getSessionLandmarkFillRatio(muscle.effective_sets) * barAreaWidth;
 
@@ -164,7 +182,7 @@ const MuscleBar: React.FC<MuscleBarProps> = ({
 
   return (
     <View style={styles.barRow}>
-      <Text style={[styles.muscleLabel, { width: labelWidth }]} numberOfLines={1}>
+      <Text style={[styles.muscleLabel, { width: labelWidth, color: textColor }]} numberOfLines={1}>
         {muscle.display_name}
       </Text>
       <View style={styles.barContainer}>
@@ -175,20 +193,20 @@ const MuscleBar: React.FC<MuscleBarProps> = ({
             width={barAreaWidth}
             height={BAR_HEIGHT - 8}
             rx={6}
-            fill="rgba(255, 255, 255, 0.15)"
+            fill={barBg}
           />
           <AnimatedRect
             x={0}
             y={4}
             height={BAR_HEIGHT - 8}
             rx={6}
-            fill={colors.white}
+            fill={barFill}
             fillOpacity={0.9}
             animatedProps={animatedProps}
           />
         </Svg>
       </View>
-      <Text style={[styles.valueLabel, { width: valueWidth }]}>
+      <Text style={[styles.valueLabel, { width: valueWidth, color: textColor }]}>
         {muscle.effective_sets.toFixed(1)}
       </Text>
     </View>

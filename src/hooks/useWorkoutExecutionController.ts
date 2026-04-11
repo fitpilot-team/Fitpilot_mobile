@@ -851,9 +851,14 @@ export const useWorkoutExecutionController = ({
         return null;
       }
 
+      const isChangingExercise =
+        options?.nextExerciseIndex !== undefined &&
+        options.nextExerciseIndex !== resolvedExecution.context.exerciseIndex;
       syncActiveExecution(mutationResult.state, {
         exerciseIndex: options?.nextExerciseIndex ?? resolvedExecution.context.exerciseIndex,
-        setNumber: options?.nextSetNumber ?? resolvedExecution.draft.currentSetNumber,
+        // When changing to a different exercise, do NOT fall back to the current set number —
+        // let createWorkoutExecutionDraft default to set 1 for the new exercise.
+        setNumber: isChangingExercise ? options?.nextSetNumber : (options?.nextSetNumber ?? resolvedExecution.draft.currentSetNumber),
       });
 
       return mutationResult.state;

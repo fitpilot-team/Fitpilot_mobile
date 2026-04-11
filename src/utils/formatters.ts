@@ -125,12 +125,18 @@ export function isCardioExercise(dayExercise: Partial<DayExercise> | null | unde
     return false;
   }
 
-  return getExerciseClass(dayExercise) === 'cardio' || !!dayExercise.exercise?.cardio_subclass;
+  return ['cardio', 'conditioning'].includes(getExerciseClass(dayExercise) ?? '') || !!dayExercise.cardio_subclass;
 }
 
 export function isMovementExercise(dayExercise: Partial<DayExercise> | null | undefined): boolean {
   const exerciseClass = getExerciseClass(dayExercise);
-  return exerciseClass === 'plyometric' || exerciseClass === 'mobility' || exerciseClass === 'warmup';
+  return (
+    exerciseClass === 'plyometric' ||
+    exerciseClass === 'mobility' ||
+    exerciseClass === 'warmup' ||
+    exerciseClass === 'flexibility' ||
+    exerciseClass === 'balance'
+  );
 }
 
 export function isPlyometricExercise(dayExercise: Partial<DayExercise> | null | undefined): boolean {
@@ -141,7 +147,12 @@ export function isMobilityOrWarmupExercise(
   dayExercise: Partial<DayExercise> | null | undefined,
 ): boolean {
   const exerciseClass = getExerciseClass(dayExercise);
-  return exerciseClass === 'mobility' || exerciseClass === 'warmup';
+  return (
+    exerciseClass === 'mobility' ||
+    exerciseClass === 'warmup' ||
+    exerciseClass === 'flexibility' ||
+    exerciseClass === 'balance'
+  );
 }
 
 export function isTimedMovementExercise(
@@ -163,7 +174,7 @@ export function isHiitCardioExercise(
   }
 
   return (
-    dayExercise?.exercise?.cardio_subclass === 'hiit' ||
+    dayExercise?.cardio_subclass === 'hiit' ||
     ((dayExercise?.intervals ?? 0) > 0 && (dayExercise?.work_seconds ?? 0) > 0)
   );
 }
@@ -209,15 +220,13 @@ export function getCardioSummaryLabel(
     primaryParts.push(`${formatCompactNumber(dayExercise.target_calories)} cal`);
   }
 
-  const zoneLabel = formatZoneLabel(
-    dayExercise.intensity_zone ?? dayExercise.exercise?.intensity_zone,
-  );
+  const zoneLabel = formatZoneLabel(dayExercise.intensity_zone);
   if (zoneLabel) {
     primaryParts.push(zoneLabel);
   }
 
-  if (!primaryParts.length && dayExercise.exercise?.cardio_subclass) {
-    return dayExercise.exercise.cardio_subclass.toUpperCase();
+  if (!primaryParts.length && dayExercise.cardio_subclass) {
+    return dayExercise.cardio_subclass.toUpperCase();
   }
 
   return primaryParts.slice(0, 2).join(' / ') || 'Cardio';
@@ -320,7 +329,7 @@ export function getCardioIntensityLabel(
   }
 
   // Steady-state: zone + duration
-  const zone = dayExercise.intensity_zone ?? dayExercise.exercise?.intensity_zone;
+  const zone = dayExercise.intensity_zone;
   const zonePart = zone ? `Z${zone}` : null;
   const durationPart = dayExercise.duration_seconds
     ? formatDurationSeconds(dayExercise.duration_seconds)

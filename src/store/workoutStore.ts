@@ -4,10 +4,9 @@ import type {
   AbandonReason,
   CardioBlockLog,
   CurrentWorkoutState,
+  DashboardBootstrap,
   DayExercise,
   ExerciseProgress,
-  Macrocycle,
-  MicrocycleProgress,
   MissedWorkout,
   MovementBlockLog,
   WorkoutLog,
@@ -21,9 +20,7 @@ export type WorkoutMutationResult =
   | { ok: false };
 
 interface WorkoutState {
-  activeMacrocycle: Macrocycle | null;
-  dashboardWorkoutLogs: WorkoutLog[];
-  microcycleProgress: MicrocycleProgress | null;
+  dashboardBootstrap: DashboardBootstrap | null;
   currentWorkout: CurrentWorkoutState | null;
   missedWorkouts: MissedWorkout[];
   dashboardDataVersion: number;
@@ -35,7 +32,7 @@ interface WorkoutState {
   isLoadingMissed: boolean;
   error: string | null;
 
-  loadDashboardData: (clientId: string) => Promise<void>;
+  loadDashboardData: () => Promise<void>;
   loadMissedWorkouts: (daysBack?: number) => Promise<void>;
   startWorkout: (trainingDayId: string) => Promise<string | null>;
   loadWorkoutState: (workoutLogId: string) => Promise<void>;
@@ -536,9 +533,7 @@ const commitWorkoutMutation = async <TResponse>(
 };
 
 export const useWorkoutStore = create<WorkoutState>((set, get) => ({
-  activeMacrocycle: null,
-  dashboardWorkoutLogs: [],
-  microcycleProgress: null,
+  dashboardBootstrap: null,
   currentWorkout: null,
   missedWorkouts: [],
   dashboardDataVersion: 0,
@@ -550,46 +545,21 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   isLoadingMissed: false,
   error: null,
 
-  loadDashboardData: async (clientId: string) => {
+  loadDashboardData: async () => {
     set({ isLoading: true, error: null });
 
     try {
-      const [microcycleProgress, macrocycleResponse] = await Promise.all([
-        trainingClient.get<MicrocycleProgress>('/workout-logs/progress/microcycle/current'),
-        trainingClient.get<{ total: number; macrocycles: Macrocycle[] }>('/mesocycles?status=active&limit=1'),
-      ]);
-      const activeMacrocycleSummary = macrocycleResponse.macrocycles[0] ?? null;
-
-      if (!activeMacrocycleSummary) {
-        set((state) => ({
-          microcycleProgress,
-          activeMacrocycle: null,
-          dashboardWorkoutLogs: [],
-          dashboardDataVersion: state.dashboardDataVersion + 1,
-          isLoading: false,
-        }));
-        return;
-      }
-
-      const [activeMacrocycle, workoutLogsResponse] = await Promise.all([
-        trainingClient.get<Macrocycle>(`/mesocycles/${activeMacrocycleSummary.id}`),
-        trainingClient.get<{ total: number; workout_logs: WorkoutLog[] }>(
-          `/workout-logs/client/${clientId}?limit=500`,
-        ),
-      ]);
+      const dashboardBootstrap =
+        await trainingClient.get<DashboardBootstrap>('/client-app/dashboard-bootstrap');
 
       set((state) => ({
-        microcycleProgress,
-        activeMacrocycle,
-        dashboardWorkoutLogs: workoutLogsResponse.workout_logs,
+        dashboardBootstrap,
         dashboardDataVersion: state.dashboardDataVersion + 1,
         isLoading: false,
       }));
     } catch (error: any) {
       set({
-        microcycleProgress: null,
-        activeMacrocycle: null,
-        dashboardWorkoutLogs: [],
+        dashboardBootstrap: null,
         isLoading: false,
         error: error.message || 'Error al cargar el dashboard',
       });
@@ -823,9 +793,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   reset: () =>
     set({
-      activeMacrocycle: null,
-      dashboardWorkoutLogs: [],
-      microcycleProgress: null,
+      dashboardBootstrap: null,
       currentWorkout: null,
       missedWorkouts: [],
       dashboardDataVersion: 0,

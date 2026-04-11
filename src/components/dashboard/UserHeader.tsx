@@ -3,12 +3,12 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize } from '../../constants/colors';
 import { Logo } from '../common/Logo';
-import type { User, Macrocycle } from '../../types';
+import type { DashboardProgramSummary, User } from '../../types';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 
 interface UserHeaderProps {
   user: User;
-  macrocycle?: Macrocycle | null;
+  program?: DashboardProgramSummary | null;
   onMenuPress?: () => void;
   contentWidth?: number;
   horizontalPadding?: number;
@@ -25,7 +25,7 @@ const objectiveLabels: Record<string, string> = {
 
 export const UserHeader: React.FC<UserHeaderProps> = ({
   user,
-  macrocycle,
+  program,
   onMenuPress,
   contentWidth,
   horizontalPadding = spacing.md,
@@ -39,8 +39,8 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
     .toUpperCase()
     .slice(0, 2);
 
-  const objectiveLabel = macrocycle?.objective
-    ? objectiveLabels[macrocycle.objective] || macrocycle.objective
+  const objectiveLabel = program?.objective
+    ? objectiveLabels[program.objective] || program.objective
     : null;
 
   return (

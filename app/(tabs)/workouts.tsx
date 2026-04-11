@@ -30,6 +30,7 @@ import { RepRangeVolumeChart } from '../../src/components/workout-analytics/RepR
 import { WorkoutAnalyticsComparisonGroup } from '../../src/components/workout-analytics/WorkoutAnalyticsComparisonGroup';
 import { WorkoutAnalyticsContextNavigator } from '../../src/components/workout-analytics/WorkoutAnalyticsContextNavigator';
 import { WorkoutAnalyticsContextPickerModal } from '../../src/components/workout-analytics/WorkoutAnalyticsContextPickerModal';
+import { WorkoutAnalyticsDailySessionComparisonChart } from '../../src/components/workout-analytics/WorkoutAnalyticsDailySessionComparisonChart';
 import { WorkoutAnalyticsHero, type WorkoutAnalyticsHeroMetric } from '../../src/components/workout-analytics/WorkoutAnalyticsHero';
 import { WorkoutAnalyticsLineTrendChart } from '../../src/components/workout-analytics/WorkoutAnalyticsLineTrendChart';
 import { WorkoutAnalyticsPillSelector } from '../../src/components/workout-analytics/WorkoutAnalyticsPillSelector';
@@ -1614,6 +1615,11 @@ export default function WorkoutsScreen() {
                           contentWidth={chartWidth}
                           selectedBucketId={selectedRepBucketId}
                           onSelectBucket={analyticsScopeKind === 'range' ? setSelectedRepBucketId : undefined}
+                        />
+                      ) : trendSection.semantic_kind === 'daily_session_comparison' ? (
+                        <WorkoutAnalyticsDailySessionComparisonChart
+                          section={trendSection}
+                          contentWidth={chartWidth}
                         />
                       ) : (
                         <WorkoutAnalyticsLineTrendChart section={trendSection} contentWidth={chartWidth} />

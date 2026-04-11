@@ -18,9 +18,9 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import Svg, { Path } from 'react-native-svg';
 import { borderRadius, brandColors, colors, fontSize, shadows, spacing } from '../../constants/colors';
 import { getWorkoutSetTypeDefinition, usesSegmentedWorkoutCapture } from '../../constants/workoutSetTypes';
-import { getAssetUrl, getVideoThumbnailUrl } from '../../services/api';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { DayExercise, ExerciseProgress, WorkoutScreenMode } from '../../types';
+import { resolveTechniqueMedia } from '../../utils/exerciseTechnique';
 import {
   formatDistanceMeters,
   formatDurationSeconds,
@@ -107,11 +107,6 @@ type MovementExerciseCardProps = ExerciseCardBaseProps & {
 
 type ExerciseCardProps = StrengthExerciseCardProps | CardioExerciseCardProps | MovementExerciseCardProps;
 
-type ResolvedExerciseMedia = {
-  gifUrl: string | null;
-  posterUrl: string | null;
-};
-
 type CardVariant = 'compact' | 'interactive';
 
 type CardLayout = {
@@ -180,17 +175,6 @@ const formatMovementBlockChipLabel = (
   return getMovementSummaryLabel(dayExercise);
 };
 
-const isYouTubeUrl = (value: string | null | undefined) => !!value && /youtube\.com|youtu\.be/i.test(value);
-
-const isGifUrl = (value: string | null | undefined) => {
-  if (!value) {
-    return false;
-  }
-
-  const [withoutQuery] = value.split(/[?#]/);
-  return /\.gif$/i.test(withoutQuery ?? value);
-};
-
 const getExerciseDescription = (dayExercise: DayExercise) => {
   const descriptionEs = dayExercise.exercise?.description_es?.trim();
   if (descriptionEs) {
@@ -199,22 +183,6 @@ const getExerciseDescription = (dayExercise: DayExercise) => {
 
   const descriptionEn = dayExercise.exercise?.description_en?.trim();
   return descriptionEn || null;
-};
-
-const resolveExerciseMedia = (
-  dayExercise: DayExercise,
-  videoUrl: string | null,
-  useYouTubeModal: boolean,
-): ResolvedExerciseMedia => {
-  const thumbnailUrl = getAssetUrl(dayExercise.exercise?.thumbnail_url);
-  const imageUrl = getAssetUrl(dayExercise.exercise?.image_url);
-  const gifUrl = [thumbnailUrl, imageUrl].find((candidate) => isGifUrl(candidate)) ?? null;
-  const posterUrl =
-    (!useYouTubeModal ? getVideoThumbnailUrl(videoUrl) : null) ||
-    [imageUrl, thumbnailUrl].find((candidate) => candidate && !isGifUrl(candidate)) ||
-    null;
-
-  return { gifUrl, posterUrl };
 };
 
 const createCardLayout = (variant: CardVariant): CardLayout => {
@@ -507,8 +475,10 @@ const InlineStaticMetric = ({
   value: string;
   styles: ReturnType<typeof createStyles>;
 }) => (
-  <View style={styles.inlineMetricValue}>
-    <Text style={styles.inlineMetricNumber}>{value}</Text>
+  <View style={styles.inlineStaticMetricContainer}>
+    <Text style={styles.inlineMetricNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+      {value}
+    </Text>
     <Text style={styles.inlineMetricLabel}>{label}</Text>
   </View>
 );
@@ -663,6 +633,8 @@ const StrengthSegmentEditor = ({
   onAddSegment,
   onRemoveSegment,
   onDeleteCurrentSet,
+  actionLabel,
+  actionIcon,
 }: {
   dayExercise: DayExercise;
   draft: StrengthExecutionDraft;
@@ -677,6 +649,8 @@ const StrengthSegmentEditor = ({
   onAddSegment?: () => void;
   onRemoveSegment?: (segmentIndex: number) => void;
   onDeleteCurrentSet?: () => void;
+  actionLabel?: string;
+  actionIcon?: React.ComponentProps<typeof Ionicons>['name'];
 }) => {
   const setTypeDefinition = getWorkoutSetTypeDefinition(dayExercise.set_type);
   const showStrengthEffort = shouldShowStrengthEffort(dayExercise);
@@ -770,8 +744,8 @@ const StrengthSegmentEditor = ({
         ) : null}
         {onAdvance ? (
           <TouchableOpacity style={styles.ghostButton} onPress={onAdvance} disabled={isSavingSet}>
-            <Ionicons name="checkmark-circle-outline" size={16} color={brandColors.navy} />
-            <Text style={styles.ghostButtonText}>Guardar serie</Text>
+            <Ionicons name={actionIcon ?? 'checkmark-circle-outline'} size={16} color={brandColors.navy} />
+            <Text style={styles.ghostButtonText}>{actionLabel ?? 'Guardar serie'}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -806,8 +780,7 @@ const CardioExerciseBody = ({
   actionLabel: string;
   actionDockWidth: number;
 }) => {
-  const plannedZoneLabel =
-    formatZoneLabel(dayExercise.intensity_zone ?? dayExercise.exercise?.intensity_zone) ?? '--';
+  const plannedZoneLabel = formatZoneLabel(dayExercise.intensity_zone) ?? '--';
 
   if (!isEditing) {
     return (
@@ -1061,12 +1034,8 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = (props) => {
   const showCurrentSetChip = isInteractiveMode && (!isCompleted || isEditing) && (props.isActive || props.setInProgress);
   const setTypeDefinition = getWorkoutSetTypeDefinition(props.dayExercise.set_type);
   const accentColor = (props.isSavingSet ?? false) ? theme.colors.iconMuted : theme.colors.primary;
-  const videoUrl = getAssetUrl(exercise?.video_url);
-  const useYouTubeModal = !videoUrl || isYouTubeUrl(videoUrl);
-  const media = useMemo(
-    () => resolveExerciseMedia(props.dayExercise, videoUrl, useYouTubeModal),
-    [props.dayExercise, useYouTubeModal, videoUrl],
-  );
+  const media = useMemo(() => resolveTechniqueMedia(exercise), [exercise]);
+  const { videoUrl, useYouTubeModal } = media;
   const inlineImageSource =
     props.shouldAutoplayPreview && media.gifUrl
       ? { uri: media.gifUrl }
@@ -1077,8 +1046,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = (props) => {
     () => createCardLayout(showInlineControls ? 'interactive' : 'compact'),
     [showInlineControls],
   );
-  const plannedZoneLabel =
-    formatZoneLabel(props.dayExercise.intensity_zone ?? exercise?.intensity_zone) ?? null;
+  const plannedZoneLabel = formatZoneLabel(props.dayExercise.intensity_zone) ?? null;
   const primaryAction = isHistoricalEditMode ? props.onSaveSet : props.onAdvanceSet;
   const currentSetExists = isCardio
     ? hasCompletedCardioExecution(props.progress, props.currentSetNumber)
@@ -1173,7 +1141,13 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = (props) => {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={[styles.playButton, useYouTubeModal && styles.youtubeButton]} onPress={handleTechniquePress}>
+        <TouchableOpacity
+          accessibilityLabel={`Abrir tecnica de ${exerciseName}`}
+          activeOpacity={0.88}
+          style={[styles.playButton, useYouTubeModal && styles.youtubeButton]}
+          testID="exercise-technique-button"
+          onPress={handleTechniquePress}
+        >
           <Ionicons name={useYouTubeModal ? 'logo-youtube' : 'play'} size={18} color={colors.white} />
         </TouchableOpacity>
 
@@ -1196,7 +1170,7 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = (props) => {
                 <View style={[styles.modeBadge, isCardio ? styles.cardioBadge : styles.strengthBadge]}>
                   <Text style={styles.modeBadgeText}>
                     {isCardio
-                      ? (exercise?.cardio_subclass?.toUpperCase() || 'CARDIO')
+                      ? (props.dayExercise.cardio_subclass?.toUpperCase() || 'CARDIO')
                       : isMovement
                         ? (exercise?.exercise_class?.toUpperCase() || 'MOV')
                         : setTypeDefinition.shortLabel}
@@ -1395,6 +1369,17 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = (props) => {
           onAddSegment={props.onAddSegment}
           onRemoveSegment={props.onRemoveSegment}
           onAdvance={primaryAction}
+          actionLabel={(() => {
+            if (isHistoricalEditMode) return 'Guardar serie';
+            const isLastSet = props.currentSetNumber >= props.progress.total_sets;
+            if (props.setInProgress) return isLastSet ? 'Finalizar ejercicio' : 'Finalizar serie';
+            return isLastSet ? 'Iniciar última serie' : 'Iniciar serie';
+          })()}
+          actionIcon={(() => {
+            if (isHistoricalEditMode) return 'checkmark-circle-outline';
+            if (props.setInProgress) return props.currentSetNumber >= props.progress.total_sets ? 'trophy-outline' : 'checkmark-circle-outline';
+            return 'play-circle-outline';
+          })()}
           onDeleteCurrentSet={
             isHistoricalEditMode && currentSetExists && props.onDeleteSet
               ? () => props.onDeleteSet?.(props.currentSetNumber)
@@ -1508,6 +1493,7 @@ const createStyles = (theme: AppTheme) =>
     bodyContent: {
       marginTop: spacing.xs,
       alignSelf: 'flex-start',
+      flex: 1,
     },
     card: {
       borderRadius: borderRadius.xl,
@@ -1538,6 +1524,7 @@ const createStyles = (theme: AppTheme) =>
       position: 'absolute',
       right: spacing.sm,
       bottom: spacing.sm,
+      zIndex: 4,
       width: 38,
       height: 38,
       borderRadius: 19,
@@ -1623,11 +1610,9 @@ const createStyles = (theme: AppTheme) =>
     editorSection: {
       gap: spacing.sm,
     },
-    inlineEditorSection: {
-      gap: spacing.xs,
-    },
     inlineMetricsStack: {
       width: '100%',
+      flexShrink: 1,
     },
     inlineStaticMetricsStack: {
       width: '100%',
@@ -1680,12 +1665,19 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       color: theme.colors.textPrimary,
       textAlign: 'center',
+      width: '100%',
     },
     inlineMetricLabel: {
       marginTop: 2,
       fontSize: fontSize.xs,
       color: theme.colors.textMuted,
       textAlign: 'center',
+    },
+    inlineStaticMetricContainer: {
+      width: '100%',
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     inlineDivider: {
       width: '100%',
@@ -1754,7 +1746,7 @@ const createStyles = (theme: AppTheme) =>
       overflow: 'hidden',
     },
     inlineActionDock: {
-      paddingTop: spacing.xs,
+      paddingTop: spacing.sm,
       alignSelf: 'flex-start',
     },
     inlineActionDockTouchable: {
@@ -1770,6 +1762,11 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.xs,
       fontWeight: '700',
       color: colors.white,
+    },
+    inlineEditorSection: {
+      flex: 1,
+      justifyContent: 'space-between',
+      gap: spacing.md,
     },
     setChipSection: {
       marginTop: spacing.md,

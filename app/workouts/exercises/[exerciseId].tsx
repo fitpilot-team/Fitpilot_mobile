@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Image,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, LoadingSpinner } from '../../../src/components/common';
+import { VideoPlayerModal, YouTubePlayerModal } from '../../../src/components/video';
 import { AnalyticsRangeSelector } from '../../../src/components/workout-analytics/AnalyticsRangeSelector';
 import { ExerciseTrendChart } from '../../../src/components/workout-analytics/ExerciseTrendChart';
 import { WorkoutAnalyticsPillSelector } from '../../../src/components/workout-analytics/WorkoutAnalyticsPillSelector';
@@ -49,8 +51,10 @@ import {
   getProfileContextCopy,
   getProfilePrimaryMetricLabel,
 } from '../../../src/utils/analyticsProfiles';
+import { resolveTechniqueMedia } from '../../../src/utils/exerciseTechnique';
 
 // METRIC_CHART_SUBTITLES removed (now in analyticsProfiles.ts)
+const YOUTUBE_RED = '#FF0000';
 
 const getPointBucketEntries = (
   bucketTotals: Record<string, number> | null | undefined,
@@ -116,6 +120,8 @@ export default function ExerciseTrendDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showTechniqueVideoModal, setShowTechniqueVideoModal] = useState(false);
+  const [showTechniqueYouTubeModal, setShowTechniqueYouTubeModal] = useState(false);
 
   useEffect(() => {
     setRange(normalizeWorkoutAnalyticsRange(rangeParam, DEFAULT_WORKOUT_ANALYTICS_RANGE));
@@ -284,6 +290,18 @@ export default function ExerciseTrendDetailScreen() {
 
   const chartSubtitle = getMetricChartSubtitle(selectedMetric);
   const metricLabel = getMetricLabel(selectedMetric);
+  const techniqueMedia = useMemo(() => resolveTechniqueMedia(detail?.exercise_media), [detail?.exercise_media]);
+  const techniquePreviewUrl = techniqueMedia.gifUrl ?? techniqueMedia.posterUrl;
+  const techniqueActionLabel = techniqueMedia.useYouTubeModal
+    ? techniqueMedia.videoUrl
+      ? 'Abrir en YouTube'
+      : 'Buscar en YouTube'
+    : 'Reproducir tecnica';
+  const techniqueCaption = techniqueMedia.useYouTubeModal
+    ? techniqueMedia.videoUrl
+      ? 'Abre la demostracion publicada para este ejercicio.'
+      : 'Usa la busqueda automatica en YouTube cuando no exista un video vinculado.'
+    : 'Reproduce el video tecnico vinculado desde el catalogo.';
   const scopeLabel =
     scopeKind === 'microcycle'
       ? 'Microciclo'
@@ -349,6 +367,76 @@ export default function ExerciseTrendDetailScreen() {
               Tendencia y registros muestran solo matches del rango seleccionado desde Entrenamientos.
             </Text>
           </View>
+        ) : null}
+
+        {detail ? (
+          <Card style={styles.techniqueCard}>
+            <View style={styles.techniqueHeader}>
+              <View style={styles.techniqueHeaderCopy}>
+                <Text style={styles.techniqueEyebrow}>Tecnica</Text>
+                <Text style={styles.techniqueTitle}>Video y referencia</Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Abrir tecnica de ${detail.exercise_name}`}
+                activeOpacity={0.88}
+                style={[
+                  styles.techniqueActionButton,
+                  techniqueMedia.useYouTubeModal && styles.techniqueActionButtonYouTube,
+                ]}
+                testID="exercise-detail-technique-button"
+                onPress={() => {
+                  if (techniqueMedia.useYouTubeModal) {
+                    setShowTechniqueYouTubeModal(true);
+                    return;
+                  }
+                  setShowTechniqueVideoModal(true);
+                }}
+              >
+                <Ionicons
+                  name={techniqueMedia.useYouTubeModal ? 'logo-youtube' : 'play'}
+                  size={16}
+                  color="white"
+                />
+                <Text style={styles.techniqueActionButtonText}>{techniqueActionLabel}</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.techniqueText}>{techniqueCaption}</Text>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.techniquePreview}
+              onPress={() => {
+                if (techniqueMedia.useYouTubeModal) {
+                  setShowTechniqueYouTubeModal(true);
+                  return;
+                }
+                setShowTechniqueVideoModal(true);
+              }}
+            >
+              {techniquePreviewUrl ? (
+                <Image source={{ uri: techniquePreviewUrl }} style={styles.techniquePreviewImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.techniquePreviewPlaceholder}>
+                  <Ionicons
+                    name={techniqueMedia.useYouTubeModal ? 'logo-youtube' : 'play-circle'}
+                    size={34}
+                    color={techniqueMedia.useYouTubeModal ? YOUTUBE_RED : theme.colors.primary}
+                  />
+                  <Text style={styles.techniquePreviewPlaceholderText}>Abrir referencia tecnica</Text>
+                </View>
+              )}
+              <View style={styles.techniquePreviewOverlay}>
+                <View style={styles.techniquePreviewBadge}>
+                  <Ionicons
+                    name={techniqueMedia.useYouTubeModal ? 'logo-youtube' : 'play'}
+                    size={14}
+                    color="white"
+                  />
+                  <Text style={styles.techniquePreviewBadgeText}>{techniqueActionLabel}</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </Card>
         ) : null}
 
         <View style={styles.metricSelectorWrap}>
@@ -618,6 +706,24 @@ export default function ExerciseTrendDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      {detail && !techniqueMedia.useYouTubeModal && techniqueMedia.videoUrl ? (
+        <VideoPlayerModal
+          visible={showTechniqueVideoModal}
+          exerciseName={detail.exercise_name}
+          videoUri={techniqueMedia.videoUrl}
+          onClose={() => setShowTechniqueVideoModal(false)}
+        />
+      ) : null}
+
+      {detail ? (
+        <YouTubePlayerModal
+          visible={showTechniqueYouTubeModal}
+          exerciseName={detail.exercise_name}
+          youtubeUrl={techniqueMedia.useYouTubeModal && techniqueMedia.videoUrl ? techniqueMedia.videoUrl : undefined}
+          onClose={() => setShowTechniqueYouTubeModal(false)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -692,6 +798,100 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
       lineHeight: 20,
+    },
+    techniqueCard: {
+      gap: spacing.md,
+      padding: spacing.lg,
+    },
+    techniqueHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+    techniqueHeaderCopy: {
+      flex: 1,
+      gap: 4,
+    },
+    techniqueEyebrow: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.7,
+    },
+    techniqueTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    techniqueText: {
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      lineHeight: 20,
+    },
+    techniqueActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    techniqueActionButtonYouTube: {
+      backgroundColor: YOUTUBE_RED,
+    },
+    techniqueActionButtonText: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: 'white',
+    },
+    techniquePreview: {
+      height: 180,
+      borderRadius: borderRadius.xl,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    techniquePreviewImage: {
+      width: '100%',
+      height: '100%',
+    },
+    techniquePreviewPlaceholder: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      backgroundColor: theme.colors.surfaceAlt,
+      paddingHorizontal: spacing.lg,
+    },
+    techniquePreviewPlaceholderText: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
+    techniquePreviewOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: 'flex-end',
+      padding: spacing.md,
+    },
+    techniquePreviewBadge: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      borderRadius: borderRadius.full,
+      backgroundColor: 'rgba(15, 23, 42, 0.78)',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+    },
+    techniquePreviewBadgeText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: 'white',
     },
     metricSelectorWrap: {
       gap: spacing.sm,

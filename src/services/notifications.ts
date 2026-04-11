@@ -2,6 +2,9 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
+
+const PUSH_TOKEN_FINGERPRINT_KEY = 'fitpilot_push_token_fingerprint';
 
 // Configure how notifications behave when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -72,13 +75,34 @@ export async function registerForPushNotificationsAsync(): Promise<string | unde
 /**
  * Sends the generated token to the backend to associate it with the logged-in user.
  */
-export async function sendPushTokenToBackend(pushToken: string): Promise<void> {
+export async function sendPushTokenToBackend(pushToken: string): Promise<boolean> {
   try {
     const { nutritionClient } = await import('./api');
 
     await nutritionClient.post('/users/push-token', { token: pushToken });
     console.log('Successfully registered push token with backend');
+    return true;
   } catch (error) {
     console.error('Failed to send push token to backend:', error);
+    return false;
   }
+}
+
+export async function registerDevicePushTokenForUser(userId: string): Promise<void> {
+  const pushToken = await registerForPushNotificationsAsync();
+  if (!pushToken) {
+    return;
+  }
+
+  const fingerprint = `${userId}:${pushToken}`;
+  const previousFingerprint = await SecureStore.getItemAsync(PUSH_TOKEN_FINGERPRINT_KEY);
+  if (previousFingerprint === fingerprint) {
+    return;
+  }
+
+  const wasRegistered = await sendPushTokenToBackend(pushToken);
+  if (!wasRegistered) {
+    return;
+  }
+  await SecureStore.setItemAsync(PUSH_TOKEN_FINGERPRINT_KEY, fingerprint);
 }

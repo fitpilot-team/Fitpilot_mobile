@@ -54,7 +54,9 @@ import {
   createMyMeasurement,
   getMyMeasurementDetail,
   listMyMeasurements,
+  updateMyMeasurement,
 } from '../../src/services/measurements';
+import { useAuthStore } from '../../src/store/authStore';
 import {
   MEASUREMENT_PREFERENCE_LABELS,
   useMeasurementPreferenceStore,
@@ -144,6 +146,7 @@ export default function MeasurementsScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset(72);
+  const user = useAuthStore((state) => state.user);
   const measurementPreference = useMeasurementPreferenceStore(
     (state) => state.preference,
   );
@@ -167,6 +170,9 @@ export default function MeasurementsScreen() {
   );
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isFormVisible, setIsFormVisible] = useState(false);
+  const [editingMeasurementId, setEditingMeasurementId] = useState<string | null>(
+    null,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreateMenuVisible, setIsCreateMenuVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,6 +185,28 @@ export default function MeasurementsScreen() {
   const selectedMeasurementDetail = selectedMeasurementId
     ? detailCache[selectedMeasurementId] ?? null
     : null;
+  const selectedMeasurement = selectedMeasurementId
+    ? selectedMeasurementDetail?.measurement ??
+      measurements.find((measurement) => measurement.id === selectedMeasurementId) ??
+      null
+    : null;
+  const editingMeasurement = editingMeasurementId
+    ? detailCache[editingMeasurementId]?.measurement ??
+      measurements.find((measurement) => measurement.id === editingMeasurementId) ??
+      null
+    : null;
+  const defaultHeightCm = useMemo(() => {
+    const latestMeasurementWithHeight = measurements.find(
+      (measurement) => parseMeasurementNumber(measurement.height_cm) !== null,
+    );
+    const heightValue = latestMeasurementWithHeight?.height_cm;
+
+    if (heightValue === null || heightValue === undefined) {
+      return null;
+    }
+
+    return String(heightValue);
+  }, [measurements]);
 
   const loadMeasurements = useCallback(
     async ({ page = 1, append = false }: { page?: number; append?: boolean } = {}) => {
@@ -233,6 +261,7 @@ export default function MeasurementsScreen() {
       setSelectedMeasurementId(null);
       setIsDetailLoading(false);
       setIsFormVisible(false);
+      setEditingMeasurementId(null);
       setIsCreateMenuVisible(false);
       glucose.resetUi();
       return;
@@ -358,6 +387,38 @@ export default function MeasurementsScreen() {
     [measurementPreference],
   );
 
+  const closeMeasurementDetail = useCallback(() => {
+    setIsDetailVisible(false);
+    setSelectedMeasurementId(null);
+    setIsDetailLoading(false);
+  }, []);
+
+  const openCreateMeasurementForm = useCallback(() => {
+    setEditingMeasurementId(null);
+    setIsFormVisible(true);
+  }, []);
+
+  const closeMeasurementForm = useCallback(() => {
+    setIsFormVisible(false);
+    setEditingMeasurementId(null);
+  }, []);
+
+  const isMeasurementEditable = useCallback(
+    (measurement: MeasurementHistoryItem | null) => {
+      if (!measurement) {
+        return false;
+      }
+
+      const authenticatedUserId = Number(user?.id);
+
+      return (
+        Number.isFinite(authenticatedUserId) &&
+        measurement.recorded_by_user_id === authenticatedUserId
+      );
+    },
+    [user?.id],
+  );
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
 
@@ -408,25 +469,55 @@ export default function MeasurementsScreen() {
         }));
       } catch (detailError) {
         const apiError = detailError as ApiError;
-        setIsDetailVisible(false);
-        setSelectedMeasurementId(null);
+        closeMeasurementDetail();
         Alert.alert('Error', apiError.message || 'No fue posible cargar el detalle.');
       } finally {
         setIsDetailLoading(false);
       }
     },
-    [detailCache],
+    [closeMeasurementDetail, detailCache],
   );
 
-  const handleCreateMeasurement = useCallback(
+  const handleEditMeasurement = useCallback(() => {
+    if (!selectedMeasurement) {
+      return;
+    }
+
+    if (!isMeasurementEditable(selectedMeasurement)) {
+      Alert.alert(
+        'Edicion no disponible',
+        'Solo puedes editar mediciones registradas por ti desde la app.',
+      );
+      return;
+    }
+
+    setEditingMeasurementId(selectedMeasurement.id);
+    closeMeasurementDetail();
+    setIsFormVisible(true);
+  }, [closeMeasurementDetail, isMeasurementEditable, selectedMeasurement]);
+
+  const handleSubmitMeasurement = useCallback(
     async (payload: CreateOwnMeasurementPayload) => {
       setIsSubmitting(true);
 
       try {
-        await createMyMeasurement(payload);
-        setIsFormVisible(false);
+        const savedMeasurement = editingMeasurementId
+          ? await updateMyMeasurement(editingMeasurementId, payload)
+          : await createMyMeasurement(payload);
+
+        closeMeasurementDetail();
+        closeMeasurementForm();
         await loadMeasurements();
-        Alert.alert('Medicion registrada', 'Tus medidas se actualizaron correctamente.');
+        setDetailCache((currentCache) => ({
+          ...currentCache,
+          [savedMeasurement.measurement.id]: savedMeasurement,
+        }));
+        Alert.alert(
+          editingMeasurementId ? 'Medicion actualizada' : 'Medicion registrada',
+          editingMeasurementId
+            ? 'Tus cambios se guardaron correctamente.'
+            : 'Tus medidas se actualizaron correctamente.',
+        );
       } catch (saveError) {
         const apiError = saveError as ApiError;
         Alert.alert('Error', apiError.message || 'No fue posible guardar la medicion.');
@@ -434,7 +525,7 @@ export default function MeasurementsScreen() {
         setIsSubmitting(false);
       }
     },
-    [loadMeasurements],
+    [closeMeasurementDetail, closeMeasurementForm, editingMeasurementId, loadMeasurements],
   );
 
   const handleTabChange = useCallback(
@@ -454,13 +545,13 @@ export default function MeasurementsScreen() {
       setIsCreateMenuVisible(false);
 
       if (action === 'body') {
-        setIsFormVisible(true);
+        openCreateMeasurementForm();
         return;
       }
 
       glucose.openCreateForm();
     },
-    [glucose.openCreateForm],
+    [glucose.openCreateForm, openCreateMeasurementForm],
   );
 
   const handleOpenGlucoseDetail = useCallback(
@@ -687,7 +778,7 @@ export default function MeasurementsScreen() {
                     <TouchableOpacity
                       style={styles.inlineAction}
                       activeOpacity={0.88}
-                      onPress={() => setIsFormVisible(true)}
+                      onPress={openCreateMeasurementForm}
                     >
                       <Ionicons
                         name="add-outline"
@@ -707,7 +798,7 @@ export default function MeasurementsScreen() {
                     <TouchableOpacity
                       style={styles.inlineAction}
                       activeOpacity={0.88}
-                      onPress={() => setIsFormVisible(true)}
+                      onPress={openCreateMeasurementForm}
                     >
                       <Ionicons
                         name="add-outline"
@@ -871,7 +962,7 @@ export default function MeasurementsScreen() {
                   </Text>
                   <Button
                     title="Registrar mi primera medicion"
-                    onPress={() => setIsFormVisible(true)}
+                    onPress={openCreateMeasurementForm}
                     icon={<Ionicons name="add-outline" size={18} color="#ffffff" />}
                   />
                 </Card>
@@ -1155,7 +1246,7 @@ export default function MeasurementsScreen() {
                       </View>
                       <TouchableOpacity
                         style={styles.sectionHeaderAction}
-                        onPress={() => setIsFormVisible(true)}
+                        onPress={openCreateMeasurementForm}
                       >
                         <Text style={styles.sectionLink}>Registrar nueva</Text>
                       </TouchableOpacity>
@@ -1411,18 +1502,17 @@ export default function MeasurementsScreen() {
           visible={isFocused && isDetailVisible}
           detail={selectedMeasurementDetail}
           isLoading={isDetailLoading}
-          onClose={() => {
-            setIsDetailVisible(false);
-            setSelectedMeasurementId(null);
-            setIsDetailLoading(false);
-          }}
+          onClose={closeMeasurementDetail}
+          onEdit={handleEditMeasurement}
         />
 
         <MeasurementFormModal
           visible={isFocused && isFormVisible}
           isSubmitting={isSubmitting}
-          onClose={() => setIsFormVisible(false)}
-          onSubmit={handleCreateMeasurement}
+          initialMeasurement={editingMeasurement}
+          defaultHeightCm={defaultHeightCm}
+          onClose={closeMeasurementForm}
+          onSubmit={handleSubmitMeasurement}
         />
 
         <GlucoseDetailModal

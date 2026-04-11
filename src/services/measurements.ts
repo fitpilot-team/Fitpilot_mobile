@@ -26,3 +26,12 @@ export const createMyMeasurement = (
   payload: CreateOwnMeasurementPayload,
 ): Promise<MeasurementDetail> =>
   nutritionClient.post<MeasurementDetail>('/measurements/me', payload);
+
+export const updateMyMeasurement = (
+  measurementId: string,
+  payload: CreateOwnMeasurementPayload,
+): Promise<MeasurementDetail> =>
+  nutritionClient.patch<MeasurementDetail>(
+    `/measurements/me/${measurementId}`,
+    payload,
+  );

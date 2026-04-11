@@ -2,8 +2,8 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { borderRadius, brandColors, fontSize, shadows, spacing } from '../../constants/colors';
-import { useThemedStyles, type AppTheme } from '../../theme';
+import { borderRadius, fontSize, shadows, spacing } from '../../constants/colors';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 
 export type WorkoutAnalyticsHeroMetric = {
   label: string;
@@ -35,40 +35,61 @@ export const WorkoutAnalyticsHero: React.FC<WorkoutAnalyticsHeroProps> = ({
   onActionPress,
 }) => {
   const styles = useThemedStyles(createStyles);
+  const { theme } = useAppTheme();
   const primaryMetrics = metrics.slice(0, 2);
   const secondaryMetrics = metrics.slice(2);
   const showEyebrow = Boolean(eyebrow);
 
+  const gradientColors = theme.isDark
+    ? ([theme.colors.surfaceAlt, theme.colors.surface] as const)
+    : ([theme.colors.primarySoft, '#f4f8ff'] as const);
+  const shellBorder = theme.isDark ? theme.colors.border : theme.colors.primaryBorder;
+  const surfaceColor = theme.colors.surface;
+  const surfaceBorder = theme.isDark ? theme.colors.border : theme.colors.primaryBorder;
+  const accentSurface = theme.colors.primarySoft;
+  const accentColor = theme.colors.primary;
+  const textPrimary = theme.colors.textPrimary;
+  const textSecondary = theme.colors.textSecondary;
+
   return (
     <LinearGradient
-      colors={['#10203b', brandColors.navy, brandColors.sky]}
+      colors={gradientColors}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={styles.container}
+      style={[styles.container, { borderColor: shellBorder }]}
     >
       <View style={styles.copy}>
-        {showEyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-        <Text numberOfLines={2} style={styles.title}>{title}</Text>
-        <Text numberOfLines={2} style={styles.subtitle}>{subtitle}</Text>
+        {showEyebrow ? <Text style={[styles.eyebrow, { color: accentColor }]}>{eyebrow}</Text> : null}
+        <Text numberOfLines={2} style={[styles.title, { color: textPrimary }]}>
+          {title}
+        </Text>
+        <Text numberOfLines={2} style={[styles.subtitle, { color: textSecondary }]}>
+          {subtitle}
+        </Text>
       </View>
 
       <View style={styles.metaRow}>
         <View style={styles.metaPills}>
-          <View style={styles.rangePill}>
-            <Ionicons name="pulse-outline" size={14} color="#ffffff" />
-            <Text style={styles.rangeText}>{rangeLabel}</Text>
+          <View style={[styles.rangePill, { backgroundColor: surfaceColor, borderColor: surfaceBorder }]}>
+            <Ionicons name="pulse-outline" size={14} color={accentColor} />
+            <Text style={[styles.rangeText, { color: textPrimary }]}>{rangeLabel}</Text>
           </View>
         </View>
       </View>
 
       <View style={styles.primaryMetricsGrid}>
         {primaryMetrics.map((metric) => (
-          <View key={metric.label} style={styles.primaryMetricCard}>
-            <View style={styles.primaryMetricIcon}>
-              <Ionicons name={metric.icon} size={16} color="#ffffff" />
+          <View
+            key={metric.label}
+            style={[styles.primaryMetricCard, { backgroundColor: surfaceColor, borderColor: surfaceBorder }]}
+          >
+            <View style={[styles.primaryMetricIcon, { backgroundColor: accentSurface }]}>
+              <Ionicons name={metric.icon} size={16} color={accentColor} />
             </View>
-            <Text numberOfLines={1} style={styles.primaryMetricValue}>{metric.value}</Text>
-            <Text style={styles.primaryMetricLabel}>{metric.label}</Text>
+            <Text numberOfLines={1} style={[styles.primaryMetricValue, { color: textPrimary }]}>
+              {metric.value}
+            </Text>
+            <Text style={[styles.primaryMetricLabel, { color: textSecondary }]}>{metric.label}</Text>
           </View>
         ))}
       </View>
@@ -76,23 +97,32 @@ export const WorkoutAnalyticsHero: React.FC<WorkoutAnalyticsHeroProps> = ({
       {secondaryMetrics.length > 0 ? (
         <View style={styles.secondaryMetricsRow}>
           {secondaryMetrics.map((metric) => (
-            <View key={metric.label} style={styles.secondaryMetricPill}>
-              <Ionicons name={metric.icon} size={14} color="rgba(255,255,255,0.86)" />
-              <Text style={styles.secondaryMetricValue}>{metric.value}</Text>
-              <Text style={styles.secondaryMetricLabel}>{metric.label}</Text>
+            <View
+              key={metric.label}
+              style={[styles.secondaryMetricPill, { backgroundColor: surfaceColor, borderColor: surfaceBorder }]}
+            >
+              <Ionicons name={metric.icon} size={14} color={accentColor} />
+              <Text style={[styles.secondaryMetricValue, { color: textPrimary }]}>{metric.value}</Text>
+              <Text style={[styles.secondaryMetricLabel, { color: textSecondary }]}>{metric.label}</Text>
             </View>
           ))}
         </View>
       ) : null}
 
-      <TouchableOpacity style={styles.actionButton} activeOpacity={0.88} onPress={onActionPress}>
+      <TouchableOpacity
+        style={[styles.actionButton, { backgroundColor: surfaceColor, borderColor: surfaceBorder }]}
+        activeOpacity={0.88}
+        onPress={onActionPress}
+      >
         <View style={styles.actionCopy}>
-          <Text style={styles.actionLabel}>{actionLabel}</Text>
-          <Text numberOfLines={1} style={styles.actionHint}>{actionHint}</Text>
+          <Text style={[styles.actionLabel, { color: textPrimary }]}>{actionLabel}</Text>
+          <Text numberOfLines={1} style={[styles.actionHint, { color: textSecondary }]}>
+            {actionHint}
+          </Text>
         </View>
 
-        <View style={styles.actionIconWrap}>
-          <Ionicons name={actionIcon} size={16} color="#ffffff" />
+        <View style={[styles.actionIconWrap, { backgroundColor: accentSurface }]}>
+          <Ionicons name={actionIcon} size={16} color={accentColor} />
         </View>
       </TouchableOpacity>
     </LinearGradient>
@@ -103,6 +133,7 @@ const createStyles = (_theme: AppTheme) =>
   StyleSheet.create({
     container: {
       borderRadius: borderRadius.xl,
+      borderWidth: 1,
       padding: spacing.md,
       gap: spacing.sm,
       ...shadows.lg,
@@ -117,19 +148,16 @@ const createStyles = (_theme: AppTheme) =>
     eyebrow: {
       fontSize: fontSize.xs,
       fontWeight: '800',
-      color: 'rgba(255,255,255,0.74)',
       textTransform: 'uppercase',
       letterSpacing: 0.8,
     },
     title: {
       fontSize: fontSize['2xl'],
       fontWeight: '800',
-      color: '#ffffff',
     },
     subtitle: {
       fontSize: fontSize.sm,
       lineHeight: 20,
-      color: 'rgba(255,255,255,0.74)',
     },
     metaPills: {
       flexDirection: 'row',
@@ -141,16 +169,13 @@ const createStyles = (_theme: AppTheme) =>
       alignItems: 'center',
       gap: 6,
       borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(255,255,255,0.1)',
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.12)',
       paddingHorizontal: spacing.sm,
       paddingVertical: 6,
     },
     rangeText: {
       fontSize: fontSize.xs,
       fontWeight: '700',
-      color: '#ffffff',
     },
     primaryMetricsGrid: {
       flexDirection: 'row',
@@ -160,9 +185,7 @@ const createStyles = (_theme: AppTheme) =>
       width: '48%',
       minHeight: 74,
       borderRadius: borderRadius.lg,
-      backgroundColor: 'rgba(255,255,255,0.08)',
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.1)',
       padding: spacing.sm,
       gap: spacing.xs,
     },
@@ -170,19 +193,16 @@ const createStyles = (_theme: AppTheme) =>
       width: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: 'rgba(255,255,255,0.12)',
       alignItems: 'center',
       justifyContent: 'center',
     },
     primaryMetricValue: {
       fontSize: fontSize.lg,
       fontWeight: '800',
-      color: '#ffffff',
     },
     primaryMetricLabel: {
       fontSize: fontSize.xs,
       fontWeight: '600',
-      color: 'rgba(255,255,255,0.68)',
       textTransform: 'uppercase',
     },
     secondaryMetricsRow: {
@@ -195,20 +215,16 @@ const createStyles = (_theme: AppTheme) =>
       alignItems: 'center',
       gap: 6,
       borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(255,255,255,0.08)',
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.08)',
       paddingHorizontal: spacing.sm,
       paddingVertical: 7,
     },
     secondaryMetricValue: {
       fontSize: fontSize.sm,
       fontWeight: '700',
-      color: '#ffffff',
     },
     secondaryMetricLabel: {
       fontSize: fontSize.xs,
-      color: 'rgba(255,255,255,0.7)',
     },
     actionButton: {
       flexDirection: 'row',
@@ -216,9 +232,7 @@ const createStyles = (_theme: AppTheme) =>
       justifyContent: 'space-between',
       gap: spacing.md,
       borderRadius: borderRadius.lg,
-      backgroundColor: 'rgba(255,255,255,0.08)',
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.1)',
       paddingHorizontal: spacing.md,
       paddingVertical: 10,
     },
@@ -229,17 +243,14 @@ const createStyles = (_theme: AppTheme) =>
     actionLabel: {
       fontSize: fontSize.sm,
       fontWeight: '800',
-      color: '#ffffff',
     },
     actionHint: {
       fontSize: fontSize.xs,
-      color: 'rgba(255,255,255,0.72)',
     },
     actionIconWrap: {
       width: 30,
       height: 30,
       borderRadius: 15,
-      backgroundColor: 'rgba(255,255,255,0.12)',
       alignItems: 'center',
       justifyContent: 'center',
     },

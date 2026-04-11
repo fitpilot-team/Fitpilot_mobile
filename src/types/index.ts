@@ -85,6 +85,13 @@ export type ExerciseClass =
   | 'balance';
 export type CardioSubclass = 'liss' | 'hiit' | 'miss';
 export type PlyometricMetricType = 'height_cm' | 'distance_cm';
+export type ExerciseType = 'multiarticular' | 'monoarticular';
+export type ResistanceProfile = 'ascending' | 'descending' | 'flat' | 'bell_shaped';
+
+export interface ExerciseMechanics {
+  type: ExerciseType;
+  resistance_profile: ResistanceProfile;
+}
 
 export interface Exercise {
   id: string;
@@ -92,20 +99,17 @@ export interface Exercise {
   name_es?: string | null;
   description_en?: string | null;
   description_es?: string | null;
-  type: 'multiarticular' | 'monoarticular';
-  category: string;
   video_url?: string | null;
   thumbnail_url?: string | null;
   image_url?: string | null;
+  anatomy_image_url?: string | null;
   equipment_needed?: string | null;
   difficulty_level?: 'beginner' | 'intermediate' | 'advanced' | null;
+  mechanics?: ExerciseMechanics | null;
   exercise_class?: ExerciseClass | null;
-  cardio_subclass?: CardioSubclass | null;
-  intensity_zone?: number | null;
-  target_heart_rate_min?: number | null;
-  target_heart_rate_max?: number | null;
-  calories_per_minute?: number | null;
 }
+
+export type ExerciseMedia = Pick<Exercise, 'video_url' | 'thumbnail_url' | 'image_url' | 'anatomy_image_url'>;
 
 export interface DayExercise {
   id: string;
@@ -122,6 +126,7 @@ export interface DayExercise {
   effort_value: number;
   tempo?: string | null;
   set_type?: WorkoutSetType | null;
+  cardio_subclass?: CardioSubclass | null;
   duration_seconds?: number | null;
   intensity_zone?: number | null;
   distance_meters?: number | null;
@@ -130,6 +135,7 @@ export interface DayExercise {
   work_seconds?: number | null;
   interval_rest_seconds?: number | null;
   plyometric_metric_type?: PlyometricMetricType | null;
+  analytics_profile_override?: string | null;
   notes?: string | null;
 }
 
@@ -398,6 +404,66 @@ export interface MicrocycleProgress {
   days: MicrocycleDayProgress[];
 }
 
+export interface DashboardProgramSummary {
+  id: string;
+  name: string;
+  objective?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
+export interface DashboardTrainingDaySummary {
+  id: string;
+  date: string;
+  session_index: number;
+  session_label?: string | null;
+  name: string;
+  focus?: string | null;
+  rest_day: boolean;
+  total_sets: number;
+  exercise_count: number;
+}
+
+export interface DashboardTimelineSession extends MicrocycleSessionProgress {
+  position: number;
+  total_sessions: number;
+  scheduled_date_key: string;
+  performed_date_key?: string | null;
+  training_day: DashboardTrainingDaySummary;
+}
+
+export interface DashboardTimelineDay {
+  date_key: string;
+  is_in_program_range: boolean;
+  has_rest_marker: boolean;
+  sessions: DashboardTimelineSession[];
+}
+
+export interface DashboardActualAdherenceMetrics {
+  on_schedule: number;
+  rescheduled: number;
+  overdue: number;
+}
+
+export interface DashboardTimeline {
+  calendar_start_date_key: string;
+  calendar_end_date_key: string;
+  first_week_start_date_key: string;
+  last_week_start_date_key: string;
+  initial_focused_date_key: string;
+  total_sessions: number;
+  all_completed: boolean;
+  actual_adherence_metrics: DashboardActualAdherenceMetrics;
+  planned_days: DashboardTimelineDay[];
+  actual_days: DashboardTimelineDay[];
+}
+
+export interface DashboardBootstrap {
+  program?: DashboardProgramSummary | null;
+  microcycle_progress: MicrocycleProgress;
+  timeline?: DashboardTimeline | null;
+}
+
 export type WorkoutAnalyticsRange = '2w' | '4w' | '8w' | '12w' | 'all';
 export type WorkoutAnalyticsColorToken = 'navy' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet';
 export type WorkoutAnalyticsHistoryStatusFilter = 'all' | WorkoutStatus;
@@ -407,6 +473,7 @@ export type WorkoutAnalyticsScopeKind = 'range' | 'microcycle' | 'mesocycle' | '
 export type WorkoutAnalyticsAvailability = 'available' | 'partial' | 'unavailable';
 export type WorkoutAnalyticsOrigin = 'measured' | 'derived';
 export type WorkoutAnalyticsTrendVariant = 'stacked_rep_ranges' | 'line';
+export type WorkoutAnalyticsTrendSemanticKind = 'daily_session_comparison';
 export type WorkoutSessionKind = 'strength' | 'cardio' | 'mixed';
 export type ExerciseDetailMetric =
   | 'best_weight'
@@ -578,6 +645,7 @@ export interface WorkoutAnalyticsTrendSeriesSection {
   title: string;
   subtitle?: string | null;
   chart_variant: WorkoutAnalyticsTrendVariant;
+  semantic_kind?: WorkoutAnalyticsTrendSemanticKind | null;
   unit?: string | null;
   primary_label?: string | null;
   secondary_label?: string | null;
@@ -699,6 +767,7 @@ export interface ExerciseTrendDetail {
   summary: ExerciseTrendDetailSummary;
   series: ExerciseTrendPoint[];
   preferences: WorkoutAnalyticsPreferences;
+  exercise_media?: ExerciseMedia | null;
   // Phase 2
   analytics_profile?: AnalyticsProfileId | null;
   available_metrics?: AvailableMetric[];
