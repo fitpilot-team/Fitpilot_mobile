@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../src/store/authStore';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import { useCareTeam } from '../../src/hooks/useCareTeam';
 import { useAppTheme, useThemedStyles, getThemePreferenceLabel } from '../../src/theme';
 import {
   MEASUREMENT_PREFERENCE_LABELS,
@@ -54,6 +55,9 @@ export default function ProfileScreen() {
   const { width, height } = useWindowDimensions();
   const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
   const { user, logout, uploadAvatar, isLoading } = useAuthStore();
+  const { assignedCount, hasLoaded: hasLoadedCareTeam, isLoading: isLoadingCareTeam } = useCareTeam(
+    user?.id ?? null,
+  );
   const { preference, theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
@@ -147,6 +151,12 @@ export default function ProfileScreen() {
     );
   };
 
+  const professionalsValue = !hasLoadedCareTeam && isLoadingCareTeam
+    ? 'Cargando'
+    : assignedCount > 0
+      ? `${assignedCount} asignado${assignedCount > 1 ? 's' : ''}`
+      : 'Sin asignacion';
+
   return (
     <TabScreenWrapper>
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -191,6 +201,12 @@ export default function ProfileScreen() {
 
           <Text style={styles.sectionTitle}>Cuenta</Text>
           <View style={styles.menuSection}>
+            <MenuItem
+              icon="people-outline"
+              label="Tus profesionales"
+              value={professionalsValue}
+              onPress={() => router.push('/profile/professionals')}
+            />
             <MenuItem
               icon="person-outline"
               label="Informacion personal"

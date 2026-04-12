@@ -1,0 +1,195 @@
+import React, { useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import {
+  borderRadius,
+  fontSize,
+  spacing,
+} from '../../constants/colors';
+import { useAppTheme, useThemedStyles } from '../../theme';
+import type {
+  AssignedProfessionalDomain,
+  AssignedProfessionalSummary,
+} from '../../types';
+import { AssignedProfessionalCard } from './AssignedProfessionalCard';
+
+type CareTeamSectionProps = {
+  summaries: Record<AssignedProfessionalDomain, AssignedProfessionalSummary | null>;
+  errors: Record<AssignedProfessionalDomain, string | null>;
+  isLoading: boolean;
+  compact?: boolean;
+  title?: string;
+  subtitle?: string;
+  horizontalPadding?: number;
+};
+
+type CareTeamCardModel = {
+  key: string;
+  domains: AssignedProfessionalDomain[];
+  state: 'loading' | 'assigned' | 'unassigned' | 'error';
+  summary: AssignedProfessionalSummary | null;
+  errorMessage: string | null;
+};
+
+const mergeDistinctText = (...values: (string | null | undefined)[]) => {
+  const uniqueValues = Array.from(
+    new Set(
+      values
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  return uniqueValues.length ? uniqueValues.join(' • ') : null;
+};
+
+const buildCareTeamCards = (
+  summaries: Record<AssignedProfessionalDomain, AssignedProfessionalSummary | null>,
+  errors: Record<AssignedProfessionalDomain, string | null>,
+  isLoading: boolean,
+): CareTeamCardModel[] => {
+  if (
+    isLoading &&
+    !summaries.training &&
+    !summaries.nutrition &&
+    !errors.training &&
+    !errors.nutrition
+  ) {
+    return [
+      {
+        key: 'training-loading',
+        domains: ['training'],
+        state: 'loading',
+        summary: null,
+        errorMessage: null,
+      },
+      {
+        key: 'nutrition-loading',
+        domains: ['nutrition'],
+        state: 'loading',
+        summary: null,
+        errorMessage: null,
+      },
+    ];
+  }
+
+  const trainingSummary = summaries.training;
+  const nutritionSummary = summaries.nutrition;
+  const canMergeAssignedProfessional =
+    !errors.training &&
+    !errors.nutrition &&
+    trainingSummary?.status === 'assigned' &&
+    nutritionSummary?.status === 'assigned' &&
+    Boolean(trainingSummary.id) &&
+    trainingSummary.id === nutritionSummary.id;
+
+  if (canMergeAssignedProfessional) {
+    return [
+      {
+        key: `merged-${trainingSummary.id}`,
+        domains: ['training', 'nutrition'],
+        state: 'assigned',
+        summary: {
+          ...trainingSummary,
+          roleLabel: mergeDistinctText(
+            trainingSummary.roleLabel,
+            nutritionSummary.roleLabel,
+          ),
+          contextLabel: mergeDistinctText(
+            trainingSummary.contextLabel,
+            nutritionSummary.contextLabel,
+          ),
+        },
+        errorMessage: null,
+      },
+    ];
+  }
+
+  return (['training', 'nutrition'] as AssignedProfessionalDomain[]).map(
+    (domain) => {
+      if (errors[domain]) {
+        return {
+          key: `${domain}-error`,
+          domains: [domain],
+          state: 'error',
+          summary: null,
+          errorMessage: errors[domain],
+        } satisfies CareTeamCardModel;
+      }
+
+      const summary = summaries[domain];
+      return {
+        key: `${domain}-${summary?.status ?? 'unassigned'}`,
+        domains: [domain],
+        state: summary?.status === 'assigned' ? 'assigned' : 'unassigned',
+        summary,
+        errorMessage: null,
+      } satisfies CareTeamCardModel;
+    },
+  );
+};
+
+export const CareTeamSection: React.FC<CareTeamSectionProps> = ({
+  summaries,
+  errors,
+  isLoading,
+  compact = false,
+  title = 'Tus profesionales',
+  subtitle,
+  horizontalPadding = 0,
+}) => {
+  const styles = useThemedStyles(createStyles);
+  const cards = useMemo(
+    () => buildCareTeamCards(summaries, errors, isLoading),
+    [errors, isLoading, summaries],
+  );
+
+  return (
+    <View style={[styles.container, { paddingHorizontal: horizontalPadding }]}>
+      <View style={styles.header}>
+        <Text style={styles.title}>{title}</Text>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </View>
+
+      <View style={styles.cardsColumn}>
+        {cards.map((card) => (
+          <AssignedProfessionalCard
+            key={card.key}
+            domains={card.domains}
+            state={card.state}
+            summary={card.summary}
+            errorMessage={card.errorMessage}
+            compact={compact}
+          />
+        ))}
+      </View>
+    </View>
+  );
+};
+
+const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
+  StyleSheet.create({
+    container: {
+      width: '100%',
+    },
+    header: {
+      marginBottom: spacing.md,
+    },
+    title: {
+      fontSize: fontSize.xl,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    subtitle: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      lineHeight: 20,
+    },
+    cardsColumn: {
+      gap: spacing.sm,
+      padding: spacing.xs,
+      borderRadius: borderRadius.xl,
+    },
+  });
+
+export default CareTeamSection;

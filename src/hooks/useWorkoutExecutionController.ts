@@ -273,6 +273,7 @@ export const useWorkoutExecutionController = ({
   const isReviewMode = screenMode === 'review';
   const isLiveMode = screenMode === 'live';
   const isHistoricalEditMode = screenMode === 'historicalEdit';
+  const shouldPrefillStrengthWeightFromFirstSet = isLiveMode;
 
   const capabilities = useMemo<WorkoutModeCapabilities>(
     () => ({
@@ -300,6 +301,22 @@ export const useWorkoutExecutionController = ({
     setMovementTimerState(HIDDEN_MOVEMENT_TIMER_STATE);
   }, []);
 
+  const createExecutionDraft = useCallback(
+    (nextWorkoutState: CurrentWorkoutState, target?: { dayExerciseId?: string; exerciseIndex?: number; setNumber?: number }) =>
+      createWorkoutExecutionDraft(nextWorkoutState, target, {
+        prefillStrengthWeightFromFirstSet: shouldPrefillStrengthWeightFromFirstSet,
+      }),
+    [shouldPrefillStrengthWeightFromFirstSet],
+  );
+
+  const hydrateExecutionDraft = useCallback(
+    (nextWorkoutState: CurrentWorkoutState, draft: WorkoutExecutionDraft | null | undefined) =>
+      hydrateWorkoutExecutionDraft(nextWorkoutState, draft, {
+        prefillStrengthWeightFromFirstSet: shouldPrefillStrengthWeightFromFirstSet,
+      }),
+    [shouldPrefillStrengthWeightFromFirstSet],
+  );
+
   useEffect(() => {
     if (!workoutState) {
       loadedWorkoutIdRef.current = null;
@@ -324,12 +341,12 @@ export const useWorkoutExecutionController = ({
       setRestTimerVisible(false);
       resetCardioTimer();
       resetMovementTimer();
-      setActiveExecution(createWorkoutExecutionDraft(workoutState));
+      setActiveExecution(createExecutionDraft(workoutState));
       return;
     }
 
-    setActiveExecution((currentDraft) => hydrateWorkoutExecutionDraft(workoutState, currentDraft));
-  }, [resetCardioTimer, resetMovementTimer, workoutState]);
+    setActiveExecution((currentDraft) => hydrateExecutionDraft(workoutState, currentDraft));
+  }, [createExecutionDraft, hydrateExecutionDraft, resetCardioTimer, resetMovementTimer, workoutState]);
 
   useEffect(() => {
     if (isLiveMode) {
@@ -475,7 +492,7 @@ export const useWorkoutExecutionController = ({
         activeExecution.currentSetNumber === setNumber;
       const draft = isCurrentExecution
         ? activeExecution
-        : createWorkoutExecutionDraft(workoutState, {
+        : createExecutionDraft(workoutState, {
             dayExerciseId: context.progress.day_exercise_id,
             setNumber,
           });
@@ -490,7 +507,7 @@ export const useWorkoutExecutionController = ({
         keyString: getExecutionKeyString(draft.key),
       };
     },
-    [activeExecution, getExerciseContext, workoutState],
+    [activeExecution, createExecutionDraft, getExerciseContext, workoutState],
   );
 
   const startCardioTimer = useCallback((resolvedExecution: ResolvedExecution) => {
@@ -539,12 +556,12 @@ export const useWorkoutExecutionController = ({
 
   const syncActiveExecution = useCallback(
     (nextWorkoutState: CurrentWorkoutState, target?: { dayExerciseId?: string; exerciseIndex?: number; setNumber?: number }) => {
-      const nextDraft = createWorkoutExecutionDraft(nextWorkoutState, target);
+      const nextDraft = createExecutionDraft(nextWorkoutState, target);
       if (nextDraft) {
         setActiveExecution(nextDraft);
       }
     },
-    [],
+    [createExecutionDraft],
   );
 
   const activateExercise = useCallback(
@@ -553,14 +570,14 @@ export const useWorkoutExecutionController = ({
         return;
       }
 
-      const nextDraft = createWorkoutExecutionDraft(workoutState, { exerciseIndex });
+      const nextDraft = createExecutionDraft(workoutState, { exerciseIndex });
       if (!nextDraft) {
         return;
       }
 
       setActiveExecution(nextDraft);
     },
-    [isReviewMode, workoutState],
+    [createExecutionDraft, isReviewMode, workoutState],
   );
 
   const selectSet = useCallback(
@@ -569,7 +586,7 @@ export const useWorkoutExecutionController = ({
         return;
       }
 
-      const nextDraft = createWorkoutExecutionDraft(workoutState, { exerciseIndex, setNumber });
+      const nextDraft = createExecutionDraft(workoutState, { exerciseIndex, setNumber });
       if (!nextDraft) {
         return;
       }
@@ -580,7 +597,7 @@ export const useWorkoutExecutionController = ({
         [getExecutionKeyString(nextDraft.key)]: false,
       }));
     },
-    [isReviewMode, workoutState],
+    [createExecutionDraft, isReviewMode, workoutState],
   );
 
   const updateStrengthDraft = useCallback(
@@ -1000,7 +1017,7 @@ export const useWorkoutExecutionController = ({
       }
 
       if (activeExecution?.currentExerciseIndex !== exerciseIndex) {
-        const nextDraft = createWorkoutExecutionDraft(workoutState, {
+        const nextDraft = createExecutionDraft(workoutState, {
           dayExerciseId: resolvedExecution.context.progress.day_exercise_id,
           setNumber,
         });
@@ -1082,6 +1099,7 @@ export const useWorkoutExecutionController = ({
       showToast,
       startCardioTimer,
       startMovementTimer,
+      createExecutionDraft,
       workoutState,
     ],
   );
