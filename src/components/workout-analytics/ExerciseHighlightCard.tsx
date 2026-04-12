@@ -11,7 +11,13 @@ import {
   getProfilePrimaryMetricLabel,
   getSummaryMetricContext,
 } from '../../utils/analyticsProfiles';
-import { formatVolumeKg, formatWeightKg, getTrendStatusMeta } from '../../utils/workoutAnalytics';
+import {
+  formatCalories,
+  formatDistance,
+  formatVolumeKg,
+  formatWeightKg,
+  getTrendStatusMeta,
+} from '../../utils/workoutAnalytics';
 import { ExerciseSparkline } from './ExerciseSparkline';
 
 const META_SEPARATOR = ' \u00b7 ';
@@ -38,7 +44,9 @@ const buildPrimaryMetricLabel = (
   selectedRepBucketLabel?: string | null,
 ) => {
   const baseLabel = getProfilePrimaryMetricLabel(analyticsProfile);
+  const profile = getProfileConfig(analyticsProfile);
   return selectedRepBucketLabel
+    && profile.showRepRangeBuckets
     ? `${baseLabel} reciente en ${selectedRepBucketLabel}`
     : `${baseLabel} reciente`;
 };
@@ -46,10 +54,11 @@ const buildPrimaryMetricLabel = (
 const buildPrimaryMetricValue = (exercise: ExerciseTrendSummary) => {
   const profile = getProfileConfig(exercise.analytics_profile);
   const isBodyweight = profile.id === 'bodyweight_progression';
+  const isCardio = profile.id === 'cardio_progression';
 
-  if (isBodyweight) {
+  if (isBodyweight || isCardio) {
     if (exercise.primary_metric_value == null) {
-      return '-- reps';
+      return `-- ${exercise.primary_metric_unit ?? profile.primaryUnit}`;
     }
 
     return formatMetricValue(exercise.primary_metric_value, exercise.primary_metric_unit ?? profile.primaryUnit);
@@ -81,9 +90,13 @@ const buildPrimaryMetricContext = (
     return null;
   }
 
+  if (profile.id === 'cardio_progression') {
+    return null;
+  }
+
   const parts = [`${context.reps_exact} reps`];
 
-  if (!selectedRepBucketLabel && context.rep_bucket_label) {
+  if (profile.showRepRangeBuckets && !selectedRepBucketLabel && context.rep_bucket_label) {
     parts.push(context.rep_bucket_label);
   }
 
@@ -97,6 +110,8 @@ export const ExerciseHighlightCard: React.FC<ExerciseHighlightCardProps> = ({
 }) => {
   const styles = useThemedStyles(createStyles);
   const trendMeta = getTrendStatusMeta(exercise.trend_status);
+  const profile = getProfileConfig(exercise.analytics_profile);
+  const isCardio = profile.id === 'cardio_progression';
   const primaryMetricContext = buildPrimaryMetricContext(exercise, selectedRepBucketLabel);
   const statItems = [
     {
@@ -104,15 +119,32 @@ export const ExerciseHighlightCard: React.FC<ExerciseHighlightCardProps> = ({
       label: 'Sesiones',
       value: `${exercise.sessions_count}`,
     },
-    ...(exercise.total_volume_kg != null && exercise.total_volume_kg > 0
+    ...(isCardio
       ? [
-          {
-            id: 'volume',
-            label: 'Volumen',
-            value: formatVolumeKg(exercise.total_volume_kg),
-          },
-        ]
-      : []),
+          exercise.total_calories_burned != null && exercise.total_calories_burned > 0
+            ? {
+                id: 'calories',
+                label: 'Calorias',
+                value: formatCalories(exercise.total_calories_burned),
+              }
+            : null,
+          exercise.total_distance_meters != null && exercise.total_distance_meters > 0
+            ? {
+                id: 'distance',
+                label: 'Distancia',
+                value: formatDistance(exercise.total_distance_meters),
+              }
+            : null,
+        ].filter((item): item is { id: string; label: string; value: string } => Boolean(item))
+      : exercise.total_volume_kg != null && exercise.total_volume_kg > 0
+        ? [
+            {
+              id: 'volume',
+              label: 'Volumen',
+              value: formatVolumeKg(exercise.total_volume_kg),
+            },
+          ]
+        : []),
   ];
 
   return (

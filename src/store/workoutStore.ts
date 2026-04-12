@@ -1,19 +1,26 @@
-import { create } from 'zustand';
+import { create, type StateCreator } from 'zustand';
 import { trainingClient } from '../services/api';
 import type {
   AbandonReason,
+  CardioBlockLog,
   CurrentWorkoutState,
-  Macrocycle,
-  MicrocycleProgress,
+  DashboardBootstrap,
+  DayExercise,
+  ExerciseProgress,
   MissedWorkout,
+  MovementBlockLog,
   WorkoutLog,
+  WorkoutSetGroup,
   WorkoutSetSegmentInput,
 } from '../types';
+import { getCardioEffectiveSets, isCardioExercise, isMovementExercise } from '../utils/formatters';
+
+export type WorkoutMutationResult =
+  | { ok: true; state: CurrentWorkoutState }
+  | { ok: false };
 
 interface WorkoutState {
-  activeMacrocycle: Macrocycle | null;
-  dashboardWorkoutLogs: WorkoutLog[];
-  microcycleProgress: MicrocycleProgress | null;
+  dashboardBootstrap: DashboardBootstrap | null;
   currentWorkout: CurrentWorkoutState | null;
   missedWorkouts: MissedWorkout[];
   dashboardDataVersion: number;
@@ -25,7 +32,7 @@ interface WorkoutState {
   isLoadingMissed: boolean;
   error: string | null;
 
-  loadDashboardData: (clientId: string) => Promise<void>;
+  loadDashboardData: () => Promise<void>;
   loadMissedWorkouts: (daysBack?: number) => Promise<void>;
   startWorkout: (trainingDayId: string) => Promise<string | null>;
   loadWorkoutState: (workoutLogId: string) => Promise<void>;
@@ -34,8 +41,26 @@ interface WorkoutState {
     dayExerciseId: string;
     setNumber: number;
     segments: WorkoutSetSegmentInput[];
-  }) => Promise<boolean>;
-  deleteSetGroup: (dayExerciseId: string, setNumber: number) => Promise<boolean>;
+  }) => Promise<WorkoutMutationResult>;
+  saveCardioBlock: (data: {
+    dayExerciseId: string;
+    setNumber: number;
+    durationSeconds: number;
+    caloriesBurned?: number | null;
+    distanceMeters?: number | null;
+    effortValue?: number | null;
+  }) => Promise<WorkoutMutationResult>;
+  saveMovementBlock: (data: {
+    dayExerciseId: string;
+    setNumber: number;
+    durationSeconds?: number | null;
+    contactsCompleted?: number | null;
+    heightCm?: number | null;
+    distanceCm?: number | null;
+  }) => Promise<WorkoutMutationResult>;
+  deleteSetGroup: (dayExerciseId: string, setNumber: number) => Promise<WorkoutMutationResult>;
+  deleteCardioBlock: (cardioLogId: string) => Promise<WorkoutMutationResult>;
+  deleteMovementBlock: (movementLogId: string) => Promise<WorkoutMutationResult>;
   closeWorkout: () => Promise<boolean>;
   abandonWorkout: (reason?: AbandonReason, notes?: string) => Promise<boolean>;
   dismissMissedWorkouts: () => void;
@@ -43,8 +68,21 @@ interface WorkoutState {
   reset: () => void;
 }
 
-const CLOSED_WORKOUT_EDIT_ERROR = 'Workout must be reopened before editing sets';
+type WorkoutStoreSet = Parameters<StateCreator<WorkoutState>>[0];
+type WorkoutStoreGet = Parameters<StateCreator<WorkoutState>>[1];
+type CardioMutationResponse =
+  | { kind: 'cardio-block'; cardioBlock: CardioBlockLog }
+  | { kind: 'legacy-set'; setGroup: WorkoutSetGroup };
+
+const CLOSED_WORKOUT_ERROR_MARKERS = [
+  'workout must be reopened before editing sets',
+  'workout must be reopened before editing cardio blocks',
+  'workout must be reopened before editing movement blocks',
+];
 const CLOSED_WORKOUT_CLIENT_MESSAGE = 'El entrenamiento esta cerrado. Reabrelo para editar.';
+
+let latestWorkoutMutationRevision = 0;
+let cardioBlockRouteSupport: 'unknown' | 'supported' | 'unsupported' = 'unknown';
 
 const fetchWorkoutState = async (workoutLogId: string) =>
   trainingClient.get<CurrentWorkoutState>(`/workout-logs/${workoutLogId}/state`);
@@ -54,7 +92,9 @@ const reloadWorkoutState = async (workoutLogId: string) => fetchWorkoutState(wor
 const isClosedWorkoutEditError = (error: { status?: number; message?: string } | null | undefined) =>
   error?.status === 409 &&
   typeof error.message === 'string' &&
-  error.message.toLowerCase().includes(CLOSED_WORKOUT_EDIT_ERROR.toLowerCase());
+  CLOSED_WORKOUT_ERROR_MARKERS.some((marker) => error.message!.toLowerCase().includes(marker));
+
+const isRouteNotFoundError = (error: { status?: number } | null | undefined) => error?.status === 404;
 
 const saveWorkoutSet = async (
   workoutLogId: string,
@@ -64,7 +104,7 @@ const saveWorkoutSet = async (
     segments: WorkoutSetSegmentInput[];
   },
 ) =>
-  trainingClient.post(
+  trainingClient.post<WorkoutSetGroup>(
     `/workout-logs/${workoutLogId}/sets`,
     {
       day_exercise_id: data.dayExerciseId,
@@ -73,10 +113,427 @@ const saveWorkoutSet = async (
     },
   );
 
+const saveWorkoutCardioBlockRoute = async (
+  workoutLogId: string,
+  data: {
+    dayExerciseId: string;
+    setNumber: number;
+    durationSeconds: number;
+    caloriesBurned?: number | null;
+    distanceMeters?: number | null;
+    effortValue?: number | null;
+  },
+) =>
+  trainingClient.post<CardioBlockLog>(
+    `/workout-logs/${workoutLogId}/cardio-blocks`,
+    {
+      day_exercise_id: data.dayExerciseId,
+      set_number: data.setNumber,
+      duration_seconds: data.durationSeconds,
+      calories_burned: data.caloriesBurned,
+      distance_meters: data.distanceMeters,
+      effort_value: data.effortValue,
+    },
+    {
+      skipErrorLogging: cardioBlockRouteSupport === 'unknown',
+    },
+  );
+
+const saveWorkoutCardioBlockLegacy = async (
+  workoutLogId: string,
+  data: {
+    dayExerciseId: string;
+    setNumber: number;
+    durationSeconds: number;
+    caloriesBurned?: number | null;
+    distanceMeters?: number | null;
+    effortValue?: number | null;
+  },
+) =>
+  trainingClient.post<WorkoutSetGroup>(
+    `/workout-logs/${workoutLogId}/sets`,
+    {
+      day_exercise_id: data.dayExerciseId,
+      set_number: data.setNumber,
+      segments: [
+        {
+          segment_index: 1,
+          reps_completed: 1,
+          weight_kg: 0,
+          effort_value: data.effortValue,
+        },
+      ],
+    },
+    {
+      skipErrorLogging: true,
+    },
+  );
+
+const saveWorkoutCardioBlock = async (
+  workoutLogId: string,
+  data: {
+    dayExerciseId: string;
+    setNumber: number;
+    durationSeconds: number;
+    caloriesBurned?: number | null;
+    distanceMeters?: number | null;
+    effortValue?: number | null;
+  },
+): Promise<CardioMutationResponse> => {
+  if (cardioBlockRouteSupport === 'unsupported') {
+    return {
+      kind: 'legacy-set',
+      setGroup: await saveWorkoutCardioBlockLegacy(workoutLogId, data),
+    };
+  }
+
+  try {
+    const cardioBlock = await saveWorkoutCardioBlockRoute(workoutLogId, data);
+    cardioBlockRouteSupport = 'supported';
+    return {
+      kind: 'cardio-block',
+      cardioBlock,
+    };
+  } catch (error: any) {
+    if (!isRouteNotFoundError(error)) {
+      throw error;
+    }
+
+    cardioBlockRouteSupport = 'unsupported';
+    return {
+      kind: 'legacy-set',
+      setGroup: await saveWorkoutCardioBlockLegacy(workoutLogId, data),
+    };
+  }
+};
+
+const saveWorkoutMovementBlock = async (
+  workoutLogId: string,
+  data: {
+    dayExerciseId: string;
+    setNumber: number;
+    durationSeconds?: number | null;
+    contactsCompleted?: number | null;
+    heightCm?: number | null;
+    distanceCm?: number | null;
+  },
+) =>
+  trainingClient.post<MovementBlockLog>(`/workout-logs/${workoutLogId}/movement-blocks`, {
+    day_exercise_id: data.dayExerciseId,
+    set_number: data.setNumber,
+    duration_seconds: data.durationSeconds,
+    contacts_completed: data.contactsCompleted,
+    height_cm: data.heightCm,
+    distance_cm: data.distanceCm,
+  });
+
+const normalizeExerciseProgress = (progress: ExerciseProgress): ExerciseProgress => ({
+  ...progress,
+  sets_data: Array.isArray(progress.sets_data) ? progress.sets_data : [],
+  cardio_blocks_data: Array.isArray(progress.cardio_blocks_data) ? progress.cardio_blocks_data : [],
+  movement_blocks_data: Array.isArray(progress.movement_blocks_data) ? progress.movement_blocks_data : [],
+});
+
+const normalizeCurrentWorkoutState = (workoutState: CurrentWorkoutState): CurrentWorkoutState => ({
+  ...workoutState,
+  workout_log: {
+    ...workoutState.workout_log,
+    exercise_sets: Array.isArray(workoutState.workout_log.exercise_sets)
+      ? workoutState.workout_log.exercise_sets
+      : [],
+    cardio_blocks: Array.isArray(workoutState.workout_log.cardio_blocks)
+      ? workoutState.workout_log.cardio_blocks
+      : [],
+    movement_blocks: Array.isArray(workoutState.workout_log.movement_blocks)
+      ? workoutState.workout_log.movement_blocks
+      : [],
+  },
+  training_day: {
+    ...workoutState.training_day,
+    exercises: Array.isArray(workoutState.training_day.exercises)
+      ? workoutState.training_day.exercises
+      : [],
+  },
+  exercises_progress: Array.isArray(workoutState.exercises_progress)
+    ? workoutState.exercises_progress.map(normalizeExerciseProgress)
+    : [],
+});
+
+const prepareWorkoutState = (workoutState: CurrentWorkoutState): CurrentWorkoutState =>
+  rebuildWorkoutState(normalizeCurrentWorkoutState(workoutState));
+
+const findDayExercise = (workoutState: CurrentWorkoutState, dayExerciseId: string): DayExercise | undefined =>
+  workoutState.training_day.exercises.find((exercise) => exercise.id === dayExerciseId);
+
+const sortWorkoutSetGroups = (groups: WorkoutSetGroup[]) =>
+  groups
+    .slice()
+    .sort((left, right) => left.set_number - right.set_number)
+    .map((group) => ({
+      ...group,
+      segments: group.segments
+        .slice()
+        .sort((leftSegment, rightSegment) => leftSegment.segment_index - rightSegment.segment_index),
+    }));
+
+const sortCardioBlocks = (blocks: CardioBlockLog[]) =>
+  blocks.slice().sort((left, right) => left.set_number - right.set_number);
+
+const sortMovementBlocks = (blocks: MovementBlockLog[]) =>
+  blocks.slice().sort((left, right) => left.set_number - right.set_number);
+
+const countContiguousCompletedSets = (setNumbers: Set<number>, totalSets: number) => {
+  let completedSets = 0;
+  for (let setNumber = 1; setNumber <= totalSets; setNumber += 1) {
+    if (!setNumbers.has(setNumber)) {
+      break;
+    }
+    completedSets += 1;
+  }
+  return completedSets;
+};
+
+const getProgressTotalSets = (workoutState: CurrentWorkoutState, progress: ExerciseProgress) => {
+  const dayExercise = findDayExercise(workoutState, progress.day_exercise_id);
+  if (!dayExercise) {
+    return progress.total_sets;
+  }
+
+  return isCardioExercise(dayExercise)
+    ? getCardioEffectiveSets(dayExercise)
+    : dayExercise.sets;
+};
+
+const rebuildProgress = (workoutState: CurrentWorkoutState, progress: ExerciseProgress): ExerciseProgress => {
+  const totalSets = getProgressTotalSets(workoutState, progress);
+  const dayExercise = findDayExercise(workoutState, progress.day_exercise_id);
+  const completedNumbers = new Set(
+    isMovementExercise(dayExercise)
+      ? progress.movement_blocks_data.map((block) => block.set_number)
+      : progress.cardio_blocks_data.length
+      ? progress.cardio_blocks_data.map((block) => block.set_number)
+      : progress.sets_data.map((setGroup) => setGroup.set_number),
+  );
+  const completedSets = countContiguousCompletedSets(completedNumbers, totalSets);
+
+  return {
+    ...progress,
+    total_sets: totalSets,
+    completed_sets: completedSets,
+    is_completed: totalSets > 0 && completedSets >= totalSets,
+    sets_data: sortWorkoutSetGroups(progress.sets_data),
+    cardio_blocks_data: sortCardioBlocks(progress.cardio_blocks_data),
+    movement_blocks_data: sortMovementBlocks(progress.movement_blocks_data),
+  };
+};
+
+const rebuildWorkoutState = (workoutState: CurrentWorkoutState): CurrentWorkoutState => {
+  const normalizedWorkoutState = normalizeCurrentWorkoutState(workoutState);
+  const exercisesProgress = normalizedWorkoutState.exercises_progress.map((progress) =>
+    rebuildProgress(normalizedWorkoutState, progress),
+  );
+
+  return {
+    ...normalizedWorkoutState,
+    total_exercises: exercisesProgress.length,
+    completed_exercises: exercisesProgress.filter((progress) => progress.is_completed).length,
+    exercises_progress: exercisesProgress,
+    workout_log: {
+      ...normalizedWorkoutState.workout_log,
+      exercise_sets: exercisesProgress.flatMap((progress) =>
+        progress.sets_data.flatMap((setGroup) => setGroup.segments),
+      ),
+      cardio_blocks: exercisesProgress.flatMap((progress) => progress.cardio_blocks_data),
+      movement_blocks: exercisesProgress.flatMap((progress) => progress.movement_blocks_data),
+    },
+  };
+};
+
+const replaceExerciseProgress = (
+  workoutState: CurrentWorkoutState,
+  dayExerciseId: string,
+  updater: (progress: ExerciseProgress) => ExerciseProgress,
+) => {
+  const progressIndex = workoutState.exercises_progress.findIndex(
+    (progress) => progress.day_exercise_id === dayExerciseId,
+  );
+  if (progressIndex < 0) {
+    return workoutState;
+  }
+
+  const nextExercisesProgress = workoutState.exercises_progress.slice();
+  nextExercisesProgress[progressIndex] = updater(nextExercisesProgress[progressIndex]);
+
+  return rebuildWorkoutState({
+    ...workoutState,
+    exercises_progress: nextExercisesProgress,
+  });
+};
+
+const patchStrengthSetGroup = (workoutState: CurrentWorkoutState, setGroup: WorkoutSetGroup) =>
+  replaceExerciseProgress(workoutState, setGroup.day_exercise_id, (progress) => ({
+    ...progress,
+    sets_data: sortWorkoutSetGroups([
+      ...progress.sets_data.filter((existingGroup) => existingGroup.set_number !== setGroup.set_number),
+      setGroup,
+    ]),
+  }));
+
+const patchCardioBlock = (workoutState: CurrentWorkoutState, cardioBlock: CardioBlockLog) =>
+  replaceExerciseProgress(workoutState, cardioBlock.day_exercise_id, (progress) => ({
+    ...progress,
+    cardio_blocks_data: sortCardioBlocks([
+      ...progress.cardio_blocks_data.filter((existingBlock) => existingBlock.set_number !== cardioBlock.set_number),
+      cardioBlock,
+    ]),
+  }));
+
+const patchMovementBlock = (workoutState: CurrentWorkoutState, movementBlock: MovementBlockLog) =>
+  replaceExerciseProgress(workoutState, movementBlock.day_exercise_id, (progress) => ({
+    ...progress,
+    movement_blocks_data: sortMovementBlocks([
+      ...progress.movement_blocks_data.filter((existingBlock) => existingBlock.set_number !== movementBlock.set_number),
+      movementBlock,
+    ]),
+  }));
+
+const removeStrengthSetGroup = (
+  workoutState: CurrentWorkoutState,
+  dayExerciseId: string,
+  setNumber: number,
+) =>
+  replaceExerciseProgress(workoutState, dayExerciseId, (progress) => ({
+    ...progress,
+    sets_data: progress.sets_data.filter((setGroup) => setGroup.set_number !== setNumber),
+  }));
+
+const removeCardioBlock = (workoutState: CurrentWorkoutState, cardioLogId: string) => {
+  const targetProgress = workoutState.exercises_progress.find((progress) =>
+    progress.cardio_blocks_data.some((block) => block.id === cardioLogId),
+  );
+  if (!targetProgress) {
+    return workoutState;
+  }
+
+  return replaceExerciseProgress(workoutState, targetProgress.day_exercise_id, (progress) => ({
+    ...progress,
+    cardio_blocks_data: progress.cardio_blocks_data.filter((block) => block.id !== cardioLogId),
+  }));
+};
+
+const removeMovementBlock = (workoutState: CurrentWorkoutState, movementLogId: string) => {
+  const targetProgress = workoutState.exercises_progress.find((progress) =>
+    progress.movement_blocks_data.some((block) => block.id === movementLogId),
+  );
+  if (!targetProgress) {
+    return workoutState;
+  }
+
+  return replaceExerciseProgress(workoutState, targetProgress.day_exercise_id, (progress) => ({
+    ...progress,
+    movement_blocks_data: progress.movement_blocks_data.filter((block) => block.id !== movementLogId),
+  }));
+};
+
+const syncWorkoutStateInBackground = (
+  setState: WorkoutStoreSet,
+  getState: WorkoutStoreGet,
+  workoutLogId: string,
+  revision: number,
+) => {
+  void fetchWorkoutState(workoutLogId)
+    .then((state) => {
+      if (revision !== latestWorkoutMutationRevision) {
+        return;
+      }
+
+      const nextState = prepareWorkoutState(state);
+
+      setState((storeState) => {
+        if (getState().currentWorkout?.workout_log.id !== workoutLogId) {
+          return storeState;
+        }
+
+        return {
+          currentWorkout: nextState,
+        };
+      });
+    })
+    .catch(() => undefined);
+};
+
+const resolveMutationError = async (
+  setState: WorkoutStoreSet,
+  currentWorkout: CurrentWorkoutState,
+  error: any,
+  fallbackMessage: string,
+): Promise<WorkoutMutationResult> => {
+  if (isClosedWorkoutEditError(error)) {
+    try {
+      const state = prepareWorkoutState(await fetchWorkoutState(currentWorkout.workout_log.id));
+
+      setState({
+        currentWorkout: state,
+        isSavingSet: false,
+        error: CLOSED_WORKOUT_CLIENT_MESSAGE,
+      });
+    } catch {
+      setState({
+        isSavingSet: false,
+        error: CLOSED_WORKOUT_CLIENT_MESSAGE,
+      });
+    }
+
+    return { ok: false };
+  }
+
+  setState({
+    isSavingSet: false,
+    error: error.message || fallbackMessage,
+  });
+
+  return { ok: false };
+};
+
+const commitWorkoutMutation = async <TResponse>(
+  setState: WorkoutStoreSet,
+  getState: WorkoutStoreGet,
+  run: (workoutLogId: string) => Promise<TResponse>,
+  patchWorkoutState: (workoutState: CurrentWorkoutState, response: TResponse) => CurrentWorkoutState,
+  fallbackMessage: string,
+): Promise<WorkoutMutationResult> => {
+  const currentWorkout = getState().currentWorkout;
+  if (!currentWorkout) {
+    return { ok: false };
+  }
+
+  setState({ isSavingSet: true, error: null });
+
+  try {
+    const response = await run(currentWorkout.workout_log.id);
+    const nextWorkoutState = patchWorkoutState(currentWorkout, response);
+    latestWorkoutMutationRevision += 1;
+    const revision = latestWorkoutMutationRevision;
+
+    setState((state) => ({
+      currentWorkout: nextWorkoutState,
+      isSavingSet: false,
+      workoutLogsVersion: state.workoutLogsVersion + 1,
+    }));
+
+    syncWorkoutStateInBackground(setState, getState, currentWorkout.workout_log.id, revision);
+
+    return {
+      ok: true,
+      state: nextWorkoutState,
+    };
+  } catch (error: any) {
+    return resolveMutationError(setState, currentWorkout, error, fallbackMessage);
+  }
+};
+
 export const useWorkoutStore = create<WorkoutState>((set, get) => ({
-  activeMacrocycle: null,
-  dashboardWorkoutLogs: [],
-  microcycleProgress: null,
+  dashboardBootstrap: null,
   currentWorkout: null,
   missedWorkouts: [],
   dashboardDataVersion: 0,
@@ -88,46 +545,21 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
   isLoadingMissed: false,
   error: null,
 
-  loadDashboardData: async (clientId: string) => {
+  loadDashboardData: async () => {
     set({ isLoading: true, error: null });
 
     try {
-      const [microcycleProgress, macrocycleResponse] = await Promise.all([
-        trainingClient.get<MicrocycleProgress>('/workout-logs/progress/microcycle/current'),
-        trainingClient.get<{ total: number; macrocycles: Macrocycle[] }>('/mesocycles?status=active&limit=1'),
-      ]);
-      const activeMacrocycleSummary = macrocycleResponse.macrocycles[0] ?? null;
-
-      if (!activeMacrocycleSummary) {
-        set((state) => ({
-          microcycleProgress,
-          activeMacrocycle: null,
-          dashboardWorkoutLogs: [],
-          dashboardDataVersion: state.dashboardDataVersion + 1,
-          isLoading: false,
-        }));
-        return;
-      }
-
-      const [activeMacrocycle, workoutLogsResponse] = await Promise.all([
-        trainingClient.get<Macrocycle>(`/mesocycles/${activeMacrocycleSummary.id}`),
-        trainingClient.get<{ total: number; workout_logs: WorkoutLog[] }>(
-          `/workout-logs/client/${clientId}?limit=500`,
-        ),
-      ]);
+      const dashboardBootstrap =
+        await trainingClient.get<DashboardBootstrap>('/client-app/dashboard-bootstrap');
 
       set((state) => ({
-        microcycleProgress,
-        activeMacrocycle,
-        dashboardWorkoutLogs: workoutLogsResponse.workout_logs,
+        dashboardBootstrap,
         dashboardDataVersion: state.dashboardDataVersion + 1,
         isLoading: false,
       }));
     } catch (error: any) {
       set({
-        microcycleProgress: null,
-        activeMacrocycle: null,
-        dashboardWorkoutLogs: [],
+        dashboardBootstrap: null,
         isLoading: false,
         error: error.message || 'Error al cargar el dashboard',
       });
@@ -161,7 +593,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
       const workoutLog = await trainingClient.post<WorkoutLog>('/workout-logs', {
         training_day_id: trainingDayId,
       });
-      const state = await fetchWorkoutState(workoutLog.id);
+      const state = prepareWorkoutState(await fetchWorkoutState(workoutLog.id));
 
       set((previousState) => ({
         currentWorkout: state,
@@ -183,7 +615,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const state = await fetchWorkoutState(workoutLogId);
+      const state = prepareWorkoutState(await fetchWorkoutState(workoutLogId));
 
       set({
         currentWorkout: state,
@@ -207,7 +639,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
     try {
       await trainingClient.post<WorkoutLog>(`/workout-logs/${targetWorkoutLogId}/reopen`);
-      const state = await reloadWorkoutState(targetWorkoutLogId);
+      const state = prepareWorkoutState(await reloadWorkoutState(targetWorkoutLogId));
 
       set((previousState) => ({
         currentWorkout: state,
@@ -225,103 +657,73 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     }
   },
 
-  saveSet: async (data) => {
-    const { currentWorkout } = get();
-    if (!currentWorkout) {
-      return false;
-    }
+  saveSet: async (data) =>
+    commitWorkoutMutation(
+      set,
+      get,
+      (workoutLogId) => saveWorkoutSet(workoutLogId, data),
+      (workoutState, response) => patchStrengthSetGroup(workoutState, response),
+      'No fue posible guardar la serie',
+    ),
 
-    set({ isSavingSet: true, error: null });
+  saveCardioBlock: async (data) =>
+    commitWorkoutMutation(
+      set,
+      get,
+      (workoutLogId) => saveWorkoutCardioBlock(workoutLogId, data),
+      (workoutState, response) =>
+        response.kind === 'cardio-block'
+          ? patchCardioBlock(workoutState, response.cardioBlock)
+          : patchStrengthSetGroup(workoutState, response.setGroup),
+      'No fue posible guardar el bloque de cardio',
+    ),
 
-    try {
-      await saveWorkoutSet(currentWorkout.workout_log.id, data);
-      const nextWorkoutState = await reloadWorkoutState(currentWorkout.workout_log.id);
+  saveMovementBlock: async (data) =>
+    commitWorkoutMutation(
+      set,
+      get,
+      (workoutLogId) => saveWorkoutMovementBlock(workoutLogId, data),
+      (workoutState, response) => patchMovementBlock(workoutState, response),
+      'No fue posible guardar el bloque de movimiento',
+    ),
 
-      set((state) => ({
-        currentWorkout: nextWorkoutState,
-        isSavingSet: false,
-        workoutLogsVersion: state.workoutLogsVersion + 1,
-      }));
+  deleteSetGroup: async (dayExerciseId, setNumber) =>
+    commitWorkoutMutation(
+      set,
+      get,
+      async (workoutLogId) => {
+        await trainingClient.delete<void>(
+          `/workout-logs/${workoutLogId}/day-exercises/${dayExerciseId}/sets/${setNumber}`,
+        );
+        return null;
+      },
+      (workoutState) => removeStrengthSetGroup(workoutState, dayExerciseId, setNumber),
+      'No fue posible eliminar la serie',
+    ),
 
-      return true;
-    } catch (error: any) {
-      if (isClosedWorkoutEditError(error)) {
-        try {
-          const state = await fetchWorkoutState(currentWorkout.workout_log.id);
+  deleteCardioBlock: async (cardioLogId) =>
+    commitWorkoutMutation(
+      set,
+      get,
+      async (workoutLogId) => {
+        await trainingClient.delete<void>(`/workout-logs/${workoutLogId}/cardio-blocks/${cardioLogId}`);
+        return null;
+      },
+      (workoutState) => removeCardioBlock(workoutState, cardioLogId),
+      'No fue posible eliminar el bloque de cardio',
+    ),
 
-          set({
-            currentWorkout: state,
-            isSavingSet: false,
-            error: CLOSED_WORKOUT_CLIENT_MESSAGE,
-          });
-        } catch {
-          set({
-            isSavingSet: false,
-            error: CLOSED_WORKOUT_CLIENT_MESSAGE,
-          });
-        }
-
-        return false;
-      }
-
-      set({
-        isSavingSet: false,
-        error: error.message || 'No fue posible guardar la serie',
-      });
-
-      return false;
-    }
-  },
-
-  deleteSetGroup: async (dayExerciseId: string, setNumber: number) => {
-    const { currentWorkout } = get();
-    if (!currentWorkout) {
-      return false;
-    }
-
-    set({ isSavingSet: true, error: null });
-
-    try {
-      await trainingClient.delete<void>(
-        `/workout-logs/${currentWorkout.workout_log.id}/day-exercises/${dayExerciseId}/sets/${setNumber}`,
-      );
-      const nextWorkoutState = await reloadWorkoutState(currentWorkout.workout_log.id);
-
-      set((state) => ({
-        currentWorkout: nextWorkoutState,
-        isSavingSet: false,
-        workoutLogsVersion: state.workoutLogsVersion + 1,
-      }));
-
-      return true;
-    } catch (error: any) {
-      if (isClosedWorkoutEditError(error)) {
-        try {
-          const state = await fetchWorkoutState(currentWorkout.workout_log.id);
-
-          set({
-            currentWorkout: state,
-            isSavingSet: false,
-            error: CLOSED_WORKOUT_CLIENT_MESSAGE,
-          });
-        } catch {
-          set({
-            isSavingSet: false,
-            error: CLOSED_WORKOUT_CLIENT_MESSAGE,
-          });
-        }
-
-        return false;
-      }
-
-      set({
-        isSavingSet: false,
-        error: error.message || 'No fue posible eliminar la serie',
-      });
-
-      return false;
-    }
-  },
+  deleteMovementBlock: async (movementLogId) =>
+    commitWorkoutMutation(
+      set,
+      get,
+      async (workoutLogId) => {
+        await trainingClient.delete<void>(`/workout-logs/${workoutLogId}/movement-blocks/${movementLogId}`);
+        return null;
+      },
+      (workoutState) => removeMovementBlock(workoutState, movementLogId),
+      'No fue posible eliminar el bloque de movimiento',
+    ),
 
   closeWorkout: async () => {
     const { currentWorkout } = get();
@@ -391,9 +793,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
 
   reset: () =>
     set({
-      activeMacrocycle: null,
-      dashboardWorkoutLogs: [],
-      microcycleProgress: null,
+      dashboardBootstrap: null,
       currentWorkout: null,
       missedWorkouts: [],
       dashboardDataVersion: 0,

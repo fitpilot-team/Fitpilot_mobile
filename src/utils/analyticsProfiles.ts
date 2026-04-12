@@ -14,11 +14,13 @@ import type {
   ExerciseTrendSummary,
   WorkoutAnalyticsMetricContext,
 } from '../types';
+import { formatCalories, formatDistance } from './workoutAnalytics';
 
 export interface ProfileConfig {
   id: AnalyticsProfileId;
   label: string;
   primaryMetric: ExerciseDetailMetric;
+  secondaryMetrics: ExerciseDetailMetric[];
   primaryUnit: string;
   showVolumeBars: boolean;
   showRepRangeBuckets: boolean;
@@ -31,6 +33,7 @@ const PROFILE_CONFIGS: Record<AnalyticsProfileId, ProfileConfig> = {
     id: 'double_progression_hypertrophy',
     label: 'Doble progresion (hipertrofia)',
     primaryMetric: 'best_weight',
+    secondaryMetrics: ['volume', 'best_reps', 'e1rm'],
     primaryUnit: 'kg',
     showVolumeBars: true,
     showRepRangeBuckets: true,
@@ -41,6 +44,7 @@ const PROFILE_CONFIGS: Record<AnalyticsProfileId, ProfileConfig> = {
     id: 'percentage_1rm_strength',
     label: 'Fuerza (% 1RM)',
     primaryMetric: 'e1rm',
+    secondaryMetrics: ['top_set_weight', 'best_reps', 'volume', 'effort'],
     primaryUnit: 'kg',
     showVolumeBars: false,
     showRepRangeBuckets: false,
@@ -51,6 +55,7 @@ const PROFILE_CONFIGS: Record<AnalyticsProfileId, ProfileConfig> = {
     id: 'rpe_strength',
     label: 'Fuerza (RPE/RIR)',
     primaryMetric: 'top_set_weight',
+    secondaryMetrics: ['e1rm', 'best_reps', 'effort', 'volume'],
     primaryUnit: 'kg',
     showVolumeBars: false,
     showRepRangeBuckets: false,
@@ -61,11 +66,23 @@ const PROFILE_CONFIGS: Record<AnalyticsProfileId, ProfileConfig> = {
     id: 'bodyweight_progression',
     label: 'Peso corporal',
     primaryMetric: 'best_reps',
+    secondaryMetrics: ['total_reps', 'volume'],
     primaryUnit: 'reps',
     showVolumeBars: false,
     showRepRangeBuckets: false,
     showEffortComparison: false,
     chartType: 'bar_chart',
+  },
+  cardio_progression: {
+    id: 'cardio_progression',
+    label: 'Cardio',
+    primaryMetric: 'duration',
+    secondaryMetrics: ['calories', 'distance', 'effort'],
+    primaryUnit: 'min',
+    showVolumeBars: false,
+    showRepRangeBuckets: false,
+    showEffortComparison: true,
+    chartType: 'line_only',
   },
 };
 
@@ -82,6 +99,9 @@ const METRIC_EXTRACTORS: Record<
   e1rm: (point) => point.e1rm_kg,
   top_set_weight: (point) => point.top_set_weight_kg,
   total_reps: (point) => point.total_reps,
+  duration: (point) => point.duration_minutes,
+  calories: (point) => point.calories_burned,
+  distance: (point) => point.distance_meters,
 };
 
 const CONTEXTUAL_METRICS = new Set<ExerciseDetailMetric>([
@@ -99,6 +119,9 @@ const METRIC_LABELS: Record<ExerciseDetailMetric, string> = {
   e1rm: '1RM estimado',
   top_set_weight: 'Top set',
   total_reps: 'Total reps',
+  duration: 'Duracion',
+  calories: 'Calorias',
+  distance: 'Distancia',
 };
 
 const METRIC_CHART_SUBTITLES: Record<ExerciseDetailMetric, string> = {
@@ -111,6 +134,9 @@ const METRIC_CHART_SUBTITLES: Record<ExerciseDetailMetric, string> = {
   e1rm: '1RM estimado (Epley) basado en el top set de cada sesion. Util como tendencia relativa.',
   top_set_weight: 'Peso del top set (set con mayor carga) por sesion.',
   total_reps: 'Total de repeticiones completadas por sesion.',
+  duration: 'Duracion total ejecutada por sesion.',
+  calories: 'Calorias registradas por sesion.',
+  distance: 'Distancia recorrida por sesion.',
 };
 
 export type MetricContextVariant =
@@ -123,6 +149,19 @@ export type MetricContextVariant =
 
 const formatContextWeight = (weightKg: number): string =>
   `${new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(weightKg)} kg`;
+
+const METRIC_UNITS: Record<ExerciseDetailMetric, string> = {
+  best_weight: 'kg',
+  volume: 'kg',
+  best_reps: 'reps',
+  effort: '',
+  e1rm: 'kg',
+  top_set_weight: 'kg',
+  total_reps: 'reps',
+  duration: 'min',
+  calories: 'cal',
+  distance: 'm',
+};
 
 export const getProfileConfig = (
   profileId: AnalyticsProfileId | null | undefined,
@@ -224,12 +263,13 @@ export const getAvailableMetrics = (
     return detail.available_metrics;
   }
 
-  return [
-    { key: 'best_weight', label: 'Mejor carga', unit: 'kg', available: true },
-    { key: 'volume', label: 'Volumen', unit: 'kg', available: true },
-    { key: 'best_reps', label: 'Mejor reps', unit: 'reps', available: true },
-    { key: 'effort', label: 'Esfuerzo', unit: '', available: true },
-  ];
+  const profile = getProfileConfig(detail?.analytics_profile);
+  return [profile.primaryMetric, ...profile.secondaryMetrics].map((metric) => ({
+    key: metric,
+    label: getMetricLabel(metric),
+    unit: METRIC_UNITS[metric] ?? '',
+    available: true,
+  }));
 };
 
 export const getDefaultMetric = (
@@ -266,6 +306,10 @@ export const getProfileContextCopy = (
     return 'La senal principal es reps y densidad; el peso externo deja de ser la metrica dominante.';
   }
 
+  if (profile.id === 'cardio_progression') {
+    return 'La lectura principal sigue duracion, calorias y distancia; las metricas de fuerza dejan de aplicar.';
+  }
+
   return 'La lectura principal sigue la mejor carga, pero mantiene el volumen repartido por rangos de reps.';
 };
 
@@ -283,6 +327,16 @@ export const getPrimaryMetricPersonalBest = (
 } => {
   const profile = getProfileConfig(detail?.analytics_profile);
   const metric = profile.primaryMetric;
+
+  if (detail?.summary.personal_best_value != null) {
+    return {
+      label: detail.summary.personal_best_label ?? getMetricLabel(metric),
+      value: detail.summary.personal_best_value,
+      unit: detail.summary.personal_best_unit ?? profile.primaryUnit,
+      context: null,
+    };
+  }
+
   let bestValue: number | null = null;
   let bestContext: WorkoutAnalyticsMetricContext | null = null;
 
@@ -312,10 +366,18 @@ export const formatMetricValue = (
     return '--';
   }
 
-  const formatted =
-    unit === 'reps'
-      ? `${Math.round(value)}`
-      : new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(value);
+  if (unit === 'reps') {
+    return `${Math.round(value)} reps`;
+  }
 
+  if (unit === 'cal') {
+    return formatCalories(value);
+  }
+
+  if (unit === 'm') {
+    return formatDistance(value);
+  }
+
+  const formatted = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(value);
   return unit ? `${formatted} ${unit}` : formatted;
 };

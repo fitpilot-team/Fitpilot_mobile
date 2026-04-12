@@ -117,28 +117,83 @@ export function formatZoneLabel(zone: number | null | undefined): string | null 
   return `Z${zone}`;
 }
 
+const getExerciseClass = (dayExercise: Partial<DayExercise> | null | undefined) =>
+  dayExercise?.exercise?.exercise_class ?? null;
+
 export function isCardioExercise(dayExercise: Partial<DayExercise> | null | undefined): boolean {
   if (!dayExercise) {
     return false;
   }
 
+  return ['cardio', 'conditioning'].includes(getExerciseClass(dayExercise) ?? '') || !!dayExercise.cardio_subclass;
+}
+
+export function isMovementExercise(dayExercise: Partial<DayExercise> | null | undefined): boolean {
+  const exerciseClass = getExerciseClass(dayExercise);
   return (
-    dayExercise.exercise?.exercise_class === 'cardio' ||
-    !!dayExercise.exercise?.cardio_subclass ||
-    dayExercise.duration_seconds != null ||
-    dayExercise.intensity_zone != null ||
-    dayExercise.distance_meters != null ||
-    dayExercise.target_calories != null ||
-    dayExercise.intervals != null ||
-    dayExercise.work_seconds != null ||
-    dayExercise.interval_rest_seconds != null
+    exerciseClass === 'plyometric' ||
+    exerciseClass === 'mobility' ||
+    exerciseClass === 'warmup' ||
+    exerciseClass === 'flexibility' ||
+    exerciseClass === 'balance'
   );
+}
+
+export function isPlyometricExercise(dayExercise: Partial<DayExercise> | null | undefined): boolean {
+  return getExerciseClass(dayExercise) === 'plyometric';
+}
+
+export function isMobilityOrWarmupExercise(
+  dayExercise: Partial<DayExercise> | null | undefined,
+): boolean {
+  const exerciseClass = getExerciseClass(dayExercise);
+  return (
+    exerciseClass === 'mobility' ||
+    exerciseClass === 'warmup' ||
+    exerciseClass === 'flexibility' ||
+    exerciseClass === 'balance'
+  );
+}
+
+export function isTimedMovementExercise(
+  dayExercise: Partial<DayExercise> | null | undefined,
+  fallbackDurationSeconds?: number | null,
+): boolean {
+  if (!isMobilityOrWarmupExercise(dayExercise)) {
+    return false;
+  }
+
+  return (dayExercise?.duration_seconds ?? fallbackDurationSeconds ?? 0) > 0;
+}
+
+export function isHiitCardioExercise(
+  dayExercise: Partial<DayExercise> | null | undefined,
+): boolean {
+  if (!isCardioExercise(dayExercise)) {
+    return false;
+  }
+
+  return (
+    dayExercise?.cardio_subclass === 'hiit' ||
+    ((dayExercise?.intervals ?? 0) > 0 && (dayExercise?.work_seconds ?? 0) > 0)
+  );
+}
+
+export function usesSteadyStateCardioTimer(
+  dayExercise: Partial<DayExercise> | null | undefined,
+  fallbackDurationSeconds?: number | null,
+): boolean {
+  if (!isCardioExercise(dayExercise) || isHiitCardioExercise(dayExercise)) {
+    return false;
+  }
+
+  return (dayExercise?.duration_seconds ?? fallbackDurationSeconds ?? 0) > 0;
 }
 
 export function shouldShowStrengthEffort(
   dayExercise: Partial<DayExercise> | null | undefined,
 ): boolean {
-  return !!dayExercise && !isCardioExercise(dayExercise);
+  return !!dayExercise && !isCardioExercise(dayExercise) && !isMovementExercise(dayExercise);
 }
 
 export function getCardioSummaryLabel(
@@ -165,15 +220,13 @@ export function getCardioSummaryLabel(
     primaryParts.push(`${formatCompactNumber(dayExercise.target_calories)} cal`);
   }
 
-  const zoneLabel = formatZoneLabel(
-    dayExercise.intensity_zone ?? dayExercise.exercise?.intensity_zone,
-  );
+  const zoneLabel = formatZoneLabel(dayExercise.intensity_zone);
   if (zoneLabel) {
     primaryParts.push(zoneLabel);
   }
 
-  if (!primaryParts.length && dayExercise.exercise?.cardio_subclass) {
-    return dayExercise.exercise.cardio_subclass.toUpperCase();
+  if (!primaryParts.length && dayExercise.cardio_subclass) {
+    return dayExercise.cardio_subclass.toUpperCase();
   }
 
   return primaryParts.slice(0, 2).join(' / ') || 'Cardio';
@@ -205,6 +258,42 @@ export function getCardioEffectiveSets(
 
   // Steady-state cardio: always 1 continuous block
   return 1;
+}
+
+export function getMovementSummaryLabel(
+  dayExercise: Partial<DayExercise> | null | undefined,
+): string {
+  if (isPlyometricExercise(dayExercise)) {
+    const minContacts = dayExercise?.reps_min;
+    const maxContacts = dayExercise?.reps_max;
+    if (minContacts != null && maxContacts != null) {
+      return `${minContacts}-${maxContacts} contactos`;
+    }
+    if (minContacts != null) {
+      return `${minContacts} contactos`;
+    }
+    return 'Contactos explosivos';
+  }
+
+  if (isTimedMovementExercise(dayExercise)) {
+    return formatDurationSeconds(dayExercise?.duration_seconds ?? 0);
+  }
+
+  if (isMobilityOrWarmupExercise(dayExercise)) {
+    return `${dayExercise?.sets ?? 1} bloque${(dayExercise?.sets ?? 1) === 1 ? '' : 's'}`;
+  }
+
+  return 'Movimiento';
+}
+
+export function getMovementMetricLabel(
+  dayExercise: Partial<DayExercise> | null | undefined,
+): string {
+  if (isPlyometricExercise(dayExercise)) {
+    return dayExercise?.plyometric_metric_type === 'distance_cm' ? 'Distancia (cm)' : 'Altura (cm)';
+  }
+
+  return 'Duracion (min)';
 }
 
 const ZONE_HR_RANGES: Record<number, string> = {
@@ -240,7 +329,7 @@ export function getCardioIntensityLabel(
   }
 
   // Steady-state: zone + duration
-  const zone = dayExercise.intensity_zone ?? dayExercise.exercise?.intensity_zone;
+  const zone = dayExercise.intensity_zone;
   const zonePart = zone ? `Z${zone}` : null;
   const durationPart = dayExercise.duration_seconds
     ? formatDurationSeconds(dayExercise.duration_seconds)

@@ -169,7 +169,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   }
 
   const { trainingDay, session } = cardState;
-  const totalSets = trainingDay.exercises.reduce((sum, exercise) => sum + exercise.sets, 0);
+  const totalSets = trainingDay.total_sets;
   const estimatedMinutes = Math.round(totalSets * 3);
   const hours = Math.floor(estimatedMinutes / 60);
   const minutes = estimatedMinutes % 60;

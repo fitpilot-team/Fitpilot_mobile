@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { InteractionManager, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { BottomTabBar, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,8 @@ import {
 } from '../../src/hooks/useBottomTabBarVisibility';
 import { isTabletLayout } from '../../src/utils/layout';
 import { ProtectedRoute } from '../../src/components/common';
+import { useAuthStore } from '../../src/store/authStore';
+import { registerDevicePushTokenForUser } from '../../src/services/notifications';
 
 const TABLET_EXPANDED_WIDTH = 164;
 const TABLET_COLLAPSED_WIDTH = 84;
@@ -305,6 +307,7 @@ export default function TabLayout() {
   const isHoverEnabled = Platform.OS === 'web';
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const { user } = useAuthStore();
   const [isRailPinnedExpanded, setIsRailPinnedExpanded] = useState(false);
   const [isRailHovered, setIsRailHovered] = useState(false);
 
@@ -319,6 +322,20 @@ export default function TabLayout() {
       setIsRailHovered(false);
     }
   }, [isTablet]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || !user?.id) {
+      return;
+    }
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      void registerDevicePushTokenForUser(user.id);
+    });
+
+    return () => {
+      task.cancel();
+    };
+  }, [user?.id]);
 
   return (
     <ProtectedRoute>

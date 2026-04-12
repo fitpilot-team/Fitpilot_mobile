@@ -15,6 +15,7 @@ export interface MeasurementFieldConfig<Key extends string = string> {
   placeholder?: string;
   unit?: string;
   icon?: string;
+  advanced?: boolean;
 }
 
 export interface MeasurementFieldSection<Key extends string = string> {
@@ -40,23 +41,27 @@ export const MEASUREMENT_NUMERIC_FORM_KEYS = [
   'chest_cm',
   'cephalic_cm',
   'neck_cm',
-  'relaxed_arm_midpoint_cm',
-  'contracted_arm_midpoint_cm',
-  'forearm_cm',
-  'wrist_cm',
+  'relaxed_arm_midpoint_right_cm',
+  'relaxed_arm_midpoint_left_cm',
+  'contracted_arm_midpoint_right_cm',
+  'contracted_arm_midpoint_left_cm',
+  'forearm_right_cm',
+  'forearm_left_cm',
+  'wrist_right_cm',
+  'wrist_left_cm',
   'mesosternal_cm',
   'umbilical_cm',
-  'arm_left_cm',
-  'arm_right_cm',
-  'mid_thigh_cm',
-  'calf_cm',
-  'thigh_left_cm',
-  'thigh_right_cm',
-  'calf_left_cm',
+  'subgluteal_thigh_right_cm',
+  'subgluteal_thigh_left_cm',
+  'mid_thigh_right_cm',
+  'mid_thigh_left_cm',
   'calf_right_cm',
+  'calf_left_cm',
+  'ankle_right_cm',
+  'ankle_left_cm',
 ] as const satisfies readonly MeasurementNumericFormKey[];
 
-export const SUMMARY_METRICS: (MeasurementFieldConfig<'weight_kg' | 'body_fat_pct' | 'muscle_mass_kg'> & {
+export const SUMMARY_METRICS: (MeasurementFieldConfig<'weight_kg' | 'body_fat_pct' | 'muscle_mass_kg' | 'visceral_fat'> & {
     emphasizeDecrease?: boolean;
   })[] = [
   {
@@ -78,6 +83,12 @@ export const SUMMARY_METRICS: (MeasurementFieldConfig<'weight_kg' | 'body_fat_pc
     label: 'Masa muscular',
     unit: 'kg',
     icon: 'barbell-outline',
+  },
+  {
+    key: 'visceral_fat',
+    label: 'Grasa visceral',
+    icon: 'scan-outline',
+    emphasizeDecrease: true,
   },
 ];
 
@@ -161,13 +172,6 @@ export const PERIMETER_SECTIONS: MeasurementFieldSection<MeasurementNumericFormK
         icon: 'resize-outline',
       },
       {
-        key: 'hip_cm',
-        label: 'Cadera',
-        placeholder: '98.0',
-        unit: 'cm',
-        icon: 'ellipse-outline',
-      },
-      {
         key: 'chest_cm',
         label: 'Pecho',
         placeholder: '102.0',
@@ -209,46 +213,64 @@ export const PERIMETER_SECTIONS: MeasurementFieldSection<MeasurementNumericFormK
         icon: 'radio-button-on-outline',
       },
       {
-        key: 'arm_left_cm',
-        label: 'Brazo izquierdo',
-        placeholder: '30.1',
-        unit: 'cm',
-        icon: 'fitness-outline',
-      },
-      {
-        key: 'arm_right_cm',
-        label: 'Brazo derecho',
-        placeholder: '30.6',
-        unit: 'cm',
-        icon: 'fitness-outline',
-      },
-      {
-        key: 'relaxed_arm_midpoint_cm',
-        label: 'Brazo relajado',
+        key: 'relaxed_arm_midpoint_right_cm',
+        label: 'Brazo medio relajado Der.',
         placeholder: '29.7',
         unit: 'cm',
         icon: 'fitness-outline',
       },
       {
-        key: 'contracted_arm_midpoint_cm',
-        label: 'Brazo contraido',
+        key: 'relaxed_arm_midpoint_left_cm',
+        label: 'Brazo medio relajado Izq.',
+        placeholder: '29.4',
+        unit: 'cm',
+        icon: 'fitness-outline',
+        advanced: true,
+      },
+      {
+        key: 'contracted_arm_midpoint_right_cm',
+        label: 'Brazo medio contraido Der.',
         placeholder: '31.4',
         unit: 'cm',
         icon: 'fitness-outline',
       },
       {
-        key: 'forearm_cm',
-        label: 'Antebrazo',
+        key: 'contracted_arm_midpoint_left_cm',
+        label: 'Brazo medio contraido Izq.',
+        placeholder: '31.0',
+        unit: 'cm',
+        icon: 'fitness-outline',
+        advanced: true,
+      },
+      {
+        key: 'forearm_right_cm',
+        label: 'Antebrazo Der.',
         placeholder: '26.3',
         unit: 'cm',
         icon: 'barbell-outline',
       },
       {
-        key: 'wrist_cm',
-        label: 'Muneca',
+        key: 'forearm_left_cm',
+        label: 'Antebrazo Izq.',
+        placeholder: '26.0',
+        unit: 'cm',
+        icon: 'barbell-outline',
+        advanced: true,
+      },
+      {
+        key: 'wrist_right_cm',
+        label: 'Muneca Der.',
         placeholder: '16.2',
         unit: 'cm',
         icon: 'watch-outline',
+      },
+      {
+        key: 'wrist_left_cm',
+        label: 'Muneca Izq.',
+        placeholder: '16.0',
+        unit: 'cm',
+        icon: 'watch-outline',
+        advanced: true,
       },
     ],
   },
@@ -257,46 +279,71 @@ export const PERIMETER_SECTIONS: MeasurementFieldSection<MeasurementNumericFormK
     description: 'Perimetros del tren inferior.',
     fields: [
       {
-        key: 'mid_thigh_cm',
-        label: 'Muslo medio',
+        key: 'hip_cm',
+        label: 'Cadera',
+        placeholder: '98.0',
+        unit: 'cm',
+        icon: 'ellipse-outline',
+      },
+      {
+        key: 'subgluteal_thigh_right_cm',
+        label: 'Muslo subglúteo Der.',
+        placeholder: '57.1',
+        unit: 'cm',
+        icon: 'walk-outline',
+      },
+      {
+        key: 'subgluteal_thigh_left_cm',
+        label: 'Muslo subglúteo Izq.',
+        placeholder: '56.9',
+        unit: 'cm',
+        icon: 'walk-outline',
+        advanced: true,
+      },
+      {
+        key: 'mid_thigh_right_cm',
+        label: 'Muslo medio Der.',
         placeholder: '54.8',
         unit: 'cm',
         icon: 'walk-outline',
       },
       {
-        key: 'thigh_left_cm',
-        label: 'Muslo izquierdo',
-        placeholder: '55.1',
+        key: 'mid_thigh_left_cm',
+        label: 'Muslo medio Izq.',
+        placeholder: '54.5',
         unit: 'cm',
         icon: 'walk-outline',
+        advanced: true,
       },
       {
-        key: 'thigh_right_cm',
-        label: 'Muslo derecho',
-        placeholder: '55.4',
-        unit: 'cm',
-        icon: 'walk-outline',
-      },
-      {
-        key: 'calf_cm',
-        label: 'Pantorrilla',
+        key: 'calf_right_cm',
+        label: 'Pantorrilla Der.',
         placeholder: '35.0',
         unit: 'cm',
         icon: 'walk-outline',
       },
       {
         key: 'calf_left_cm',
-        label: 'Pantorrilla izquierda',
-        placeholder: '35.2',
+        label: 'Pantorrilla Izq.',
+        placeholder: '34.8',
+        unit: 'cm',
+        icon: 'walk-outline',
+        advanced: true,
+      },
+      {
+        key: 'ankle_right_cm',
+        label: 'Tobillo Der.',
+        placeholder: '22.1',
         unit: 'cm',
         icon: 'walk-outline',
       },
       {
-        key: 'calf_right_cm',
-        label: 'Pantorrilla derecha',
-        placeholder: '35.1',
+        key: 'ankle_left_cm',
+        label: 'Tobillo Izq.',
+        placeholder: '22.0',
         unit: 'cm',
         icon: 'walk-outline',
+        advanced: true,
       },
     ],
   },
@@ -468,20 +515,113 @@ export const RECENT_CALCULATION_CODES = [
   'waist_hip_ratio',
 ] as const;
 
+export type MeasurementCalculationGroup =
+  | 'main'
+  | 'ideal_weight'
+  | 'special';
+
+export interface MeasurementCalculationMetadata {
+  label: string;
+  patientLabel: string;
+  order: number;
+  group: MeasurementCalculationGroup;
+  showInPrimarySummary: boolean;
+  shortDescription?: string;
+}
+
 export const CALCULATION_METADATA: Record<
   string,
-  { label: string; order: number }
+  MeasurementCalculationMetadata
 > = {
-  bmi: { label: 'IMC', order: 1 },
-  waist_hip_ratio: { label: 'Indice cintura-cadera', order: 2 },
-  waist_height_ratio: { label: 'Indice cintura-estatura', order: 3 },
-  body_fat_pct_bioimpedance: { label: 'Grasa corporal', order: 4 },
-  fat_mass_kg: { label: 'Masa grasa', order: 5 },
-  lean_mass_kg: { label: 'Masa libre de grasa', order: 6 },
-  ideal_weight_robinson: { label: 'Peso ideal Robinson', order: 7 },
-  ideal_weight_metropolitan: { label: 'Peso ideal Metropolitan', order: 8 },
-  ideal_weight_hamwi: { label: 'Peso ideal Hamwi', order: 9 },
-  ideal_weight_lorentz: { label: 'Peso ideal Lorentz', order: 10 },
-  ideal_weight_traditional: { label: 'Peso ideal tradicional', order: 11 },
-  frisancho_indicators: { label: 'Indicador Frisancho', order: 12 },
+  bmi: {
+    label: 'IMC',
+    patientLabel: 'Indice de masa corporal',
+    order: 1,
+    group: 'main',
+    showInPrimarySummary: true,
+    shortDescription: 'Relacion entre tu peso y estatura.',
+  },
+  waist_hip_ratio: {
+    label: 'Indice cintura-cadera',
+    patientLabel: 'Relacion cintura-cadera',
+    order: 2,
+    group: 'main',
+    showInPrimarySummary: true,
+    shortDescription: 'Ayuda a vigilar la distribucion de grasa corporal.',
+  },
+  waist_height_ratio: {
+    label: 'Indice cintura-estatura',
+    patientLabel: 'Relacion cintura-estatura',
+    order: 3,
+    group: 'main',
+    showInPrimarySummary: true,
+    shortDescription: 'Compara tu cintura con tu estatura.',
+  },
+  body_fat_pct_bioimpedance: {
+    label: 'Grasa corporal',
+    patientLabel: 'Grasa corporal estimada',
+    order: 4,
+    group: 'main',
+    showInPrimarySummary: true,
+    shortDescription: 'Estimacion de grasa total a partir de bioimpedancia.',
+  },
+  fat_mass_kg: {
+    label: 'Masa grasa',
+    patientLabel: 'Masa grasa',
+    order: 5,
+    group: 'main',
+    showInPrimarySummary: true,
+    shortDescription: 'Cantidad estimada de grasa corporal.',
+  },
+  lean_mass_kg: {
+    label: 'Masa libre de grasa',
+    patientLabel: 'Masa libre de grasa',
+    order: 6,
+    group: 'main',
+    showInPrimarySummary: true,
+    shortDescription: 'Peso estimado sin contar la grasa corporal.',
+  },
+  ideal_weight_robinson: {
+    label: 'Peso ideal Robinson',
+    patientLabel: 'Referencia Robinson',
+    order: 7,
+    group: 'ideal_weight',
+    showInPrimarySummary: false,
+  },
+  ideal_weight_metropolitan: {
+    label: 'Peso ideal Metropolitan',
+    patientLabel: 'Referencia Metropolitan',
+    order: 8,
+    group: 'ideal_weight',
+    showInPrimarySummary: false,
+  },
+  ideal_weight_hamwi: {
+    label: 'Peso ideal Hamwi',
+    patientLabel: 'Referencia Hamwi',
+    order: 9,
+    group: 'ideal_weight',
+    showInPrimarySummary: false,
+  },
+  ideal_weight_lorentz: {
+    label: 'Peso ideal Lorentz',
+    patientLabel: 'Referencia Lorentz',
+    order: 10,
+    group: 'ideal_weight',
+    showInPrimarySummary: false,
+  },
+  ideal_weight_traditional: {
+    label: 'Peso ideal tradicional',
+    patientLabel: 'Referencia tradicional',
+    order: 11,
+    group: 'ideal_weight',
+    showInPrimarySummary: false,
+  },
+  frisancho_indicators: {
+    label: 'Indicador Frisancho',
+    patientLabel: 'Reserva muscular braquial',
+    order: 12,
+    group: 'special',
+    showInPrimarySummary: true,
+    shortDescription: 'Referencia de reserva muscular del brazo.',
+  },
 };

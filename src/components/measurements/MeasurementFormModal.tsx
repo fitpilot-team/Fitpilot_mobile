@@ -22,9 +22,13 @@ import {
   type MeasurementNumericFormKey,
 } from '../../constants/measurements';
 import { borderRadius, fontSize, spacing } from '../../constants/colors';
-import type { CreateOwnMeasurementPayload } from '../../types';
+import type {
+  CreateOwnMeasurementPayload,
+  MeasurementHistoryItem,
+} from '../../types';
 import {
   formatMeasurementNumber,
+  getMeasurementDisplayDate,
   getTodayDateInput,
   isValidMeasurementDateInput,
   parseMeasurementNumber,
@@ -45,11 +49,13 @@ type MeasurementFormState = Record<MeasurementNumericFormKey, string> & {
 interface MeasurementFormModalProps {
   visible: boolean;
   isSubmitting: boolean;
+  initialMeasurement?: MeasurementHistoryItem | null;
+  defaultHeightCm?: string | null;
   onClose: () => void;
   onSubmit: (payload: CreateOwnMeasurementPayload) => Promise<void>;
 }
 
-const createInitialFormState = (): MeasurementFormState => {
+const createBlankFormState = (): MeasurementFormState => {
   const numericFields = Object.fromEntries(
     MEASUREMENT_NUMERIC_FORM_KEYS.map((fieldKey) => [fieldKey, '']),
   ) as Record<MeasurementNumericFormKey, string>;
@@ -59,6 +65,80 @@ const createInitialFormState = (): MeasurementFormState => {
     date: getTodayDateInput(),
     notes: '',
   };
+};
+
+const formatFieldValueForForm = (
+  value: unknown,
+  fieldKey: MeasurementNumericFormKey,
+  measurementPreference: ReturnType<
+    typeof useMeasurementPreferenceStore.getState
+  >['preference'],
+) => {
+  const parsedValue = parseMeasurementNumber(value);
+
+  if (parsedValue === null) {
+    return '';
+  }
+
+  const convertedValue = convertMeasurementUnitValue(
+    parsedValue,
+    FIELD_CONFIG_BY_KEY[fieldKey]?.unit,
+    measurementPreference,
+  );
+
+  return formatMeasurementNumber(
+    convertedValue.value,
+    convertedValue.unit === '%' ? 1 : 2,
+  );
+};
+
+const hasAdvancedPerimeterValues = (measurement?: MeasurementHistoryItem | null) =>
+  PERIMETER_SECTIONS.some((section) =>
+    section.fields.some(
+      (field) =>
+        field.advanced &&
+        parseMeasurementNumber(measurement?.[field.key]) !== null,
+    ),
+  );
+
+const createInitialFormState = ({
+  measurement,
+  defaultHeightCm,
+  measurementPreference,
+}: {
+  measurement?: MeasurementHistoryItem | null;
+  defaultHeightCm?: string | null;
+  measurementPreference: ReturnType<
+    typeof useMeasurementPreferenceStore.getState
+  >['preference'];
+}): MeasurementFormState => {
+  const initialState = createBlankFormState();
+
+  if (!measurement) {
+    if (parseMeasurementNumber(defaultHeightCm) !== null) {
+      initialState.height_cm = formatFieldValueForForm(
+        defaultHeightCm,
+        'height_cm',
+        measurementPreference,
+      );
+    }
+
+    return initialState;
+  }
+
+  const measurementDate = getMeasurementDisplayDate(measurement);
+  initialState.date = measurementDate?.slice(0, 10) ?? getTodayDateInput();
+  initialState.notes = measurement.notes?.trim() ?? '';
+
+  MEASUREMENT_NUMERIC_FORM_KEYS.forEach((fieldKey) => {
+    initialState[fieldKey] = formatFieldValueForForm(
+      measurement[fieldKey],
+      fieldKey,
+      measurementPreference,
+    );
+  });
+
+  return initialState;
 };
 
 const isIntegerField = (fieldKey: MeasurementNumericFormKey) =>
@@ -83,6 +163,8 @@ const FIELD_CONFIG_BY_KEY = Object.fromEntries(
 export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   visible,
   isSubmitting,
+  initialMeasurement,
+  defaultHeightCm,
   onClose,
   onSubmit,
 }) => {
@@ -91,8 +173,10 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
   const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
   const [formState, setFormState] = useState<MeasurementFormState>(
-    createInitialFormState(),
+    createBlankFormState(),
   );
+  const [showBilateralPerimeters, setShowBilateralPerimeters] = useState(false);
+  const isEditing = Boolean(initialMeasurement);
 
   useEffect(() => {
     void initializeMeasurementPreference();
@@ -100,9 +184,25 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
 
   useEffect(() => {
     if (!visible) {
-      setFormState(createInitialFormState());
+      setFormState(createBlankFormState());
+      setShowBilateralPerimeters(false);
+      return;
     }
-  }, [visible]);
+
+    setFormState(
+      createInitialFormState({
+        measurement: initialMeasurement,
+        defaultHeightCm,
+        measurementPreference,
+      }),
+    );
+    setShowBilateralPerimeters(hasAdvancedPerimeterValues(initialMeasurement));
+  }, [
+    defaultHeightCm,
+    initialMeasurement,
+    measurementPreference,
+    visible,
+  ]);
 
   const handleChangeField = (fieldKey: keyof MeasurementFormState, value: string) => {
     setFormState((currentState) => ({
@@ -203,6 +303,17 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
     );
   };
 
+  const visiblePerimeterSections = useMemo(
+    () =>
+      PERIMETER_SECTIONS.map((section) => ({
+        ...section,
+        fields: section.fields.filter(
+          (field) => showBilateralPerimeters || !field.advanced,
+        ),
+      })),
+    [showBilateralPerimeters],
+  );
+
   return (
     <Modal
       visible={visible}
@@ -218,9 +329,13 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
         <View style={styles.container}>
           <View style={styles.header}>
             <View style={styles.headerText}>
-              <Text style={styles.title}>Registrar medidas</Text>
+              <Text style={styles.title}>
+                {isEditing ? 'Editar medicion' : 'Registrar medidas'}
+              </Text>
               <Text style={styles.subtitle}>
-                Bioimpedancia y perimetros corporales.
+                {isEditing
+                  ? 'Actualiza bioimpedancia y perimetros corporales.'
+                  : 'Bioimpedancia y perimetros corporales.'}
               </Text>
             </View>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
@@ -276,7 +391,54 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
               </View>
             ))}
 
-            {PERIMETER_SECTIONS.map((section) => (
+            <View style={styles.calloutSection}>
+              <View style={styles.calloutCard}>
+                <View style={styles.calloutIcon}>
+                  <Ionicons name="swap-horizontal-outline" size={18} color={theme.colors.primary} />
+                </View>
+                <View style={styles.calloutContent}>
+                  <Text style={styles.calloutTitle}>Perimetros ISAK laterales</Text>
+                  <Text style={styles.calloutDescription}>
+                    El lado derecho es el flujo operativo por defecto. Activa la medicion bilateral para capturar el lado izquierdo.
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.toggleButton,
+                  showBilateralPerimeters && styles.toggleButtonActive,
+                ]}
+                onPress={() =>
+                  setShowBilateralPerimeters((currentState) => !currentState)
+                }
+              >
+                <Ionicons
+                  name={
+                    showBilateralPerimeters
+                      ? 'eye-off-outline'
+                      : 'git-compare-outline'
+                  }
+                  size={16}
+                  color={
+                    showBilateralPerimeters
+                      ? theme.colors.primary
+                      : theme.colors.textSecondary
+                  }
+                />
+                <Text
+                  style={[
+                    styles.toggleButtonText,
+                    showBilateralPerimeters && styles.toggleButtonTextActive,
+                  ]}
+                >
+                  {showBilateralPerimeters
+                    ? 'Ocultar lado izq.'
+                    : 'Medicion bilateral'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {visiblePerimeterSections.map((section) => (
               <View key={section.title} style={styles.section}>
                 <Text style={styles.sectionTitle}>{section.title}</Text>
                 <Text style={styles.sectionDescription}>{section.description}</Text>
@@ -314,7 +476,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
           <View style={styles.footer}>
             <Button title="Cancelar" variant="secondary" onPress={onClose} />
             <Button
-              title="Guardar medicion"
+              title={isEditing ? 'Guardar cambios' : 'Guardar medicion'}
               onPress={() => void handleSubmit()}
               isLoading={isSubmitting}
             />
@@ -395,6 +557,65 @@ const createStyles = (theme: AppTheme) =>
       borderRadius: borderRadius.lg,
       borderWidth: 1,
       borderColor: theme.colors.border,
+    },
+    calloutSection: {
+      marginBottom: spacing.lg,
+      gap: spacing.sm,
+    },
+    calloutCard: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      padding: spacing.md,
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.surface,
+    },
+    calloutIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    calloutContent: {
+      flex: 1,
+    },
+    calloutTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+    },
+    calloutDescription: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.textMuted,
+      lineHeight: 20,
+    },
+    toggleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: borderRadius.full,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    toggleButtonActive: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    toggleButtonText: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    toggleButtonTextActive: {
+      color: theme.colors.primary,
     },
     sectionTitle: {
       fontSize: fontSize.lg,

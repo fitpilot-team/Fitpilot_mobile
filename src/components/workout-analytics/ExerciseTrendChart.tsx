@@ -8,6 +8,8 @@ import { formatLocalDate } from '../../utils/date';
 import { formatMetricContext, getPointMetricContext } from '../../utils/analyticsProfiles';
 import {
   buildLineCoordinates,
+  formatCalories,
+  formatDistance,
   buildPolylinePoints,
   formatVolumeKg,
   formatWeightKg,
@@ -81,6 +83,27 @@ const METRIC_CONFIG: Record<ExerciseDetailMetric, {
     emptyText: 'No hay repeticiones registradas.',
     formatValue: (v) => (v != null ? `${Math.round(v)} reps` : '-- reps'),
   },
+  duration: {
+    lineLabel: 'Duracion',
+    barLabel: '',
+    showBars: false,
+    emptyText: 'No hay sesiones de cardio registradas en este rango.',
+    formatValue: (v) => (v != null ? `${new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(v)} min` : '-- min'),
+  },
+  calories: {
+    lineLabel: 'Calorias',
+    barLabel: '',
+    showBars: false,
+    emptyText: 'No hay calorias registradas en este rango.',
+    formatValue: (v) => formatCalories(v),
+  },
+  distance: {
+    lineLabel: 'Distancia',
+    barLabel: '',
+    showBars: false,
+    emptyText: 'No hay distancia registrada en este rango.',
+    formatValue: (v) => formatDistance(v),
+  },
 };
 
 const extractMetricValue = (point: ExerciseTrendPoint, metric: ExerciseDetailMetric): number | null => {
@@ -99,6 +122,12 @@ const extractMetricValue = (point: ExerciseTrendPoint, metric: ExerciseDetailMet
       return point.top_set_weight_kg ?? null;
     case 'total_reps':
       return point.total_reps ?? null;
+    case 'duration':
+      return point.duration_minutes ?? null;
+    case 'calories':
+      return point.calories_burned ?? null;
+    case 'distance':
+      return point.distance_meters ?? null;
     default:
       return point.best_weight_kg ?? null;
   }

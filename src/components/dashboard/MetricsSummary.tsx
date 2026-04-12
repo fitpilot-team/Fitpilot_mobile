@@ -29,6 +29,7 @@ const metricConfig: Record<MeasurementSummaryItem['key'], { color: string }> = {
   weight_kg: { color: '#3B82F6' },
   body_fat_pct: { color: '#EF4444' },
   muscle_mass_kg: { color: '#10B981' },
+  visceral_fat: { color: '#F59E0B' },
 };
 
 export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
@@ -76,9 +77,9 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
           <Text style={styles.title}>Mis metricas</Text>
         </View>
         <View style={[styles.metricsGrid, contentWidth >= 720 ? styles.metricsGridTablet : null]}>
-          <StatCardSkeleton />
-          <View style={styles.metricGap} />
-          <StatCardSkeleton />
+          {Array.from({ length: 4 }, (_, index) => (
+            <StatCardSkeleton key={`metrics-summary-skeleton-${index}`} />
+          ))}
         </View>
       </View>
     );

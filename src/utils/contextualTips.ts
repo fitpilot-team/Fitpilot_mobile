@@ -1,12 +1,12 @@
 import { scienceTips, type ScienceTip, type TipContextTag } from '../constants/scienceTips';
 import type {
+  DashboardTrainingDaySummary,
   MicrocycleProgress,
   MuscleVolumeResponse,
-  TrainingDay,
 } from '../types';
 
 export interface TipContext {
-  nextSession: TrainingDay | null;
+  nextSession: DashboardTrainingDaySummary | null;
   microcycleProgress: MicrocycleProgress | null;
   muscleVolume: MuscleVolumeResponse | null;
   allCompleted: boolean;
@@ -30,7 +30,7 @@ const LOWER_BODY_KEYWORDS = [
 const HIGH_VOLUME_THRESHOLD = 15;
 
 const inferBodyFocus = (
-  session: TrainingDay | null,
+  session: DashboardTrainingDaySummary | null,
   muscleVolume: MuscleVolumeResponse | null,
 ): 'upper_body' | 'lower_body' | 'full_body' | null => {
   if (!session || session.rest_day) return null;

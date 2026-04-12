@@ -1,8 +1,23 @@
 import { clampEffortValue } from './formatters';
 
-export type WorkoutMetricField = 'reps' | 'weight' | 'effort';
+export type WorkoutMetricField =
+  | 'reps'
+  | 'contacts'
+  | 'weight'
+  | 'effort'
+  | 'duration'
+  | 'calories'
+  | 'distance'
+  | 'height_cm'
+  | 'distance_cm';
 
-const DECIMAL_FIELDS: ReadonlySet<WorkoutMetricField> = new Set(['weight', 'effort']);
+const DECIMAL_FIELDS: ReadonlySet<WorkoutMetricField> = new Set([
+  'weight',
+  'effort',
+  'duration',
+  'height_cm',
+  'distance_cm',
+]);
 
 const roundToDecimals = (value: number, decimals: number) => {
   const factor = 10 ** decimals;
@@ -66,11 +81,21 @@ export const normalizeWorkoutMetricValue = (
 
   switch (field) {
     case 'reps':
+    case 'contacts':
       return Math.max(1, Math.round(parsedValue));
     case 'weight':
       return Math.max(0, roundToDecimals(parsedValue, 2));
     case 'effort':
       return clampEffortValue(Math.min(10, Math.max(0, parsedValue)));
+    case 'duration':
+      return Math.max(0.1, roundToDecimals(parsedValue, 1));
+    case 'calories':
+      return Math.max(0, Math.round(parsedValue));
+    case 'distance':
+      return Math.max(0, Math.round(parsedValue));
+    case 'height_cm':
+    case 'distance_cm':
+      return Math.max(0, roundToDecimals(parsedValue, 1));
     default:
       return null;
   }
@@ -85,8 +110,12 @@ export const formatWorkoutMetricValue = (
     return '';
   }
 
-  if (field === 'reps') {
+  if (field === 'reps' || field === 'contacts') {
     return `${normalizedValue}`;
+  }
+
+  if (field === 'calories' || field === 'distance') {
+    return `${Math.round(normalizedValue)}`;
   }
 
   return Number.isInteger(normalizedValue)

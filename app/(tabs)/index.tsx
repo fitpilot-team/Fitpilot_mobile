@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, RefreshControl, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import {
+  Alert,
+  InteractionManager,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { router } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -58,9 +66,7 @@ export default function HomeScreen() {
   const isFocused = useIsFocused();
   const { user } = useAuthStore();
   const {
-    activeMacrocycle,
-    dashboardWorkoutLogs,
-    microcycleProgress,
+    dashboardBootstrap,
     dashboardDataVersion,
     workoutLogsVersion,
     isLoading,
@@ -80,11 +86,15 @@ export default function HomeScreen() {
   const [isSessionPickerVisible, setIsSessionPickerVisible] = useState(false);
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [hasPlayedEntryAnimation, setHasPlayedEntryAnimation] = useState(false);
+  const [shouldLoadDeferredContent, setShouldLoadDeferredContent] = useState(false);
   const lastLoadedWorkoutLogsVersionRef = useRef<number | null>(null);
+  const program = dashboardBootstrap?.program ?? null;
+  const microcycleProgress = dashboardBootstrap?.microcycle_progress ?? null;
+  const timeline = dashboardBootstrap?.timeline ?? null;
 
   const programTimelineModel = useMemo(
-    () => buildProgramTimelineModel(activeMacrocycle, dashboardWorkoutLogs),
-    [activeMacrocycle, dashboardWorkoutLogs],
+    () => buildProgramTimelineModel(timeline),
+    [timeline],
   );
   const programTimelineView = useMemo(
     () => buildProgramTimelineView(programTimelineModel, focusedDateKey, microcycleMode),
@@ -146,7 +156,7 @@ export default function HomeScreen() {
         return;
       }
 
-      await loadDashboardData(user.id);
+      await loadDashboardData();
       lastLoadedWorkoutLogsVersionRef.current = version;
     },
     [loadDashboardData, user?.id, workoutLogsVersion],
@@ -182,6 +192,21 @@ export default function HomeScreen() {
   }, [shouldAnimateEntry]);
 
   useEffect(() => {
+    if (dashboardDataVersion === 0 || showInitialLoadingState) {
+      setShouldLoadDeferredContent(false);
+      return;
+    }
+
+    const task = InteractionManager.runAfterInteractions(() => {
+      setShouldLoadDeferredContent(true);
+    });
+
+    return () => {
+      task.cancel();
+    };
+  }, [dashboardDataVersion, showInitialLoadingState]);
+
+  useEffect(() => {
     setFocusedDateKey(programTimelineModel.initialFocusedDateKey);
     setIsSessionPickerVisible(false);
     setIsDatePickerVisible(false);
@@ -189,22 +214,28 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const loadMuscleVolume = async () => {
-      if (programTimelineView.highlightedTrainingDay?.id && !programTimelineView.highlightedTrainingDay.rest_day) {
-        setIsLoadingVolume(true);
-        try {
-          const data = await getMuscleVolume(
-            programTimelineView.highlightedTrainingDay.id,
-            countSecondaryMuscles,
-          );
-          setMuscleVolume(data);
-        } catch (err) {
-          console.error('Error loading muscle volume:', err);
-          setMuscleVolume(null);
-        } finally {
-          setIsLoadingVolume(false);
-        }
-      } else {
+      if (
+        !shouldLoadDeferredContent ||
+        !programTimelineView.highlightedTrainingDay?.id ||
+        programTimelineView.highlightedTrainingDay.rest_day
+      ) {
         setMuscleVolume(null);
+        setIsLoadingVolume(false);
+        return;
+      }
+
+      setIsLoadingVolume(true);
+      try {
+        const data = await getMuscleVolume(
+          programTimelineView.highlightedTrainingDay.id,
+          countSecondaryMuscles,
+        );
+        setMuscleVolume(data);
+      } catch (err) {
+        console.error('Error loading muscle volume:', err);
+        setMuscleVolume(null);
+      } finally {
+        setIsLoadingVolume(false);
       }
     };
 
@@ -213,6 +244,7 @@ export default function HomeScreen() {
     countSecondaryMuscles,
     programTimelineView.highlightedTrainingDay?.id,
     programTimelineView.highlightedTrainingDay?.rest_day,
+    shouldLoadDeferredContent,
   ]);
 
   useEffect(() => {
@@ -227,7 +259,7 @@ export default function HomeScreen() {
     }
 
     setRefreshing(true);
-    await loadDashboardData(user.id);
+    await loadDashboardData();
     lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
     setRefreshing(false);
   }, [loadDashboardData, user?.id, workoutLogsVersion]);
@@ -344,6 +376,9 @@ export default function HomeScreen() {
       params: { tipId: tip.id },
     });
   }, []);
+  const handleOpenMeasurements = useCallback(() => {
+    router.push('/(tabs)/measurements');
+  }, []);
 
   if (!user) {
     return null;
@@ -378,7 +413,7 @@ export default function HomeScreen() {
             <Animated.View entering={getEntryAnimation(0)}>
               <UserHeader
                 user={user}
-                macrocycle={activeMacrocycle}
+                program={program}
                 contentWidth={contentWidth}
                 horizontalPadding={horizontalPadding}
               />
@@ -388,7 +423,7 @@ export default function HomeScreen() {
               <View style={{ paddingHorizontal: horizontalPadding }}>
                 <HistoricalNavigator
                   eyebrow="Entrenamiento"
-                  title={microcycleProgress?.microcycle_name || activeMacrocycle?.name || 'Programa activo'}
+                  title={microcycleProgress?.microcycle_name || program?.name || 'Programa activo'}
                   subtitle={focusedDateLabel}
                   weekLabel={currentWeekLabel}
                   days={navigatorDays}
@@ -427,7 +462,7 @@ export default function HomeScreen() {
             <Animated.View entering={getEntryAnimation(340)}>
               <ActivityChart
                 muscleVolume={muscleVolume}
-                isLoading={isLoadingVolume || (isLoading && !refreshing)}
+                isLoading={!shouldLoadDeferredContent || isLoadingVolume || (isLoading && !refreshing)}
                 countSecondaryMuscles={countSecondaryMuscles}
                 onToggleSecondary={setCountSecondaryMuscles}
                 contentWidth={contentWidth}
@@ -444,9 +479,15 @@ export default function HomeScreen() {
               />
             </Animated.View>
 
-            <Animated.View entering={getEntryAnimation(500)}>
-              <MetricsSummary contentWidth={contentWidth} horizontalPadding={horizontalPadding} />
-            </Animated.View>
+            {shouldLoadDeferredContent ? (
+              <Animated.View entering={getEntryAnimation(500)}>
+                <MetricsSummary
+                  onPress={handleOpenMeasurements}
+                  contentWidth={contentWidth}
+                  horizontalPadding={horizontalPadding}
+                />
+              </Animated.View>
+            ) : null}
           </View>
         </ScrollView>
 
