@@ -61,6 +61,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   return {
     ...config,
+    owner: 'fitpilot',
     name: 'FitPilot',
     slug: 'fitpilot-mobile',
     version: '1.0.0',

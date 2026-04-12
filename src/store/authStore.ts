@@ -9,6 +9,7 @@ import {
   setSessionTokens,
   setUnauthorizedHandler,
 } from '../services/api';
+import { useCareTeamStore } from './careTeamStore';
 import { useWorkoutStore } from './workoutStore';
 import type { ApiError, LoginCredentials, LoginResponse, LoginResult, User } from '../types';
 
@@ -29,6 +30,7 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set, get) => {
   const clearAuthenticatedState = async (error: string | null = null) => {
     await clearSessionTokens();
+    useCareTeamStore.getState().reset();
     useWorkoutStore.getState().reset();
     set({
       user: null,

@@ -51,7 +51,7 @@ import {
 } from '../../utils/workoutSession';
 import { VideoPlayerModal, YouTubePlayerModal } from '../video';
 
-const EXERCISE_PLACEHOLDER = require('../../../assets/exercise-placeholder.png');
+const EXERCISE_PLACEHOLDER = require('../../../assets/exercise-placeholder.jpg');
 const YOUTUBE_RED = '#FF0000';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
