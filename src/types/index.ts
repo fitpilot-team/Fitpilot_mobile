@@ -464,6 +464,19 @@ export interface DashboardBootstrap {
   timeline?: DashboardTimeline | null;
 }
 
+export type AssignedProfessionalDomain = 'training' | 'nutrition';
+export type AssignedProfessionalStatus = 'assigned' | 'unassigned';
+
+export interface AssignedProfessionalSummary {
+  id: string | null;
+  fullName: string | null;
+  roleLabel: string | null;
+  avatarUrl: string | null;
+  domain: AssignedProfessionalDomain;
+  contextLabel: string | null;
+  status: AssignedProfessionalStatus;
+}
+
 export type WorkoutAnalyticsRange = '2w' | '4w' | '8w' | '12w' | 'all';
 export type WorkoutAnalyticsColorToken = 'navy' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet';
 export type WorkoutAnalyticsHistoryStatusFilter = 'all' | WorkoutStatus;

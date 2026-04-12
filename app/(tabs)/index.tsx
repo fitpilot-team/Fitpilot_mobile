@@ -29,9 +29,11 @@ import {
   TodayWorkoutCard,
   UserHeader,
 } from '../../src/components/dashboard';
+import { CareTeamSection } from '../../src/components/care-team';
 import type { ScienceTip } from '../../src/constants/scienceTips';
 import { spacing } from '../../src/constants/colors';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import { useCareTeam } from '../../src/hooks/useCareTeam';
 import { getMuscleVolume } from '../../src/services/api';
 import type { TipContext } from '../../src/utils/contextualTips';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
@@ -65,6 +67,12 @@ export default function HomeScreen() {
   const contentInsetBottom = useBottomTabBarContentInset();
   const isFocused = useIsFocused();
   const { user } = useAuthStore();
+  const {
+    summaries: careTeamSummaries,
+    errors: careTeamErrors,
+    isLoading: isLoadingCareTeam,
+    refreshCareTeam,
+  } = useCareTeam(user?.id ?? null);
   const {
     dashboardBootstrap,
     dashboardDataVersion,
@@ -259,10 +267,10 @@ export default function HomeScreen() {
     }
 
     setRefreshing(true);
-    await loadDashboardData();
+    await Promise.all([loadDashboardData(), refreshCareTeam()]);
     lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
     setRefreshing(false);
-  }, [loadDashboardData, user?.id, workoutLogsVersion]);
+  }, [loadDashboardData, refreshCareTeam, user?.id, workoutLogsVersion]);
 
   const openWorkoutSession = useCallback(
     async (session: MicrocycleSessionProgress) => {
@@ -419,7 +427,18 @@ export default function HomeScreen() {
               />
             </Animated.View>
 
-            <Animated.View entering={getEntryAnimation(100)}>
+            <Animated.View entering={getEntryAnimation(80)}>
+              <CareTeamSection
+                summaries={careTeamSummaries}
+                errors={careTeamErrors}
+                isLoading={isLoadingCareTeam}
+                compact
+                subtitle="Quienes elaboran tus planes actuales."
+                horizontalPadding={horizontalPadding}
+              />
+            </Animated.View>
+
+            <Animated.View entering={getEntryAnimation(160)}>
               <View style={{ paddingHorizontal: horizontalPadding }}>
                 <HistoricalNavigator
                   eyebrow="Entrenamiento"
@@ -437,7 +456,7 @@ export default function HomeScreen() {
               </View>
             </Animated.View>
 
-            <Animated.View entering={getEntryAnimation(180)}>
+            <Animated.View entering={getEntryAnimation(240)}>
               <MicrocycleStats
                 microcycleProgress={microcycleProgress}
                 actualAdherenceMetrics={programTimelineModel.actualAdherenceMetrics}
@@ -448,7 +467,7 @@ export default function HomeScreen() {
               />
             </Animated.View>
 
-            <Animated.View entering={getEntryAnimation(260)}>
+            <Animated.View entering={getEntryAnimation(320)}>
               <TodayWorkoutCard
                 cardState={programTimelineView.cardState}
                 onStartPress={handleStartHighlightedSession}
@@ -459,7 +478,7 @@ export default function HomeScreen() {
               />
             </Animated.View>
 
-            <Animated.View entering={getEntryAnimation(340)}>
+            <Animated.View entering={getEntryAnimation(400)}>
               <ActivityChart
                 muscleVolume={muscleVolume}
                 isLoading={!shouldLoadDeferredContent || isLoadingVolume || (isLoading && !refreshing)}
@@ -470,7 +489,7 @@ export default function HomeScreen() {
               />
             </Animated.View>
 
-            <Animated.View entering={getEntryAnimation(420)}>
+            <Animated.View entering={getEntryAnimation(480)}>
               <ScienceTips
                 context={tipContext}
                 contentWidth={contentWidth}

@@ -12,6 +12,7 @@ export default function ProtectedProfileLayout() {
         }}
       >
         <Stack.Screen name="personal-info" />
+        <Stack.Screen name="professionals" />
         <Stack.Screen name="change-password" />
         <Stack.Screen name="notifications-settings" />
         <Stack.Screen name="help" />

@@ -85,6 +85,10 @@ type MovementDraftValues = {
   restSeconds: number;
 };
 
+type WorkoutExecutionDraftOptions = {
+  prefillStrengthWeightFromFirstSet?: boolean;
+};
+
 export type WorkoutCardioBlockInput = {
   dayExerciseId: string;
   setNumber: number;
@@ -250,18 +254,55 @@ const normalizeSegmentDrafts = (
   return normalizedSegments.map((segment, index) => cloneSegmentDraft(segment, index + 1));
 };
 
+const prefillStrengthWeightsFromFirstSet = (
+  dayExercise: DayExercise | undefined,
+  progress: ExerciseProgress | undefined,
+  currentSegments: WorkoutSetSegmentDraft[],
+): WorkoutSetSegmentDraft[] => {
+  const firstSet = progress?.sets_data?.find((setGroup) => setGroup.set_number === 1);
+  if (!firstSet?.segments?.length) {
+    return currentSegments;
+  }
+
+  const firstSetSegments = normalizeSegmentDrafts(dayExercise, firstSet.segments);
+  let hasPrefilledWeight = false;
+
+  const nextSegments = currentSegments.map((segment, index) => {
+    const sourceWeight = firstSetSegments[index]?.weight_kg;
+    if (sourceWeight == null || sourceWeight <= 0) {
+      return segment;
+    }
+
+    hasPrefilledWeight = true;
+    return {
+      ...segment,
+      weight_kg: sourceWeight,
+    };
+  });
+
+  return hasPrefilledWeight ? nextSegments : currentSegments;
+};
+
 export const getStrengthDraftValues = (
   dayExercise?: DayExercise,
   progress?: ExerciseProgress,
   targetSetNumber?: number,
+  options?: WorkoutExecutionDraftOptions,
 ): StrengthDraftValues => {
   const preferredSet = targetSetNumber
     ? progress?.sets_data?.find((setGroup) => setGroup.set_number === targetSetNumber)
     : undefined;
   const templateSegments = preferredSet?.segments ?? null;
+  const currentSegments = normalizeSegmentDrafts(dayExercise, templateSegments);
+  const shouldPrefillFromFirstSet =
+    options?.prefillStrengthWeightFromFirstSet &&
+    !preferredSet &&
+    (targetSetNumber ?? 1) > 1;
 
   return {
-    currentSegments: normalizeSegmentDrafts(dayExercise, templateSegments),
+    currentSegments: shouldPrefillFromFirstSet
+      ? prefillStrengthWeightsFromFirstSet(dayExercise, progress, currentSegments)
+      : currentSegments,
     restSeconds: dayExercise?.interval_rest_seconds || dayExercise?.rest_seconds || 90,
   };
 };
@@ -319,6 +360,7 @@ export const getMovementDraftValues = (
 export const createWorkoutExecutionDraft = (
   workoutState: CurrentWorkoutState,
   target?: WorkoutExecutionTarget,
+  options?: WorkoutExecutionDraftOptions,
 ): WorkoutExecutionDraft | null => {
   const safeIndex = target?.dayExerciseId
     ? findExerciseIndexByDayExerciseId(workoutState, target.dayExerciseId)
@@ -378,7 +420,12 @@ export const createWorkoutExecutionDraft = (
     };
   }
 
-  const strengthDefaults = getStrengthDraftValues(dayExercise, currentProgress, currentSetNumber);
+  const strengthDefaults = getStrengthDraftValues(
+    dayExercise,
+    currentProgress,
+    currentSetNumber,
+    options,
+  );
   return {
     kind: 'strength',
     key,
@@ -392,15 +439,20 @@ export const createWorkoutExecutionDraft = (
 export const hydrateWorkoutExecutionDraft = (
   workoutState: CurrentWorkoutState,
   draft: WorkoutExecutionDraft | null | undefined,
+  options?: WorkoutExecutionDraftOptions,
 ): WorkoutExecutionDraft | null => {
   if (!draft) {
-    return createWorkoutExecutionDraft(workoutState);
+    return createWorkoutExecutionDraft(workoutState, undefined, options);
   }
 
-  return createWorkoutExecutionDraft(workoutState, {
-    dayExerciseId: draft.key.dayExerciseId,
-    setNumber: draft.key.setNumber,
-  });
+  return createWorkoutExecutionDraft(
+    workoutState,
+    {
+      dayExerciseId: draft.key.dayExerciseId,
+      setNumber: draft.key.setNumber,
+    },
+    options,
+  );
 };
 
 export const toWorkoutSetSegmentInputs = (segments: WorkoutSetSegmentDraft[]): WorkoutSetSegmentInput[] =>
