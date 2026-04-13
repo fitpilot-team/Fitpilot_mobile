@@ -1,19 +1,42 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Linking, useWindowDimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Image,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../src/store/authStore';
-import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import {
+  useBottomTabBarContentInset,
+  useBottomTabBarScroll,
+} from '../../src/hooks/useBottomTabBarVisibility';
 import { useCareTeam } from '../../src/hooks/useCareTeam';
-import { useAppTheme, useThemedStyles, getThemePreferenceLabel } from '../../src/theme';
+import {
+  getThemePreferenceLabel,
+  useAppTheme,
+  useThemedStyles,
+} from '../../src/theme';
 import {
   MEASUREMENT_PREFERENCE_LABELS,
   type MeasurementPreference,
   useMeasurementPreferenceStore,
 } from '../../src/store/measurementPreferenceStore';
-import { borderRadius, brandColors, fontSize, shadows, spacing } from '../../src/constants/colors';
+import {
+  borderRadius,
+  brandColors,
+  fontSize,
+  shadows,
+  spacing,
+} from '../../src/constants/colors';
 import { TabScreenWrapper } from '../../src/components/common';
 import { getPrimaryScreenHorizontalPadding } from '../../src/utils/layout';
 
@@ -26,7 +49,14 @@ type MenuItemProps = {
   danger?: boolean;
 };
 
-const MenuItem = ({ icon, label, value, onPress, showChevron = true, danger = false }: MenuItemProps) => {
+const MenuItem = ({
+  icon,
+  label,
+  value,
+  onPress,
+  showChevron = true,
+  danger = false,
+}: MenuItemProps) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
 
@@ -37,15 +67,30 @@ const MenuItem = ({ icon, label, value, onPress, showChevron = true, danger = fa
       activeOpacity={0.7}
       disabled={!onPress}
     >
-      <View style={[styles.menuIconContainer, danger ? styles.menuIconContainerDanger : null]}>
-        <Ionicons name={icon} size={20} color={danger ? theme.colors.error : theme.colors.icon} />
+      <View
+        style={[
+          styles.menuIconContainer,
+          danger ? styles.menuIconContainerDanger : null,
+        ]}
+      >
+        <Ionicons
+          name={icon}
+          size={20}
+          color={danger ? theme.colors.error : theme.colors.icon}
+        />
       </View>
       <View style={styles.menuContent}>
-        <Text style={[styles.menuLabel, danger ? styles.menuLabelDanger : null]}>{label}</Text>
+        <Text style={[styles.menuLabel, danger ? styles.menuLabelDanger : null]}>
+          {label}
+        </Text>
         {value ? <Text style={styles.menuValue}>{value}</Text> : null}
       </View>
       {showChevron ? (
-        <Ionicons name="chevron-forward" size={20} color={theme.colors.iconMuted} />
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color={theme.colors.iconMuted}
+        />
       ) : null}
     </TouchableOpacity>
   );
@@ -55,20 +100,33 @@ export default function ProfileScreen() {
   const { width, height } = useWindowDimensions();
   const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
   const { user, logout, uploadAvatar, isLoading } = useAuthStore();
-  const { assignedCount, hasLoaded: hasLoadedCareTeam, isLoading: isLoadingCareTeam } = useCareTeam(
-    user?.id ?? null,
-  );
+  const {
+    assignedCount,
+    hasLoaded: hasLoadedCareTeam,
+    isLoading: isLoadingCareTeam,
+  } = useCareTeam(user?.id ?? null);
   const { preference, theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset();
-  const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
-  const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
-  const setMeasurementPreference = useMeasurementPreferenceStore((state) => state.setPreference);
+  const measurementPreference = useMeasurementPreferenceStore(
+    (state) => state.preference,
+  );
+  const initializeMeasurementPreference = useMeasurementPreferenceStore(
+    (state) => state.initialize,
+  );
+  const setMeasurementPreference = useMeasurementPreferenceStore(
+    (state) => state.setPreference,
+  );
+  const [hasProfileImageError, setHasProfileImageError] = useState(false);
 
   useEffect(() => {
     void initializeMeasurementPreference();
   }, [initializeMeasurementPreference]);
+
+  useEffect(() => {
+    setHasProfileImageError(false);
+  }, [user?.profilePictureUrl]);
 
   const handlePickImage = async () => {
     try {
@@ -77,7 +135,7 @@ export default function ProfileScreen() {
       if (status !== 'granted') {
         Alert.alert(
           'Permiso denegado',
-          'Necesitamos permiso para acceder a tu galeria para cambiar tu foto de perfil.',
+          'Necesitamos permiso para acceder a tu galería para cambiar tu foto de perfil.',
         );
         return;
       }
@@ -92,24 +150,24 @@ export default function ProfileScreen() {
       if (!result.canceled && result.assets[0].uri) {
         try {
           await uploadAvatar(result.assets[0].uri);
-          Alert.alert('Exito', 'Foto de perfil actualizada correctamente');
+          Alert.alert('Éxito', 'Foto de perfil actualizada correctamente');
         } catch {
           Alert.alert('Error', 'No se pudo actualizar la foto de perfil');
         }
       }
     } catch {
-      Alert.alert('Error', 'Ocurrio un error al seleccionar la imagen');
+      Alert.alert('Error', 'Ocurrió un error al seleccionar la imagen');
     }
   };
 
   const handleLogout = () => {
     Alert.alert(
-      'Cerrar sesion',
-      'Estas seguro que deseas cerrar sesion?',
+      'Cerrar sesión',
+      '¿Estás seguro de que deseas cerrar sesión?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Cerrar sesion',
+          text: 'Cerrar sesión',
           style: 'destructive',
           onPress: async () => {
             await logout();
@@ -142,7 +200,7 @@ export default function ProfileScreen() {
           },
         },
         {
-          text: 'Mexico',
+          text: 'México',
           onPress: () => {
             void handleMeasurementPreferenceSelect('mx');
           },
@@ -151,11 +209,12 @@ export default function ProfileScreen() {
     );
   };
 
-  const professionalsValue = !hasLoadedCareTeam && isLoadingCareTeam
-    ? 'Cargando'
-    : assignedCount > 0
-      ? `${assignedCount} asignado${assignedCount > 1 ? 's' : ''}`
-      : 'Sin asignacion';
+  const professionalsValue =
+    !hasLoadedCareTeam && isLoadingCareTeam
+      ? 'Cargando'
+      : assignedCount > 0
+        ? `${assignedCount} asignado${assignedCount > 1 ? 's' : ''}`
+        : 'Sin asignación';
 
   return (
     <TabScreenWrapper>
@@ -168,7 +227,10 @@ export default function ProfileScreen() {
           style={styles.scrollView}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingHorizontal: horizontalPadding, paddingBottom: contentInsetBottom },
+            {
+              paddingHorizontal: horizontalPadding,
+              paddingBottom: contentInsetBottom,
+            },
           ]}
           onScroll={tabBarScroll.onScroll}
           scrollEventThrottle={tabBarScroll.scrollEventThrottle}
@@ -177,8 +239,12 @@ export default function ProfileScreen() {
           <View style={styles.userCard}>
             <View style={styles.avatarContainer}>
               <View style={styles.avatar}>
-                {user?.profilePictureUrl ? (
-                  <Image source={{ uri: user.profilePictureUrl }} style={styles.avatarImage} />
+                {user?.profilePictureUrl && !hasProfileImageError ? (
+                  <Image
+                    source={{ uri: user.profilePictureUrl }}
+                    style={styles.avatarImage}
+                    onError={() => setHasProfileImageError(true)}
+                  />
                 ) : (
                   <Ionicons name="person" size={40} color={theme.colors.primary} />
                 )}
@@ -209,12 +275,12 @@ export default function ProfileScreen() {
             />
             <MenuItem
               icon="person-outline"
-              label="Informacion personal"
+              label="Información personal"
               onPress={() => router.push('/profile/personal-info')}
             />
             <MenuItem
               icon="lock-closed-outline"
-              label="Cambiar contrasena"
+              label="Cambiar contraseña"
               onPress={() => router.push('/profile/change-password')}
             />
             <MenuItem
@@ -256,7 +322,9 @@ export default function ProfileScreen() {
               icon="document-text-outline"
               label="Términos y condiciones"
               onPress={() => {
-                const url = process.env.EXPO_PUBLIC_TERMS_URL || 'https://pro.fitpilot.fit/es/terms';
+                const url =
+                  process.env.EXPO_PUBLIC_TERMS_URL ||
+                  'https://pro.fitpilot.fit/es/terms';
                 if (url) {
                   Linking.openURL(url);
                 } else {
@@ -268,7 +336,9 @@ export default function ProfileScreen() {
               icon="shield-checkmark-outline"
               label="Política de privacidad"
               onPress={() => {
-                const url = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://pro.fitpilot.fit/es/privacy';
+                const url =
+                  process.env.EXPO_PUBLIC_PRIVACY_URL ||
+                  'https://pro.fitpilot.fit/es/privacy';
                 if (url) {
                   Linking.openURL(url);
                 } else {
@@ -281,7 +351,7 @@ export default function ProfileScreen() {
           <View style={styles.menuSection}>
             <MenuItem
               icon="log-out-outline"
-              label="Cerrar sesion"
+              label="Cerrar sesión"
               onPress={handleLogout}
               showChevron={false}
               danger

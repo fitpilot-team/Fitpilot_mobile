@@ -1,9 +1,15 @@
-import { nutritionClient, trainingClient } from './api';
+import {
+  getNutritionAssetUrl,
+  getTrainingAssetUrl,
+  nutritionClient,
+  trainingClient,
+} from './api';
 import type {
   AssignedProfessionalDomain,
   AssignedProfessionalSummary,
   AssignedProfessionalStatus,
 } from '../types';
+import { normalizeOptionalRemoteText, normalizeRemoteText } from '../utils/text';
 
 type AssignedProfessionalApiResponse = {
   id?: string | null;
@@ -25,27 +31,25 @@ export type CareTeamDomainResults = Record<
   CareTeamDomainResult
 >;
 
-const normalizeOptionalText = (value: string | null | undefined) => {
-  const trimmedValue = value?.trim() ?? '';
-  return trimmedValue || null;
-};
-
 const mapAssignedProfessionalSummary = (
   payload: AssignedProfessionalApiResponse,
   fallbackDomain: AssignedProfessionalDomain,
 ): AssignedProfessionalSummary => ({
-  id: normalizeOptionalText(payload.id),
-  fullName: normalizeOptionalText(payload.full_name),
-  roleLabel: normalizeOptionalText(payload.role_label),
-  avatarUrl: normalizeOptionalText(payload.avatar_url),
+  id: normalizeOptionalRemoteText(payload.id),
+  fullName: normalizeOptionalRemoteText(payload.full_name),
+  roleLabel: normalizeOptionalRemoteText(payload.role_label),
+  avatarUrl:
+    fallbackDomain === 'training'
+      ? getTrainingAssetUrl(payload.avatar_url)
+      : getNutritionAssetUrl(payload.avatar_url),
   domain: payload.domain ?? fallbackDomain,
-  contextLabel: normalizeOptionalText(payload.context_label),
+  contextLabel: normalizeOptionalRemoteText(payload.context_label),
   status: payload.status === 'assigned' ? 'assigned' : 'unassigned',
 });
 
 const toErrorMessage = (error: unknown, fallbackMessage: string) => {
   if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
+    return normalizeRemoteText(error.message.trim());
   }
 
   return fallbackMessage;
@@ -93,7 +97,7 @@ export const fetchCareTeamDomainSummaries = async (
         : {
             error: toErrorMessage(
               nutritionResult.reason,
-              'No fue posible cargar tu profesional de nutricion.',
+              'No fue posible cargar tu profesional de nutrici\u00f3n.',
             ),
             summary: null,
           },

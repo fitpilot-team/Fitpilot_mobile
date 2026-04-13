@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing, fontSize } from '../../constants/colors';
 import { Logo } from '../common/Logo';
@@ -32,12 +32,17 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const [hasAvatarError, setHasAvatarError] = useState(false);
   const initials = user.displayName
     .split(' ')
     .map((n) => n[0])
     .join('')
     .toUpperCase()
     .slice(0, 2);
+
+  useEffect(() => {
+    setHasAvatarError(false);
+  }, [user.profilePictureUrl]);
 
   const objectiveLabel = program?.objective
     ? objectiveLabels[program.objective] || program.objective
@@ -53,8 +58,12 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
     >
       <View style={styles.userInfo}>
         <View style={styles.avatar}>
-          {user.profilePictureUrl ? (
-            <Image source={{ uri: user.profilePictureUrl }} style={styles.avatarImage} />
+          {user.profilePictureUrl && !hasAvatarError ? (
+            <Image
+              source={{ uri: user.profilePictureUrl }}
+              style={styles.avatarImage}
+              onError={() => setHasAvatarError(true)}
+            />
           ) : (
             <Text style={styles.avatarText}>{initials}</Text>
           )}
@@ -77,7 +86,11 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
         </View>
         {onMenuPress ? (
           <TouchableOpacity onPress={onMenuPress} style={styles.menuButton}>
-            <Ionicons name="ellipsis-vertical" size={20} color={theme.colors.icon} />
+            <Ionicons
+              name="ellipsis-vertical"
+              size={20}
+              color={theme.colors.icon}
+            />
           </TouchableOpacity>
         ) : null}
       </View>

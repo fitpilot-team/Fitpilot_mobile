@@ -30,7 +30,7 @@ export default function HelpScreen() {
         <View style={styles.introContent}>
           <Text style={styles.introTitle}>Centro de ayuda</Text>
           <Text style={styles.introDescription}>
-            Aqui reunimos respuestas rapidas a los problemas mas comunes dentro de FitPilot.
+            Aquí reunimos respuestas rápidas a los problemas más comunes dentro de FitPilot.
           </Text>
         </View>
       </View>
@@ -61,9 +61,9 @@ export default function HelpScreen() {
       </View>
 
       <View style={styles.contactCard}>
-        <Text style={styles.contactTitle}>Necesitas ayuda adicional?</Text>
+        <Text style={styles.contactTitle}>¿Necesitas ayuda adicional?</Text>
         <Text style={styles.contactDescription}>
-          Si tu caso no aparece aqui, abre la pantalla de soporte y contactanos por el
+          Si tu caso no aparece aquí, abre la pantalla de soporte y contáctanos por el
           canal que prefieras.
         </Text>
         <Button

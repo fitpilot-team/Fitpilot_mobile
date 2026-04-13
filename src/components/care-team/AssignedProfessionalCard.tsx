@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -26,16 +26,18 @@ type AssignedProfessionalCardProps = {
   summary?: AssignedProfessionalSummary | null;
   errorMessage?: string | null;
   compact?: boolean;
+  embedded?: boolean;
+  showDomainBadges?: boolean;
 };
 
 const DOMAIN_LABELS: Record<AssignedProfessionalDomain, string> = {
   training: 'Entrenamiento',
-  nutrition: 'Nutricion',
+  nutrition: 'Nutrici\u00f3n',
 };
 
 const EMPTY_MESSAGES: Record<AssignedProfessionalDomain, string> = {
-  training: 'Aun no tienes entrenador asignado para entrenamiento.',
-  nutrition: 'Aun no tienes nutriologo asignado para nutricion.',
+  training: 'A\u00fan no tienes entrenador asignado para entrenamiento.',
+  nutrition: 'A\u00fan no tienes nutri\u00f3logo asignado para nutrici\u00f3n.',
 };
 
 const joinDomainLabels = (domains: AssignedProfessionalDomain[]) =>
@@ -47,9 +49,17 @@ export const AssignedProfessionalCard: React.FC<AssignedProfessionalCardProps> =
   summary,
   errorMessage,
   compact = false,
+  embedded = false,
+  showDomainBadges = true,
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const [hasImageError, setHasImageError] = useState(false);
+
+  useEffect(() => {
+    setHasImageError(false);
+  }, [summary?.avatarUrl]);
+
   const initials = useMemo(() => {
     const sourceLabel = summary?.fullName ?? joinDomainLabels(domains);
     return sourceLabel
@@ -63,18 +73,38 @@ export const AssignedProfessionalCard: React.FC<AssignedProfessionalCardProps> =
   const emptyMessage =
     domains.length === 1
       ? EMPTY_MESSAGES[domains[0]]
-      : 'Aun no tienes profesionales asignados para tus planes actuales.';
+      : 'A\u00fan no tienes profesionales asignados para tus planes actuales.';
+
+  const canRenderAvatarImage =
+    state === 'assigned' && Boolean(summary?.avatarUrl) && !hasImageError;
 
   if (state === 'loading') {
     return (
-      <View style={[styles.card, compact ? styles.cardCompact : styles.cardExpanded]}>
-        <View style={styles.badgeRow}>
-          {domains.map((domain) => (
-            <DomainBadge key={domain} domain={domain} />
-          ))}
-        </View>
-        <View style={styles.loadingRow}>
-          <View style={[styles.avatarBase, compact ? styles.avatarCompact : styles.avatarExpanded]} />
+      <View
+        style={[
+          embedded ? styles.cardEmbedded : styles.card,
+          !embedded && (compact ? styles.cardCompact : styles.cardExpanded),
+        ]}
+      >
+        {showDomainBadges ? (
+          <View style={styles.badgeRow}>
+            {domains.map((domain) => (
+              <DomainBadge key={domain} domain={domain} />
+            ))}
+          </View>
+        ) : null}
+        <View
+          style={[
+            styles.loadingRow,
+            showDomainBadges ? styles.bodyRowWithBadges : null,
+          ]}
+        >
+          <View
+            style={[
+              styles.avatarBase,
+              compact ? styles.avatarCompact : styles.avatarExpanded,
+            ]}
+          />
           <View style={styles.loadingTextGroup}>
             <Skeleton width="62%" height={18} />
             <Skeleton width="44%" height={14} style={styles.loadingLine} />
@@ -90,23 +120,34 @@ export const AssignedProfessionalCard: React.FC<AssignedProfessionalCardProps> =
       ? summary?.fullName ?? joinDomainLabels(domains)
       : joinDomainLabels(domains);
   const roleLabel =
-    state === 'assigned' ? summary?.roleLabel : state === 'error' ? 'No disponible' : 'Sin asignacion';
+    state === 'assigned'
+      ? summary?.roleLabel
+      : state === 'error'
+        ? 'No disponible'
+        : 'Sin asignaci\u00f3n';
   const contextLabel =
     state === 'assigned'
       ? summary?.contextLabel
       : state === 'error'
-        ? errorMessage ?? 'No fue posible cargar esta asignacion.'
+        ? errorMessage ?? 'No fue posible cargar esta asignaci\u00f3n.'
         : emptyMessage;
 
   return (
-    <View style={[styles.card, compact ? styles.cardCompact : styles.cardExpanded]}>
-      <View style={styles.badgeRow}>
-        {domains.map((domain) => (
-          <DomainBadge key={domain} domain={domain} />
-        ))}
-      </View>
+    <View
+      style={[
+        embedded ? styles.cardEmbedded : styles.card,
+        !embedded && (compact ? styles.cardCompact : styles.cardExpanded),
+      ]}
+    >
+      {showDomainBadges ? (
+        <View style={styles.badgeRow}>
+          {domains.map((domain) => (
+            <DomainBadge key={domain} domain={domain} />
+          ))}
+        </View>
+      ) : null}
 
-      <View style={styles.bodyRow}>
+      <View style={[styles.bodyRow, showDomainBadges ? styles.bodyRowWithBadges : null]}>
         <View
           style={[
             styles.avatarBase,
@@ -118,12 +159,24 @@ export const AssignedProfessionalCard: React.FC<AssignedProfessionalCardProps> =
                 : null,
           ]}
         >
-          {state === 'assigned' && summary?.avatarUrl ? (
-            <Image source={{ uri: summary.avatarUrl }} style={styles.avatarImage} />
+          {canRenderAvatarImage ? (
+            <Image
+              source={{ uri: summary?.avatarUrl ?? '' }}
+              style={styles.avatarImage}
+              onError={() => setHasImageError(true)}
+            />
           ) : state === 'error' ? (
-            <Ionicons name="alert-circle-outline" size={compact ? 22 : 24} color={theme.colors.error} />
+            <Ionicons
+              name="alert-circle-outline"
+              size={compact ? 22 : 24}
+              color={theme.colors.error}
+            />
           ) : state === 'unassigned' ? (
-            <Ionicons name="person-outline" size={compact ? 20 : 22} color={theme.colors.icon} />
+            <Ionicons
+              name="person-outline"
+              size={compact ? 20 : 22}
+              color={theme.colors.icon}
+            />
           ) : (
             <Text style={styles.avatarText}>{initials}</Text>
           )}
@@ -187,6 +240,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       borderColor: theme.colors.border,
       ...shadows.sm,
     },
+    cardEmbedded: {
+      backgroundColor: 'transparent',
+    },
     cardCompact: {
       padding: spacing.md,
     },
@@ -214,12 +270,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     bodyRow: {
       flexDirection: 'row',
       alignItems: 'center',
+    },
+    bodyRowWithBadges: {
       marginTop: spacing.md,
     },
     loadingRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginTop: spacing.md,
     },
     avatarBase: {
       borderRadius: borderRadius.full,

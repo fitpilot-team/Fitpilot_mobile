@@ -57,9 +57,11 @@ export default function NotificationsSettingsScreen() {
     setIsSaving(true);
     try {
       await nutritionClient.post('/users/notification-preferences', preferences);
-      Alert.alert('Exito', 'Tus preferencias de notificaciones se guardaron correctamente.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      Alert.alert(
+        '\u00c9xito',
+        'Tus preferencias de notificaciones se guardaron correctamente.',
+        [{ text: 'OK', onPress: () => router.back() }],
+      );
     } catch (error) {
       console.error('Failed to save preferences', error);
       Alert.alert('Error', 'No se pudieron guardar tus preferencias.');
@@ -92,7 +94,7 @@ export default function NotificationsSettingsScreen() {
   return (
     <ProfileDetailScreen
       title="Notificaciones"
-      subtitle="Configura que tipo de avisos quieres recibir en tu dispositivo."
+      subtitle="Configura qu\u00e9 tipo de avisos quieres recibir en tu dispositivo."
       footer={footer}
     >
       <View style={styles.card}>
@@ -146,7 +148,9 @@ export default function NotificationsSettingsScreen() {
             <View style={[styles.settingRow, !preferences.push_enabled ? styles.disabledRow : null]}>
               <View style={styles.textContainer}>
                 <Text style={styles.settingTitle}>Suscripciones y alertas</Text>
-                <Text style={styles.settingDescription}>Avisos sobre pagos y dias restantes de tu paquete.</Text>
+                <Text style={styles.settingDescription}>
+                  Avisos sobre pagos y d\u00edas restantes de tu paquete.
+                </Text>
               </View>
               <Switch
                 value={preferences.subscriptions_enabled}

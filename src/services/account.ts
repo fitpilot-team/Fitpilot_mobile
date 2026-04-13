@@ -1,4 +1,8 @@
-import { getRefreshToken, nutritionClient } from './api';
+import {
+  getNutritionAssetUrl,
+  getRefreshToken,
+  nutritionClient,
+} from './api';
 import type {
   ApiMessageResponse,
   ChangePasswordPayload,
@@ -7,6 +11,7 @@ import type {
   User,
   UserRole,
 } from '../types';
+import { normalizeOptionalRemoteText } from '../utils/text';
 
 const normalizeRole = (role: string | null | undefined): UserRole => {
   const normalizedRole = role?.trim().toLowerCase();
@@ -36,10 +41,13 @@ const normalizeProfessionalRoles = (
   return [];
 };
 
-export const mapNutritionUserToUser = (payload: NutritionAuthUserResponse): User => {
-  const firstName = payload.name?.trim() || null;
-  const lastName = payload.lastname?.trim() || null;
-  const displayName = [firstName, lastName].filter(Boolean).join(' ').trim() || payload.email;
+export const mapNutritionUserToUser = (
+  payload: NutritionAuthUserResponse,
+): User => {
+  const firstName = normalizeOptionalRemoteText(payload.name);
+  const lastName = normalizeOptionalRemoteText(payload.lastname);
+  const displayName =
+    [firstName, lastName].filter(Boolean).join(' ').trim() || payload.email;
 
   return {
     id: String(payload.id),
@@ -51,7 +59,7 @@ export const mapNutritionUserToUser = (payload: NutritionAuthUserResponse): User
     phoneNumber: payload.phone_number ?? null,
     isPhoneVerified: payload.is_phone_verified ?? false,
     onboardingStatus: payload.onboarding_status ?? null,
-    profilePictureUrl: payload.profile_picture ?? null,
+    profilePictureUrl: getNutritionAssetUrl(payload.profile_picture),
     professionalRoles: normalizeProfessionalRoles(payload.professional_role),
     currentSubscription: payload.current_subscription ?? null,
     hasSubscription: payload.has_subscription ?? false,
@@ -68,7 +76,10 @@ export const getCurrentUser = async (): Promise<User> => {
 export const updateCurrentUser = async (
   payload: UpdateCurrentUserPayload,
 ): Promise<User> => {
-  const response = await nutritionClient.patch<NutritionAuthUserResponse>('/users/me', payload);
+  const response = await nutritionClient.patch<NutritionAuthUserResponse>(
+    '/users/me',
+    payload,
+  );
   return mapNutritionUserToUser(response);
 };
 
@@ -78,7 +89,9 @@ export const changePassword = async (
   const refreshToken = await getRefreshToken();
 
   if (!refreshToken) {
-    throw new Error('No fue posible validar tu sesión actual. Inicia sesión de nuevo.');
+    throw new Error(
+      'No fue posible validar tu sesi\u00f3n actual. Inicia sesi\u00f3n de nuevo.',
+    );
   }
 
   return nutritionClient.post<ApiMessageResponse>(

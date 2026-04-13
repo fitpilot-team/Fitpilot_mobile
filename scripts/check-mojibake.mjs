@@ -4,7 +4,7 @@ import path from 'node:path';
 const rootDir = process.cwd();
 const targetDirs = ['app', 'src'];
 const filePattern = /\.(ts|tsx)$/;
-const mojibakePattern = /Ã|Â|�/;
+const mojibakePattern = /Ã|Â|â|ï¿½|�/;
 
 const listSourceFiles = (dirPath) => {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });

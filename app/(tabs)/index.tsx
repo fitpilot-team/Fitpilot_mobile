@@ -428,17 +428,6 @@ export default function HomeScreen() {
             </Animated.View>
 
             <Animated.View entering={getEntryAnimation(80)}>
-              <CareTeamSection
-                summaries={careTeamSummaries}
-                errors={careTeamErrors}
-                isLoading={isLoadingCareTeam}
-                compact
-                subtitle="Quienes elaboran tus planes actuales."
-                horizontalPadding={horizontalPadding}
-              />
-            </Animated.View>
-
-            <Animated.View entering={getEntryAnimation(160)}>
               <View style={{ paddingHorizontal: horizontalPadding }}>
                 <HistoricalNavigator
                   eyebrow="Entrenamiento"
@@ -454,6 +443,17 @@ export default function HomeScreen() {
                   onOpenDatePicker={canOpenDatePicker ? handleOpenDatePicker : undefined}
                 />
               </View>
+            </Animated.View>
+
+            <Animated.View entering={getEntryAnimation(160)}>
+              <CareTeamSection
+                summaries={careTeamSummaries}
+                errors={careTeamErrors}
+                isLoading={isLoadingCareTeam}
+                compact
+                subtitle="Quienes elaboran tus planes actuales."
+                horizontalPadding={horizontalPadding}
+              />
             </Animated.View>
 
             <Animated.View entering={getEntryAnimation(240)}>

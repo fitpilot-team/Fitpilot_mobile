@@ -20,7 +20,7 @@ export default function ProfessionalsScreen() {
       <View style={styles.callout}>
         <Text style={styles.calloutTitle}>Planes activos</Text>
         <Text style={styles.calloutText}>
-          Aqui puedes revisar quien lleva tu entrenamiento y tu nutricion dentro
+          Aquí puedes revisar quién lleva tu entrenamiento y tu nutrición dentro
           de tu plan actual.
         </Text>
       </View>
@@ -30,6 +30,7 @@ export default function ProfessionalsScreen() {
         errors={errors}
         isLoading={isLoading}
         title="Asignaciones actuales"
+        presentation="segmented"
       />
     </ProfileDetailScreen>
   );

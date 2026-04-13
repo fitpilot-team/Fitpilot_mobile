@@ -35,6 +35,7 @@
     "production": {
       "autoIncrement": true,
       "env": {
+        "APP_ENV": "production",
         "EXPO_PUBLIC_NUTRITION_API_URL": "https://nutrition-api.fitpilot.fit/v1",
         "EXPO_PUBLIC_TRAINING_API_URL": "https://training-api.fitpilot.fit/api",
         "EXPO_PUBLIC_TURNSTILE_BRIDGE_URL": "https://pro.fitpilot.fit/turnstile/mobile",

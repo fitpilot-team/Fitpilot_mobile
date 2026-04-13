@@ -11,7 +11,14 @@ import {
 } from '../services/api';
 import { useCareTeamStore } from './careTeamStore';
 import { useWorkoutStore } from './workoutStore';
-import type { ApiError, LoginCredentials, LoginResponse, LoginResult, User } from '../types';
+import type {
+  ApiError,
+  LoginCredentials,
+  LoginResponse,
+  LoginResult,
+  User,
+} from '../types';
+import { normalizeRemoteText } from '../utils/text';
 
 interface AuthState {
   user: User | null;
@@ -44,7 +51,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
   const ensureClientUser = async (user: User) => {
     if (user.role !== 'client') {
       await clearAuthenticatedState(
-        'Esta aplicacion es solo para clientes. Los profesionales deben usar la aplicacion web.',
+        'Esta aplicaci\u00f3n es solo para clientes. Los profesionales deben usar la aplicaci\u00f3n web.',
       );
       return null;
     }
@@ -58,15 +65,15 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     if (status === 401) {
       return (
-        'Correo o contrasena incorrectos. Verifica tus datos e intenta de nuevo.\n\n' +
-        'Si aun no tienes cuenta, solicita a tu entrenador o nutriologo que te de de alta.'
+        'Correo o contrase\u00f1a incorrectos. Verifica tus datos e intenta de nuevo.\n\n' +
+        'Si a\u00fan no tienes cuenta, solicita a tu entrenador o nutri\u00f3logo que te d\u00e9 de alta.'
       );
     }
 
     if (status === 404) {
       return (
-        'No se encontro una cuenta con ese correo.\n\n' +
-        'Pide a tu entrenador o nutriologo que te registre en la plataforma.'
+        'No se encontr\u00f3 una cuenta con ese correo.\n\n' +
+        'Pide a tu entrenador o nutri\u00f3logo que te registre en la plataforma.'
       );
     }
 
@@ -74,10 +81,12 @@ export const useAuthStore = create<AuthState>((set, get) => {
       rawMessage.toLowerCase().includes('network') ||
       rawMessage.toLowerCase().includes('timeout')
     ) {
-      return 'No se pudo conectar con el servidor. Verifica tu conexion a internet e intenta de nuevo.';
+      return 'No se pudo conectar con el servidor. Verifica tu conexi\u00f3n a internet e intenta de nuevo.';
     }
 
-    return rawMessage || 'Error al iniciar sesion. Intenta de nuevo mas tarde.';
+    return normalizeRemoteText(
+      rawMessage || 'Error al iniciar sesi\u00f3n. Intenta de nuevo m\u00e1s tarde.',
+    );
   };
 
   const authStore: AuthState = {
@@ -240,7 +249,9 @@ export const useAuthStore = create<AuthState>((set, get) => {
         }
 
         set({
-          error: error.message || 'No fue posible actualizar tu perfil',
+          error: normalizeRemoteText(
+            error.message || 'No fue posible actualizar tu perfil',
+          ),
         });
 
         throw error;
@@ -287,7 +298,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
         set({
           isLoading: false,
-          error: error.message || 'Error al subir la imagen',
+          error: normalizeRemoteText(error.message || 'Error al subir la imagen'),
         });
 
         throw error;

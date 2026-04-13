@@ -1,8 +1,15 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { borderRadius, nutritionTheme, colors, fontSize, spacing, shadows } from '../../constants/colors';
+import {
+  borderRadius,
+  nutritionTheme,
+  colors,
+  fontSize,
+  spacing,
+  shadows,
+} from '../../constants/colors';
 import type { ClientDietMenu } from '../../types';
 import { formatLocalDate } from '../../utils/date';
 import { useAppTheme } from '../../theme';
@@ -23,6 +30,7 @@ export const DietHero: React.FC<DietHeroProps> = ({
   isPreview = false,
 }) => {
   const { theme } = useAppTheme();
+  const isAndroidLight = Platform.OS === 'android' && !theme.isDark;
   const dateLabel = formatLocalDate(assignedDate, {
     weekday: 'long',
     day: 'numeric',
@@ -33,57 +41,116 @@ export const DietHero: React.FC<DietHeroProps> = ({
   const badgeIcon = isPreview ? 'eye-outline' : isToday ? 'sparkles' : 'calendar-outline';
   const stats = [
     { label: 'Comidas', value: menu.totalMeals },
-    { label: 'Kcal', value: menu.totalCalories !== null ? Math.round(menu.totalCalories) : 'ND' },
+    {
+      label: 'Kcal',
+      value: menu.totalCalories !== null ? Math.round(menu.totalCalories) : 'ND',
+    },
     { label: 'Recetas', value: menu.totalRecipes },
   ];
 
-  // Lighter green gradient for Light Mode, original nutrition green for Dark Mode
   const gradientColors = theme.isDark
-    ? ([nutritionTheme.heroGradientStart, nutritionTheme.heroGradientMiddle, nutritionTheme.heroGradientEnd] as const)
+    ? ([
+        nutritionTheme.heroGradientStart,
+        nutritionTheme.heroGradientMiddle,
+        nutritionTheme.heroGradientEnd,
+      ] as const)
     : (['#10B98122', '#10B9810A'] as const);
-  const textPrimary = theme.isDark ? colors.white : '#15803D'; // Darker green for readability in light mode
+  const textPrimary = theme.isDark ? colors.white : '#15803D';
   const textSecondary = theme.isDark ? 'rgba(255,255,255,0.8)' : '#15803DCC';
   const surfaceColor = theme.isDark ? 'rgba(255,255,255,0.12)' : '#10B98118';
   const surfaceBorder = theme.isDark ? 'rgba(255,255,255,0.12)' : '#10B98122';
   const badgeBg = theme.isDark ? 'rgba(255,255,255,0.14)' : '#10B98122';
+  const shellBackgroundColor = isAndroidLight
+    ? nutritionTheme.accentSurface
+    : 'transparent';
+  const surfaceBackgroundColor = isAndroidLight
+    ? nutritionTheme.accentSurface
+    : 'transparent';
 
   return (
-    <LinearGradient
-      colors={gradientColors}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[styles.container, { borderWidth: theme.isDark ? 0 : 1, borderColor: '#10B98133' }]}
+    <View
+      style={[
+        styles.cardShell,
+        { backgroundColor: shellBackgroundColor },
+      ]}
     >
-      <View style={styles.topRow}>
-        <View style={[styles.badge, { backgroundColor: badgeBg }]}>
-          <Ionicons name={badgeIcon} size={12} color={textPrimary} />
-          <Text style={[styles.badgeText, { color: textPrimary }]}>{badgeLabel}</Text>
+      <View
+        style={[
+          styles.cardSurface,
+          {
+            backgroundColor: surfaceBackgroundColor,
+            borderWidth: theme.isDark ? 0 : 1,
+            borderColor: '#10B98133',
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={gradientColors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+
+        <View style={styles.topRow}>
+          <View style={[styles.badge, { backgroundColor: badgeBg }]}>
+            <Ionicons name={badgeIcon} size={12} color={textPrimary} />
+            <Text style={[styles.badgeText, { color: textPrimary }]}>
+              {badgeLabel}
+            </Text>
+          </View>
+        </View>
+
+        <Text numberOfLines={1} style={[styles.title, { color: textPrimary }]}>
+          {menuLabel}
+        </Text>
+        <Text
+          numberOfLines={2}
+          style={[styles.subtitle, { color: textSecondary }]}
+        >
+          {subtitle}
+        </Text>
+
+        <View
+          style={[
+            styles.statsRail,
+            { backgroundColor: surfaceColor, borderColor: surfaceBorder },
+          ]}
+        >
+          {stats.map((stat, index) => (
+            <React.Fragment key={stat.label}>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: textPrimary }]}>
+                  {stat.value}
+                </Text>
+                <Text style={[styles.statLabel, { color: textSecondary }]}>
+                  {stat.label}
+                </Text>
+              </View>
+              {index < stats.length - 1 ? (
+                <View
+                  style={[
+                    styles.statDivider,
+                    { backgroundColor: surfaceBorder },
+                  ]}
+                />
+              ) : null}
+            </React.Fragment>
+          ))}
         </View>
       </View>
-
-      <Text numberOfLines={1} style={[styles.title, { color: textPrimary }]}>{menuLabel}</Text>
-      <Text numberOfLines={2} style={[styles.subtitle, { color: textSecondary }]}>{subtitle}</Text>
-
-      <View style={[styles.statsRail, { backgroundColor: surfaceColor, borderColor: surfaceBorder }]}>
-        {stats.map((stat, index) => (
-          <React.Fragment key={stat.label}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: textPrimary }]}>{stat.value}</Text>
-              <Text style={[styles.statLabel, { color: textSecondary }]}>{stat.label}</Text>
-            </View>
-            {index < stats.length - 1 ? <View style={[styles.statDivider, { backgroundColor: surfaceBorder }]} /> : null}
-          </React.Fragment>
-        ))}
-      </View>
-    </LinearGradient>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  cardShell: {
     borderRadius: borderRadius.xl,
-    padding: spacing.lg,
     ...shadows.lg,
+  },
+  cardSurface: {
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
+    padding: spacing.lg,
   },
   topRow: {
     flexDirection: 'row',

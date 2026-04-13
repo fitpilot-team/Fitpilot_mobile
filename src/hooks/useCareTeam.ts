@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useCareTeamStore } from '../store/careTeamStore';
 import { getTodayDateKey } from '../utils/date';
+import { countUniqueAssignedProfessionals } from '../utils/careTeam';
 
 export const useCareTeam = (clientId: string | null) => {
   const summaries = useCareTeamStore((state) => state.summaries);
@@ -26,9 +27,7 @@ export const useCareTeam = (clientId: string | null) => {
   }, [clientId, dateKey, loadCareTeam]);
 
   const assignedCount = useMemo(
-    () =>
-      Object.values(summaries).filter((summary) => summary?.status === 'assigned')
-        .length,
+    () => countUniqueAssignedProfessionals(summaries),
     [summaries],
   );
 
