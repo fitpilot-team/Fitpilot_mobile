@@ -108,17 +108,17 @@ export const StartupBrandIntro: React.FC<StartupBrandIntroProps> = ({ onComplete
       <View style={styles.content}>
         <View style={styles.markStage}>
           <AnimatedView style={[styles.markLayer, dotStyle]}>
-            <LogoMark size={136} wingColor="transparent" pColor="transparent" showP={false} showWings={false} />
+            <LogoMark size={164} wingColor="transparent" pColor="transparent" showP={false} showWings={false} />
           </AnimatedView>
           <AnimatedView style={[styles.markLayer, wingsStyle]}>
-            <LogoMark size={136} wingColor="#ffffff" pColor="transparent" showDot={false} showP={false} />
+            <LogoMark size={164} wingColor="#ffffff" pColor="transparent" showDot={false} showP={false} />
           </AnimatedView>
           <AnimatedView style={[styles.markLayer, pStyle]}>
-            <LogoMark size={136} wingColor="transparent" showDot={false} showWings={false} />
+            <LogoMark size={164} wingColor="transparent" showDot={false} showWings={false} />
           </AnimatedView>
         </View>
         <AnimatedView style={[styles.wordmarkWrap, wordmarkStyle]}>
-          <WordmarkDark width={252} height={56} />
+          <WordmarkDark width={200} height={44} />
         </AnimatedView>
       </View>
     </AnimatedView>
@@ -155,8 +155,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   markStage: {
-    width: 152,
-    height: 152,
+    width: 180,
+    height: 180,
     alignItems: 'center',
     justifyContent: 'center',
   },

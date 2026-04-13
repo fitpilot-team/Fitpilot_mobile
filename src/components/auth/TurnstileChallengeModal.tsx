@@ -153,6 +153,29 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
     webViewState === 'error' || bridgeState === 'error' || bridgeState === 'expired';
   const showWaitingHelp = webViewState === 'loaded' && bridgeState === 'waiting';
 
+  // Injected JS: zoom-out the entire bridge page so it fits without horizontal clipping
+  const injectedJS = `
+    (function() {
+      // Force a viewport meta that scales the page down to fit
+      var existingMeta = document.querySelector('meta[name="viewport"]');
+      if (existingMeta) {
+        existingMeta.setAttribute('content', 'width=device-width, initial-scale=0.88, maximum-scale=1, user-scalable=no');
+      } else {
+        var meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, initial-scale=0.88, maximum-scale=1, user-scalable=no';
+        document.head.appendChild(meta);
+      }
+
+      // Prevent any scrolling
+      var style = document.createElement('style');
+      style.textContent =
+        'html, body { overflow: hidden !important; max-width: 100vw !important; }';
+      document.head.appendChild(style);
+    })();
+    true;
+  `;
+
   return (
     <Modal
       visible={visible}
@@ -166,9 +189,9 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
         <View style={styles.card}>
           <View style={styles.header}>
             <View style={styles.headerCopy}>
-              <Text style={styles.title}>Verificacion de seguridad</Text>
+              <Text style={styles.title}>Verificación de seguridad</Text>
               <Text style={styles.subtitle}>
-                Completa el challenge para continuar con el inicio de sesion.
+                Completa el challenge para continuar con el inicio de sesión.
               </Text>
             </View>
             <TouchableOpacity
@@ -192,6 +215,12 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
                 thirdPartyCookiesEnabled
                 cacheEnabled={false}
                 setSupportMultipleWindows={false}
+                scrollEnabled={false}
+                overScrollMode="never"
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+                scalesPageToFit={Platform.OS === 'android'}
+                injectedJavaScript={injectedJS}
                 originWhitelist={['https://*', 'about:blank', 'about:srcdoc']}
                 onMessage={handleMessage}
                 onError={(event) => {
@@ -224,7 +253,7 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
 
             {showLoadingOverlay ? (
               <View style={styles.overlayState}>
-                <LoadingSpinner text="Preparando verificacion..." />
+                <LoadingSpinner text="Preparando verificación..." />
               </View>
             ) : null}
 
@@ -259,7 +288,7 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
           ) : null}
 
           <Text style={styles.footerText}>
-            Si cierras este modal, tu sesion no se iniciara hasta completar la verificacion.
+            Si cierras este modal, tu sesión no se iniciará hasta completar la verificación.
           </Text>
         </View>
       </View>
@@ -272,45 +301,49 @@ const createStyles = (theme: AppTheme) =>
     overlay: {
       flex: 1,
       justifyContent: 'center',
-      padding: spacing.lg,
+      padding: spacing.sm,
     },
     backdrop: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: theme.colors.overlay,
     },
     card: {
+      flex: 1,
       backgroundColor: theme.colors.surface,
       borderRadius: borderRadius.xl,
       overflow: 'hidden',
       borderWidth: 1,
       borderColor: theme.colors.border,
+      maxWidth: 420,
+      alignSelf: 'center',
+      width: '100%',
     },
     header: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       justifyContent: 'space-between',
-      paddingHorizontal: spacing.lg,
-      paddingTop: spacing.lg,
-      paddingBottom: spacing.md,
-      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+      gap: spacing.sm,
     },
     headerCopy: {
       flex: 1,
       gap: spacing.xs,
     },
     title: {
-      fontSize: fontSize.xl,
+      fontSize: fontSize.lg,
       fontWeight: '700',
       color: theme.colors.textPrimary,
     },
     subtitle: {
-      fontSize: fontSize.sm,
-      lineHeight: 20,
+      fontSize: fontSize.xs,
+      lineHeight: 18,
       color: theme.colors.textSecondary,
     },
     closeButton: {
-      width: 36,
-      height: 36,
+      width: 32,
+      height: 32,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: borderRadius.full,
@@ -319,9 +352,10 @@ const createStyles = (theme: AppTheme) =>
       borderColor: theme.colors.border,
     },
     webViewWrapper: {
-      height: 340,
-      marginHorizontal: spacing.lg,
-      marginBottom: spacing.md,
+      flex: 1,
+      minHeight: 300,
+      marginHorizontal: spacing.sm,
+      marginBottom: spacing.sm,
       borderRadius: borderRadius.lg,
       overflow: 'hidden',
       backgroundColor: theme.isDark ? '#0b1423' : '#f8fafc',
@@ -337,17 +371,17 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.isDark ? 'rgba(8, 17, 31, 0.92)' : 'rgba(248, 250, 252, 0.96)',
-      padding: spacing.lg,
+      padding: spacing.md,
     },
     waitingHelpCard: {
-      marginHorizontal: spacing.lg,
-      marginBottom: spacing.md,
-      padding: spacing.md,
+      marginHorizontal: spacing.sm,
+      marginBottom: spacing.sm,
+      padding: spacing.sm,
       borderRadius: borderRadius.lg,
       borderWidth: 1,
       borderColor: theme.colors.border,
       backgroundColor: theme.colors.surfaceAlt,
-      gap: spacing.sm,
+      gap: spacing.xs,
     },
     waitingHelpCopy: {
       flexDirection: 'row',
@@ -356,8 +390,8 @@ const createStyles = (theme: AppTheme) =>
     },
     waitingHelpText: {
       flex: 1,
-      fontSize: fontSize.sm,
-      lineHeight: 20,
+      fontSize: fontSize.xs,
+      lineHeight: 18,
       color: theme.colors.textSecondary,
     },
     waitingHelpButton: {
@@ -368,33 +402,33 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       backgroundColor: theme.colors.surface,
       borderRadius: borderRadius.lg,
-      padding: spacing.lg,
+      padding: spacing.md,
       borderWidth: 1,
       borderColor: theme.colors.border,
       gap: spacing.sm,
     },
     errorTitle: {
-      fontSize: fontSize.base,
+      fontSize: fontSize.sm,
       fontWeight: '700',
       color: theme.colors.textPrimary,
       textAlign: 'center',
     },
     errorText: {
-      fontSize: fontSize.sm,
-      lineHeight: 20,
+      fontSize: fontSize.xs,
+      lineHeight: 18,
       color: theme.colors.textSecondary,
       textAlign: 'center',
     },
     retryButton: {
       alignSelf: 'stretch',
-      marginTop: spacing.sm,
+      marginTop: spacing.xs,
     },
     footerText: {
-      paddingHorizontal: spacing.lg,
-      paddingBottom: spacing.lg,
+      paddingHorizontal: spacing.md,
+      paddingBottom: spacing.md,
       color: theme.colors.textMuted,
       fontSize: fontSize.xs,
-      lineHeight: 18,
+      lineHeight: 16,
       textAlign: 'center',
     },
   });
