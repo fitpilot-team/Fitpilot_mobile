@@ -150,7 +150,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
         {!hasVolumeData ? (
           <>
             <Text style={[styles.title, { color: textColor }]}>
-              {'Volumen de entrenamiento por sesi\u00f3n'}
+              {'Volumen de entrenamiento por sesión'}
             </Text>
             <View style={styles.emptyState}>
               <Text style={[styles.emptyText, { color: subtextColor }]}>
@@ -206,7 +206,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
             </View>
 
             <Text style={[styles.rangeLegend, { color: subtextColor }]}>
-              Rango RP por sesi\u00f3n: {SESSION_LANDMARK_MIN}-
+              Rango RP por sesión: {SESSION_LANDMARK_MIN}-
               {SESSION_LANDMARK_MAX} series efectivas
             </Text>
 
