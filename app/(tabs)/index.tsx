@@ -35,6 +35,11 @@ import { spacing } from '../../src/constants/colors';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useCareTeam } from '../../src/hooks/useCareTeam';
 import { getMuscleVolume } from '../../src/services/api';
+import {
+  calculateWeeklyVisibleDietCaloriesAverage,
+  getClientEffectiveDietWeek,
+  getTodayDietDateKey,
+} from '../../src/services/diet';
 import type { TipContext } from '../../src/utils/contextualTips';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type {
@@ -44,8 +49,9 @@ import type {
 } from '../../src/types';
 import { formatLocalDate, toLocalDateKey } from '../../src/utils/date';
 import {
-  getDashboardContentWidth,
+  getAvailableContentWidth,
   getPrimaryScreenHorizontalPadding,
+  isTabletPortraitLayout,
   isTabletLayout,
 } from '../../src/utils/layout';
 import {
@@ -59,7 +65,9 @@ import {
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
   const isTablet = isTabletLayout(width, height);
-  const contentWidth = getDashboardContentWidth(width);
+  const isTabletPortrait = isTabletPortraitLayout(width, height);
+  const [contentColumnWidth, setContentColumnWidth] = useState(0);
+  const contentWidth = getAvailableContentWidth(contentColumnWidth, width);
   const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -87,6 +95,7 @@ export default function HomeScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeResponse | null>(null);
+  const [currentWeekDietCaloriesAverage, setCurrentWeekDietCaloriesAverage] = useState<number | null>(null);
   const [isLoadingVolume, setIsLoadingVolume] = useState(false);
   const [countSecondaryMuscles, setCountSecondaryMuscles] = useState(true);
   const [microcycleMode, setMicrocycleMode] = useState<MicrocycleMode>('planned');
@@ -169,6 +178,28 @@ export default function HomeScreen() {
     },
     [loadDashboardData, user?.id, workoutLogsVersion],
   );
+  const loadCurrentWeekDietCaloriesAverage = useCallback(async () => {
+    if (!user?.id) {
+      setCurrentWeekDietCaloriesAverage(null);
+      return;
+    }
+
+    try {
+      const currentWeekDays = await getClientEffectiveDietWeek(
+        user.id,
+        getTodayDietDateKey(),
+      );
+      setCurrentWeekDietCaloriesAverage(
+        calculateWeeklyVisibleDietCaloriesAverage(currentWeekDays),
+      );
+    } catch (loadError) {
+      console.error(
+        'Error loading current week diet calories average:',
+        loadError,
+      );
+      setCurrentWeekDietCaloriesAverage(null);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (!isFocused || !user?.id) {
@@ -184,6 +215,19 @@ export default function HomeScreen() {
 
     void syncDashboardData(workoutLogsVersion);
   }, [dashboardDataVersion, isFocused, syncDashboardData, user?.id, workoutLogsVersion]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCurrentWeekDietCaloriesAverage(null);
+      return;
+    }
+
+    if (!isFocused) {
+      return;
+    }
+
+    void loadCurrentWeekDietCaloriesAverage();
+  }, [isFocused, loadCurrentWeekDietCaloriesAverage, user?.id]);
 
   useEffect(() => {
     if (!shouldAnimateEntry) {
@@ -267,10 +311,20 @@ export default function HomeScreen() {
     }
 
     setRefreshing(true);
-    await Promise.all([loadDashboardData(), refreshCareTeam()]);
+    await Promise.all([
+      loadDashboardData(),
+      refreshCareTeam(),
+      loadCurrentWeekDietCaloriesAverage(),
+    ]);
     lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
     setRefreshing(false);
-  }, [loadDashboardData, refreshCareTeam, user?.id, workoutLogsVersion]);
+  }, [
+    loadCurrentWeekDietCaloriesAverage,
+    loadDashboardData,
+    refreshCareTeam,
+    user?.id,
+    workoutLogsVersion,
+  ]);
 
   const openWorkoutSession = useCallback(
     async (session: MicrocycleSessionProgress) => {
@@ -378,6 +432,37 @@ export default function HomeScreen() {
       programTimelineView.workoutTotal,
     ],
   );
+  const nutritionContextOverride = useMemo(
+    () => (
+      currentWeekDietCaloriesAverage === null
+        ? null
+        : `Promedio semanal: ${currentWeekDietCaloriesAverage} kcal/d\u00eda`
+    ),
+    [currentWeekDietCaloriesAverage],
+  );
+  const homeCareTeamSummaries = useMemo(() => {
+    const nutritionSummary = careTeamSummaries.nutrition;
+
+    if (
+      !nutritionSummary ||
+      nutritionSummary.status !== 'assigned' ||
+      !nutritionContextOverride
+    ) {
+      return careTeamSummaries;
+    }
+
+    if (nutritionSummary.contextLabel === nutritionContextOverride) {
+      return careTeamSummaries;
+    }
+
+    return {
+      ...careTeamSummaries,
+      nutrition: {
+        ...nutritionSummary,
+        contextLabel: nutritionContextOverride,
+      },
+    };
+  }, [careTeamSummaries, nutritionContextOverride]);
   const handleOpenScienceTip = useCallback((tip: ScienceTip) => {
     router.push({
       pathname: '/recommendations/[tipId]',
@@ -387,6 +472,15 @@ export default function HomeScreen() {
   const handleOpenMeasurements = useCallback(() => {
     router.push('/(tabs)/measurements');
   }, []);
+  const handleContentColumnLayout = useCallback(
+    (event: { nativeEvent: { layout: { width: number } } }) => {
+      const nextWidth = event.nativeEvent.layout.width;
+      setContentColumnWidth((currentWidth) =>
+        Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth,
+      );
+    },
+    [],
+  );
 
   if (!user) {
     return null;
@@ -417,7 +511,10 @@ export default function HomeScreen() {
           scrollEventThrottle={tabBarScroll.scrollEventThrottle}
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.contentColumn, { maxWidth: contentWidth }]}>
+          <View
+            onLayout={handleContentColumnLayout}
+            style={[styles.contentColumn, { maxWidth: contentWidth }]}
+          >
             <Animated.View entering={getEntryAnimation(0)}>
               <UserHeader
                 user={user}
@@ -436,6 +533,7 @@ export default function HomeScreen() {
                   weekLabel={currentWeekLabel}
                   days={navigatorDays}
                   contentWidth={contentWidth}
+                  isTabletPortrait={isTabletPortrait}
                   canGoToPreviousWeek={programTimelineView.canGoToPreviousWeek}
                   canGoToNextWeek={programTimelineView.canGoToNextWeek}
                   showWeekButtons={isTablet}
@@ -447,7 +545,7 @@ export default function HomeScreen() {
 
             <Animated.View entering={getEntryAnimation(160)}>
               <CareTeamSection
-                summaries={careTeamSummaries}
+                summaries={homeCareTeamSummaries}
                 errors={careTeamErrors}
                 isLoading={isLoadingCareTeam}
                 compact
@@ -475,6 +573,7 @@ export default function HomeScreen() {
                 isLoading={isStartingWorkout || (isLoading && !refreshing)}
                 contentWidth={contentWidth}
                 horizontalPadding={horizontalPadding}
+                isTabletPortrait={isTabletPortrait}
               />
             </Animated.View>
 

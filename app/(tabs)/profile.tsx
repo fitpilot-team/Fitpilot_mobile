@@ -37,7 +37,10 @@ import {
   shadows,
   spacing,
 } from '../../src/constants/colors';
-import { TabScreenWrapper } from '../../src/components/common';
+import {
+  ProfileImagePreviewModal,
+  TabScreenWrapper,
+} from '../../src/components/common';
 import { getPrimaryScreenHorizontalPadding } from '../../src/utils/layout';
 
 type MenuItemProps = {
@@ -119,6 +122,7 @@ export default function ProfileScreen() {
     (state) => state.setPreference,
   );
   const [hasProfileImageError, setHasProfileImageError] = useState(false);
+  const [isProfileImagePreviewVisible, setIsProfileImagePreviewVisible] = useState(false);
 
   useEffect(() => {
     void initializeMeasurementPreference();
@@ -126,6 +130,7 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     setHasProfileImageError(false);
+    setIsProfileImagePreviewVisible(false);
   }, [user?.profilePictureUrl]);
 
   const handlePickImage = async () => {
@@ -216,6 +221,22 @@ export default function ProfileScreen() {
         ? `${assignedCount} asignado${assignedCount > 1 ? 's' : ''}`
         : 'Sin asignación';
 
+  const profileImageUrl = user?.profilePictureUrl ?? undefined;
+  const canPreviewProfileImage = Boolean(profileImageUrl && !hasProfileImageError);
+  const avatarContent = (
+    <View style={styles.avatar}>
+      {canPreviewProfileImage ? (
+        <Image
+          source={{ uri: profileImageUrl }}
+          style={styles.avatarImage}
+          onError={() => setHasProfileImageError(true)}
+        />
+      ) : (
+        <Ionicons name="person" size={40} color={theme.colors.primary} />
+      )}
+    </View>
+  );
+
   return (
     <TabScreenWrapper>
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -238,17 +259,15 @@ export default function ProfileScreen() {
         >
           <View style={styles.userCard}>
             <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
-                {user?.profilePictureUrl && !hasProfileImageError ? (
-                  <Image
-                    source={{ uri: user.profilePictureUrl }}
-                    style={styles.avatarImage}
-                    onError={() => setHasProfileImageError(true)}
-                  />
-                ) : (
-                  <Ionicons name="person" size={40} color={theme.colors.primary} />
-                )}
-              </View>
+              {canPreviewProfileImage ? (
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  onPress={() => setIsProfileImagePreviewVisible(true)}
+                  style={styles.avatarPressable}
+                >
+                  {avatarContent}
+                </TouchableOpacity>
+              ) : avatarContent}
               <TouchableOpacity
                 style={styles.editAvatarButton}
                 activeOpacity={0.7}
@@ -360,6 +379,13 @@ export default function ProfileScreen() {
 
           <Text style={styles.versionText}>FitPilot v1.0.0</Text>
         </ScrollView>
+
+        <ProfileImagePreviewModal
+          visible={isProfileImagePreviewVisible && canPreviewProfileImage}
+          imageUrl={profileImageUrl}
+          title={user?.displayName || 'Foto de perfil'}
+          onClose={() => setIsProfileImagePreviewVisible(false)}
+        />
       </SafeAreaView>
     </TabScreenWrapper>
   );
@@ -387,13 +413,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       paddingBottom: spacing.xxl,
     },
     userCard: {
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.isDark ? theme.colors.primarySoft : theme.colors.surface,
       borderRadius: borderRadius.lg,
       padding: spacing.xl,
       alignItems: 'center',
       marginBottom: spacing.lg,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: theme.isDark ? theme.colors.primaryBorder : theme.colors.border,
       ...shadows.md,
     },
     avatarContainer: {
@@ -404,10 +430,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: theme.colors.primarySoft,
+      backgroundColor: theme.isDark ? theme.colors.surfaceAlt : theme.colors.primarySoft,
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
+    },
+    avatarPressable: {
+      borderRadius: 40,
     },
     avatarImage: {
       width: '100%',
@@ -424,7 +453,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 2,
-      borderColor: theme.colors.surface,
+      borderColor: theme.isDark ? theme.colors.primarySoft : theme.colors.surface,
     },
     userName: {
       fontSize: fontSize.xl,
@@ -437,7 +466,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginTop: spacing.xs,
     },
     roleBadge: {
-      backgroundColor: theme.colors.primarySoft,
+      backgroundColor: theme.isDark ? theme.colors.surface : theme.colors.primarySoft,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.xs,
       borderRadius: borderRadius.full,

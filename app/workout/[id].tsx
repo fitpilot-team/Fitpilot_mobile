@@ -8,11 +8,12 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
   type ViewToken,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { LoadingSpinner } from '../../src/components/common';
@@ -24,6 +25,7 @@ import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import type { DayExercise, ExercisePhase, ExerciseProgress } from '../../src/types';
 import { getCardioEffectiveSets } from '../../src/utils/formatters';
 import { formatLocalShortWeekday, getLocalDayNumber } from '../../src/utils/date';
+import { isTabletPortraitLayout } from '../../src/utils/layout';
 import { getDayExerciseByProgress, getExerciseTargetSetNumber } from '../../src/utils/workoutSession';
 
 type ListItem =
@@ -50,8 +52,11 @@ const areExerciseIdListsEqual = (left: string[], right: string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 export default function WorkoutSessionScreen() {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const isTabletPortrait = isTabletPortraitLayout(width, height);
   const { id: workoutLogId } = useLocalSearchParams<{ id: string }>();
   const {
     currentWorkout,
@@ -76,8 +81,10 @@ export default function WorkoutSessionScreen() {
   const [cardLayouts, setCardLayouts] = useState<Record<string, ExerciseCardLayout>>({});
   const [visibleExerciseIds, setVisibleExerciseIds] = useState<string[]>([]);
   const [viewportHeight, setViewportHeight] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(0);
   const [scrollOffsetY, setScrollOffsetY] = useState(0);
   const [autoplayExerciseId, setAutoplayExerciseId] = useState<string | null>(null);
+  const [footerHeight, setFooterHeight] = useState(0);
   const viewabilityConfigRef = useRef({ itemVisiblePercentThreshold: 45 });
 
   const controller = useWorkoutExecutionController({
@@ -112,8 +119,10 @@ export default function WorkoutSessionScreen() {
     setCardLayouts({});
     setVisibleExerciseIds([]);
     setViewportHeight(0);
+    setViewportWidth(0);
     setScrollOffsetY(0);
     setAutoplayExerciseId(null);
+    setFooterHeight(0);
 
     if (workoutLogId) {
       void loadWorkoutState(workoutLogId);
@@ -274,8 +283,14 @@ export default function WorkoutSessionScreen() {
   }, []);
 
   const handleListLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextWidth = event.nativeEvent.layout.width;
     const nextHeight = event.nativeEvent.layout.height;
+    setViewportWidth((previous) => (Math.abs(previous - nextWidth) < 1 ? previous : nextWidth));
     setViewportHeight((previous) => (Math.abs(previous - nextHeight) < 1 ? previous : nextHeight));
+  }, []);
+  const handleFooterLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = event.nativeEvent.layout.height;
+    setFooterHeight((previous) => (Math.abs(previous - nextHeight) < 1 ? previous : nextHeight));
   }, []);
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<ListItem>[] }) => {
@@ -454,6 +469,13 @@ export default function WorkoutSessionScreen() {
     : isHistoricalEditMode
       ? { label: 'Guardar cambios y cerrar', iconName: 'checkmark-outline' as const, colors: ['#0f766e', '#34d399'] as const, iconColor: '#0f766e' }
       : { label: 'Finalizar entrenamiento', iconName: 'arrow-forward' as const, colors: ['#182f50', '#67b6df'] as const, iconColor: theme.isDark ? theme.colors.primary : '#182f50' };
+  const resolvedViewportWidth = viewportWidth > 0 ? viewportWidth : width;
+  const footerContentWidth = Math.min(
+    Math.max(320, resolvedViewportWidth - spacing.lg * 2),
+    720,
+  );
+  const scrollBottomPadding =
+    footerHeight > 0 ? footerHeight + spacing.lg : 140 + insets.bottom;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -491,7 +513,10 @@ export default function WorkoutSessionScreen() {
       <FlatList
         data={groupedExercises}
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: scrollBottomPadding },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         onLayout={handleListLayout}
@@ -545,6 +570,8 @@ export default function WorkoutSessionScreen() {
                   setInProgress={executionInProgress[resolvedExecution.keyString] || false}
                   isSavingSet={isSavingSet}
                   shouldAutoplayPreview={exercise.id === autoplayExerciseId}
+                  availableWidth={resolvedViewportWidth}
+                  isTabletPortrait={isTabletPortrait}
                   onActivateExercise={isReviewMode ? undefined : () => actions.activateExercise(originalIndex)}
                   onStrengthMetricChange={(segmentIndex, field, delta) => actions.changeStrengthMetric(originalIndex, segmentIndex, field, delta)}
                   onStrengthMetricCommit={(segmentIndex, field, value) => actions.commitStrengthMetric(originalIndex, segmentIndex, field, value)}
@@ -569,6 +596,8 @@ export default function WorkoutSessionScreen() {
                   setInProgress={executionInProgress[resolvedExecution.keyString] || false}
                   isSavingSet={isSavingSet}
                   shouldAutoplayPreview={exercise.id === autoplayExerciseId}
+                  availableWidth={resolvedViewportWidth}
+                  isTabletPortrait={isTabletPortrait}
                   onActivateExercise={isReviewMode ? undefined : () => actions.activateExercise(originalIndex)}
                   onCardioMetricChange={(field, delta) => actions.changeCardioMetric(originalIndex, field, delta)}
                   onCardioMetricCommit={(field, value) => actions.commitCardioMetric(originalIndex, field, value)}
@@ -591,6 +620,8 @@ export default function WorkoutSessionScreen() {
                   setInProgress={executionInProgress[resolvedExecution.keyString] || false}
                   isSavingSet={isSavingSet}
                   shouldAutoplayPreview={exercise.id === autoplayExerciseId}
+                  availableWidth={resolvedViewportWidth}
+                  isTabletPortrait={isTabletPortrait}
                   onActivateExercise={isReviewMode ? undefined : () => actions.activateExercise(originalIndex)}
                   onMovementMetricChange={(field, delta) => actions.changeMovementMetric(originalIndex, field, delta)}
                   onMovementMetricCommit={(field, value) => actions.commitMovementMetric(originalIndex, field, value)}
@@ -605,15 +636,23 @@ export default function WorkoutSessionScreen() {
         }}
       />
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.finishButtonWrapper} onPress={handlePrimaryFooterAction} activeOpacity={0.82}>
-          <LinearGradient colors={footerConfig.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.finishButton}>
-            <Text style={styles.finishButtonTextActive}>{footerConfig.label}</Text>
-            <View style={styles.finishArrowActive}>
-              <Ionicons name={footerConfig.iconName} size={16} color={footerConfig.iconColor} />
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
+      <View
+        style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.lg) }]}
+        pointerEvents="box-none"
+      >
+        <View
+          onLayout={handleFooterLayout}
+          style={[styles.footerInner, { maxWidth: footerContentWidth }]}
+        >
+          <TouchableOpacity style={styles.finishButtonWrapper} onPress={handlePrimaryFooterAction} activeOpacity={0.82}>
+            <LinearGradient colors={footerConfig.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.finishButton}>
+              <Text style={styles.finishButtonTextActive}>{footerConfig.label}</Text>
+              <View style={styles.finishArrowActive}>
+                <Ionicons name={footerConfig.iconName} size={16} color={footerConfig.iconColor} />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <RestTimer
@@ -666,7 +705,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   modeBannerButtonText: { fontSize: fontSize.xs, fontWeight: '700', color: colors.white },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 120 },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: spacing.lg, paddingBottom: spacing.xl, backgroundColor: theme.colors.background },
+  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, backgroundColor: theme.colors.background },
+  footerInner: { width: '100%', alignSelf: 'center' },
   finishButtonWrapper: { shadowColor: '#182f50', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 8, elevation: 5 },
   finishButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: borderRadius.full, paddingVertical: spacing.md, paddingHorizontal: spacing.xl },
   finishButtonTextActive: { fontSize: fontSize.base, fontWeight: '700', color: colors.white, marginRight: spacing.sm, letterSpacing: 0.4 },

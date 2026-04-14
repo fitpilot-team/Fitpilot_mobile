@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Dimensions,
   Image,
   Modal,
   Pressable,
@@ -53,8 +52,7 @@ import { VideoPlayerModal, YouTubePlayerModal } from '../video';
 
 const EXERCISE_PLACEHOLDER = require('../../../assets/exercise-placeholder.jpg');
 const YOUTUBE_RED = '#FF0000';
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
+const DEFAULT_AVAILABLE_WIDTH = 390;
 const CARD_HEIGHT = 312;
 const INTERACTIVE_CARD_HEIGHT = 356;
 const IMAGE_WIDTH_RATIO = 0.5;
@@ -80,6 +78,8 @@ type ExerciseCardBaseProps = {
   onSelectSet?: (setNumber: number) => void;
   onDeleteSet?: (setNumber: number) => void;
   shouldAutoplayPreview?: boolean;
+  availableWidth?: number;
+  isTabletPortrait?: boolean;
 };
 
 type StrengthExerciseCardProps = ExerciseCardBaseProps & {
@@ -110,6 +110,7 @@ type ExerciseCardProps = StrengthExerciseCardProps | CardioExerciseCardProps | M
 type CardVariant = 'compact' | 'interactive';
 
 type CardLayout = {
+  cardWidth: number;
   cardHeight: number;
   imageWidth: number;
   infoWidth: number;
@@ -185,20 +186,30 @@ const getExerciseDescription = (dayExercise: DayExercise) => {
   return descriptionEn || null;
 };
 
-const createCardLayout = (variant: CardVariant): CardLayout => {
-  const cardHeight = variant === 'interactive' ? INTERACTIVE_CARD_HEIGHT : CARD_HEIGHT;
-  const imageWidth = CARD_WIDTH * IMAGE_WIDTH_RATIO;
-  const infoWidth = CARD_WIDTH - imageWidth + DIAGONAL_WIDTH;
+const createCardLayout = (
+  variant: CardVariant,
+  availableWidth: number,
+  isTabletPortrait: boolean,
+): CardLayout => {
+  const cardWidth = Math.max(320, availableWidth - spacing.lg * 2);
+  const imageWidthRatio = isTabletPortrait ? 0.42 : IMAGE_WIDTH_RATIO;
+  const compactCardHeight = isTabletPortrait ? 332 : CARD_HEIGHT;
+  const interactiveCardHeight = isTabletPortrait ? 388 : INTERACTIVE_CARD_HEIGHT;
+  const cardHeight =
+    variant === 'interactive' ? interactiveCardHeight : compactCardHeight;
+  const imageWidth = cardWidth * imageWidthRatio;
+  const infoWidth = cardWidth - imageWidth + DIAGONAL_WIDTH;
   const innerPadding = spacing.md + spacing.sm;
   const getAvailableInfoWidth = (verticalFraction: number) =>
     Math.max(infoWidth - DIAGONAL_WIDTH * verticalFraction, 0);
 
   return {
+    cardWidth,
     cardHeight,
     imageWidth,
     infoWidth,
-    metricsWidth: getAvailableInfoWidth(0.72) - innerPadding,
-    actionDockWidth: getAvailableInfoWidth(0.88) - innerPadding,
+    metricsWidth: Math.max(getAvailableInfoWidth(0.72) - innerPadding, 180),
+    actionDockWidth: Math.max(getAvailableInfoWidth(0.88) - innerPadding, 180),
   };
 };
 
@@ -1042,9 +1053,15 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = (props) => {
       : media.posterUrl
         ? { uri: media.posterUrl }
         : EXERCISE_PLACEHOLDER;
+  const resolvedAvailableWidth = props.availableWidth ?? DEFAULT_AVAILABLE_WIDTH;
   const layout = useMemo(
-    () => createCardLayout(showInlineControls ? 'interactive' : 'compact'),
-    [showInlineControls],
+    () =>
+      createCardLayout(
+        showInlineControls ? 'interactive' : 'compact',
+        resolvedAvailableWidth,
+        props.isTabletPortrait ?? false,
+      ),
+    [props.isTabletPortrait, resolvedAvailableWidth, showInlineControls],
   );
   const plannedZoneLabel = formatZoneLabel(props.dayExercise.intensity_zone) ?? null;
   const primaryAction = isHistoricalEditMode ? props.onSaveSet : props.onAdvanceSet;
@@ -1125,7 +1142,12 @@ export const ExerciseCard: React.FC<ExerciseCardProps> = (props) => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.cardBase, { height: layout.cardHeight }]}>
+      <View
+        style={[
+          styles.cardBase,
+          { width: layout.cardWidth, height: layout.cardHeight },
+        ]}
+      >
         <View style={[styles.mediaArea, { width: layout.imageWidth }]}>
           <TouchableOpacity
             style={[styles.mediaPressable, { width: layout.imageWidth, height: layout.cardHeight }]}
@@ -1444,7 +1466,6 @@ const createStyles = (theme: AppTheme) =>
       marginVertical: spacing.sm,
     },
     cardBase: {
-      width: CARD_WIDTH,
       borderRadius: borderRadius.xl,
       overflow: 'hidden',
       backgroundColor: theme.colors.surfaceAlt,

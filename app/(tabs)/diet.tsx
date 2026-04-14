@@ -30,8 +30,7 @@ import { useAuthStore } from '../../src/store/authStore';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import {
-  getClientDietCalendar,
-  getClientDietMenuPool,
+  getClientEffectiveDietWeek,
   getClientDietMenuCalendar,
   getFoodsByExchangeGroup,
   resetDietRecipeIngredientSwap,
@@ -47,7 +46,6 @@ import {
   isTabletLayout,
 } from '../../src/utils/layout';
 import {
-  applyDietRotationMenuOptions,
   getDietSelectableMenus,
   mergeDietMenuOptionsByDate,
   resolveDietSelectableMenuById,
@@ -253,44 +251,6 @@ export default function DietScreen() {
     });
   }, []);
 
-  const loadRotationMenuPool = useCallback(
-    async (
-      resolvedAnchorDate: string,
-      preferredSelectedDate: string,
-      baseDays: ClientDietWeekDay[],
-    ) => {
-      if (!user) {
-        return [] as ClientDietMenu[];
-      }
-
-      const candidateDates = Array.from(
-        new Set(
-          [
-            preferredSelectedDate,
-            resolvedAnchorDate,
-            ...baseDays
-              .filter((day) => day.backendPrimaryMenuId !== null)
-              .map((day) => day.assignedDate),
-          ].filter(Boolean),
-        ),
-      );
-
-      for (const candidateDate of candidateDates) {
-        try {
-          const poolMenus = await getClientDietMenuPool(user.id, candidateDate);
-          if (poolMenus.length > 0) {
-            return poolMenus;
-          }
-        } catch {
-          // Fall back to the next candidate date and keep the week usable without rotation.
-        }
-      }
-
-      return [];
-    },
-    [user],
-  );
-
   const loadDiet = useCallback(
     async ({
       mode = 'initial',
@@ -311,13 +271,9 @@ export default function DietScreen() {
 
       try {
         const preferredSelectedDate = requestedSelectedDate ?? resolvedAnchorDate;
-        const baseDays = await getClientDietCalendar(user.id, resolvedAnchorDate);
-        const rotationMenus = await loadRotationMenuPool(
-          resolvedAnchorDate,
-          preferredSelectedDate,
-          baseDays,
-        );
-        const days = applyDietRotationMenuOptions(baseDays, rotationMenus);
+        const days = await getClientEffectiveDietWeek(user.id, resolvedAnchorDate, {
+          selectedDate: preferredSelectedDate,
+        });
 
         setDietDays(days);
         setAnchorDate(resolvedAnchorDate);
@@ -357,7 +313,7 @@ export default function DietScreen() {
         }
       }
     },
-    [loadRotationMenuPool, user],
+    [user],
   );
 
   const loadMenuCalendar = useCallback(

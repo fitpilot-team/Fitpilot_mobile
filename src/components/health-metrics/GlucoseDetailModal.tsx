@@ -51,7 +51,7 @@ export const GlucoseDetailModal: React.FC<GlucoseDetailModalProps> = ({
       return [];
     }
 
-    const metrics: Array<{ label: string; value: string }> = [];
+    const metrics: { label: string; value: string }[] = [];
 
     if (record.systolic_mmhg !== null || record.diastolic_mmhg !== null) {
       metrics.push({

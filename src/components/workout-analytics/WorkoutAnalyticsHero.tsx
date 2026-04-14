@@ -41,12 +41,12 @@ export const WorkoutAnalyticsHero: React.FC<WorkoutAnalyticsHeroProps> = ({
   const showEyebrow = Boolean(eyebrow);
 
   const gradientColors = theme.isDark
-    ? ([theme.colors.surfaceAlt, theme.colors.surface] as const)
+    ? ([theme.colors.primarySoft, theme.colors.primarySoft] as const)
     : ([theme.colors.primarySoft, '#f4f8ff'] as const);
-  const shellBorder = theme.isDark ? theme.colors.border : theme.colors.primaryBorder;
+  const shellBorder = theme.colors.primaryBorder;
   const surfaceColor = theme.colors.surface;
   const surfaceBorder = theme.isDark ? theme.colors.border : theme.colors.primaryBorder;
-  const accentSurface = theme.colors.primarySoft;
+  const accentSurface = theme.isDark ? theme.colors.surfaceAlt : theme.colors.primarySoft;
   const accentColor = theme.colors.primary;
   const textPrimary = theme.colors.textPrimary;
   const textSecondary = theme.colors.textSecondary;

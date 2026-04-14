@@ -87,9 +87,21 @@ export const CalendarDatePickerModal: React.FC<CalendarDatePickerModalProps> = (
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
-  const parsedSelectedDate = parseLocalDate(selectedDate) ?? null;
-  const parsedMinDate = parseLocalDate(minDate) ?? null;
-  const parsedMaxDate = parseLocalDate(maxDate) ?? null;
+  const selectedDateKey = toLocalDateKey(selectedDate);
+  const minDateKey = toLocalDateKey(minDate);
+  const maxDateKey = toLocalDateKey(maxDate);
+  const parsedSelectedDate = useMemo(
+    () => (selectedDateKey ? parseLocalDate(selectedDateKey) : null),
+    [selectedDateKey],
+  );
+  const parsedMinDate = useMemo(
+    () => (minDateKey ? parseLocalDate(minDateKey) : null),
+    [minDateKey],
+  );
+  const parsedMaxDate = useMemo(
+    () => (maxDateKey ? parseLocalDate(maxDateKey) : null),
+    [maxDateKey],
+  );
   const [calendarMonth, setCalendarMonth] = useState(() =>
     startOfMonth(parsedSelectedDate ?? new Date()),
   );
@@ -99,7 +111,12 @@ export const CalendarDatePickerModal: React.FC<CalendarDatePickerModalProps> = (
       return;
     }
 
-    setCalendarMonth(startOfMonth(parsedSelectedDate ?? new Date()));
+    const nextCalendarMonth = startOfMonth(parsedSelectedDate ?? new Date());
+    setCalendarMonth((currentMonth) => (
+      compareMonths(currentMonth, nextCalendarMonth) === 0
+        ? currentMonth
+        : nextCalendarMonth
+    ));
   }, [parsedSelectedDate, visible]);
 
   const calendarDays = useMemo<CalendarDay[]>(() => {
@@ -137,7 +154,6 @@ export const CalendarDatePickerModal: React.FC<CalendarDatePickerModalProps> = (
     compareMonths(calendarMonth, startOfMonth(parsedMinDate)) > 0;
   const canGoToNextMonth = !parsedMaxDate ||
     compareMonths(calendarMonth, startOfMonth(parsedMaxDate)) < 0;
-  const selectedDateKey = toLocalDateKey(parsedSelectedDate);
 
   return (
     <Modal

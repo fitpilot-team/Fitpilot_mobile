@@ -17,7 +17,7 @@ import type { ProgramTimelineCardState } from '../../utils/programTimeline';
 
 const workoutImage = require('../../../assets/mock-image-workout.jpg');
 
-const CARD_HEIGHT = 240;
+const BASE_CARD_HEIGHT = 240;
 const CORNER_RADIUS = borderRadius.xl;
 
 const getChamferHorizontal = (cardWidth: number) => Math.max(84, Math.min(110, cardWidth * 0.16));
@@ -98,6 +98,7 @@ interface TodayWorkoutCardProps {
   isLoading?: boolean;
   contentWidth?: number;
   horizontalPadding?: number;
+  isTabletPortrait?: boolean;
 }
 
 const getEmptyIconName = (
@@ -125,12 +126,14 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   isLoading,
   contentWidth,
   horizontalPadding = spacing.md,
+  isTabletPortrait = false,
 }) => {
   const scale = useSharedValue(1);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const availableWidth = Math.max(320, (contentWidth ?? 0) - horizontalPadding * 2);
   const cardWidth = availableWidth;
+  const cardHeight = isTabletPortrait ? 268 : BASE_CARD_HEIGHT;
   const chamferHorizontal = getChamferHorizontal(cardWidth);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -176,7 +179,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   const durationText = hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
   const sessionCaption = `Sesion ${trainingDay.session_index}`;
   const isOverdueRecommendation = cardState.recommendation === 'overdue';
-
+  const durationContainerWidth = Math.max(chamferHorizontal - spacing.xs, 84);
   return (
     <AnimatedPressable
       style={[styles.container, { marginHorizontal: horizontalPadding }, animatedStyle]}
@@ -185,12 +188,12 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
       onPress={onStartPress}
     >
       <MaskedView
-        style={[styles.cardContainer, { width: cardWidth, height: CARD_HEIGHT }]}
-        maskElement={<CardMask cardWidth={cardWidth} cardHeight={CARD_HEIGHT} />}
+        style={[styles.cardContainer, { width: cardWidth, height: cardHeight }]}
+        maskElement={<CardMask cardWidth={cardWidth} cardHeight={cardHeight} />}
       >
         <ImageBackground
           source={workoutImage}
-          style={[styles.maskedImage, { width: cardWidth, height: CARD_HEIGHT }]}
+          style={[styles.maskedImage, { width: cardWidth, height: cardHeight }]}
           resizeMode="cover"
         >
           <LinearGradient
@@ -261,8 +264,16 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
         </ImageBackground>
       </MaskedView>
 
-      <View style={styles.durationContainer}>
-        <Text style={styles.durationLabel}>Duracion:</Text>
+      <View
+        pointerEvents="none"
+        style={[
+          styles.durationContainer,
+          {
+            width: durationContainerWidth,
+          },
+        ]}
+      >
+        <Text style={styles.durationLabel}>Duracion</Text>
         <Text style={styles.durationValue}>{durationText}</Text>
       </View>
     </AnimatedPressable>
@@ -274,7 +285,6 @@ const createStyles = (theme: AppTheme) =>
     container: {
       marginVertical: spacing.md,
       position: 'relative',
-      height: CARD_HEIGHT,
     },
     skeletonWrapper: {
       marginVertical: spacing.md,
@@ -289,13 +299,15 @@ const createStyles = (theme: AppTheme) =>
     durationLabel: {
       fontSize: fontSize.xs,
       color: theme.colors.textMuted,
-      fontWeight: '500',
+      fontWeight: '600',
+      textAlign: 'right',
     },
     durationValue: {
       fontSize: fontSize.sm,
       color: theme.colors.textSecondary,
-      fontWeight: '600',
+      fontWeight: '700',
       marginTop: 2,
+      textAlign: 'right',
     },
     cardContainer: {
       overflow: 'hidden',
@@ -322,7 +334,9 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'space-between',
     },
     headerMeta: {
+      flexDirection: 'row',
       alignItems: 'flex-start',
+      minHeight: 32,
     },
     dayBadge: {
       alignSelf: 'flex-start',

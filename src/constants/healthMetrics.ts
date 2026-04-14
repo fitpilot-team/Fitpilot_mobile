@@ -1,9 +1,9 @@
 import type { GlucoseContext } from '../types/healthMetrics';
 
-export const GLUCOSE_CONTEXT_OPTIONS: Array<{
+export const GLUCOSE_CONTEXT_OPTIONS: {
   value: GlucoseContext;
   label: string;
-}> = [
+}[] = [
   { value: 'ayuno', label: 'Ayuno' },
   { value: 'posprandial', label: 'Posprandial' },
   { value: 'casual', label: 'Casual' },
