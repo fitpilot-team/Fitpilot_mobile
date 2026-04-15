@@ -49,7 +49,7 @@ import type {
 } from '../../src/types';
 import { formatLocalDate, toLocalDateKey } from '../../src/utils/date';
 import {
-  getAvailableContentWidth,
+  getPrimaryScreenContentWidth,
   getPrimaryScreenHorizontalPadding,
   isTabletPortraitLayout,
   isTabletLayout,
@@ -66,8 +66,8 @@ export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
   const isTablet = isTabletLayout(width, height);
   const isTabletPortrait = isTabletPortraitLayout(width, height);
-  const [contentColumnWidth, setContentColumnWidth] = useState(0);
-  const contentWidth = getAvailableContentWidth(contentColumnWidth, width);
+  const [sceneWidth, setSceneWidth] = useState(0);
+  const contentWidth = getPrimaryScreenContentWidth(sceneWidth, width, height);
   const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -472,10 +472,10 @@ export default function HomeScreen() {
   const handleOpenMeasurements = useCallback(() => {
     router.push('/(tabs)/measurements');
   }, []);
-  const handleContentColumnLayout = useCallback(
+  const handleSceneLayout = useCallback(
     (event: { nativeEvent: { layout: { width: number } } }) => {
       const nextWidth = event.nativeEvent.layout.width;
-      setContentColumnWidth((currentWidth) =>
+      setSceneWidth((currentWidth) =>
         Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth,
       );
     },
@@ -492,7 +492,11 @@ export default function HomeScreen() {
 
   return (
     <TabScreenWrapper>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['top']}
+        onLayout={handleSceneLayout}
+      >
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={[
@@ -512,7 +516,6 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View
-            onLayout={handleContentColumnLayout}
             style={[styles.contentColumn, { maxWidth: contentWidth }]}
           >
             <Animated.View entering={getEntryAnimation(0)}>

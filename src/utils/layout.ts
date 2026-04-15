@@ -7,6 +7,10 @@ export function isTabletLayout(width: number, height: number): boolean {
   return Math.min(width, height) >= TABLET_MIN_DIMENSION;
 }
 
+export function isLandscapeLayout(width: number, height: number): boolean {
+  return width > height;
+}
+
 export function isPortraitLayout(width: number, height: number): boolean {
   return height >= width;
 }
@@ -19,12 +23,17 @@ export function getDashboardContentWidth(width: number): number {
   return Math.min(width, DASHBOARD_MAX_WIDTH);
 }
 
-export function getAvailableContentWidth(
+export function getPrimaryScreenContentWidth(
   measuredWidth: number | null | undefined,
   fallbackWidth: number,
+  fallbackHeight: number,
 ): number {
   const resolvedWidth =
     measuredWidth && measuredWidth > 0 ? measuredWidth : fallbackWidth;
+
+  if (isLandscapeLayout(fallbackWidth, fallbackHeight)) {
+    return resolvedWidth;
+  }
 
   return getDashboardContentWidth(resolvedWidth);
 }

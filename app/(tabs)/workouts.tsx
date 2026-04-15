@@ -68,7 +68,7 @@ import type {
 import { formatLocalDate } from '../../src/utils/date';
 import { formatDuration } from '../../src/utils/formatters';
 import {
-  getDashboardContentWidth,
+  getPrimaryScreenContentWidth,
   getPrimaryScreenHorizontalPadding,
   isTabletLayout,
 } from '../../src/utils/layout';
@@ -686,7 +686,8 @@ const HistoryCard = ({
 
 export default function WorkoutsScreen() {
   const { width, height } = useWindowDimensions();
-  const contentWidth = getDashboardContentWidth(width);
+  const [sceneWidth, setSceneWidth] = useState(0);
+  const contentWidth = getPrimaryScreenContentWidth(sceneWidth, width, height);
   const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
   const chartWidth = Math.max(contentWidth - horizontalPadding * 2, 280);
   const { theme } = useAppTheme();
@@ -724,6 +725,15 @@ export default function WorkoutsScreen() {
   const [contextCatalogError, setContextCatalogError] = useState<string | null>(null);
   const [macrocycleSummaries, setMacrocycleSummaries] = useState<MacrocycleListItem[]>([]);
   const [macrocycleDetailsById, setMacrocycleDetailsById] = useState<Record<string, Macrocycle>>({});
+  const handleSceneLayout = useCallback(
+    (event: { nativeEvent: { layout: { width: number } } }) => {
+      const nextWidth = event.nativeEvent.layout.width;
+      setSceneWidth((currentWidth) =>
+        Math.abs(currentWidth - nextWidth) > 1 ? nextWidth : currentWidth,
+      );
+    },
+    [],
+  );
   const deferredExerciseSearch = useDeferredValue(exerciseSearchQuery);
   const selectedContext = useMemo(
     () => ({
@@ -1548,7 +1558,11 @@ export default function WorkoutsScreen() {
 
   return (
     <TabScreenWrapper>
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView
+        style={styles.container}
+        edges={['top']}
+        onLayout={handleSceneLayout}
+      >
         {activeTab === 'overview' ? (
           <FlatList
             data={overviewSections}

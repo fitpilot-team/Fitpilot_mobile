@@ -49,7 +49,7 @@ export const UserHeader: React.FC<UserHeaderProps> = ({
     setIsUploading(true);
     try {
       await uploadAvatar(uri);
-    } catch (err) {
+    } catch {
       // Errors are handled by the store
     } finally {
       setIsUploading(false);
