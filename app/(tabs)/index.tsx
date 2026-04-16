@@ -61,6 +61,7 @@ export default function HomeScreen() {
   const isTablet = isTabletLayout(width, height);
   const contentWidth = getDashboardContentWidth(width);
   const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
+  const calendarContentWidth = Math.max(0, contentWidth - horizontalPadding * 2);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
@@ -446,7 +447,7 @@ export default function HomeScreen() {
                   subtitle={focusedDateLabel}
                   weekLabel={currentWeekLabel}
                   days={navigatorDays}
-                  contentWidth={contentWidth}
+                  contentWidth={calendarContentWidth}
                   canGoToPreviousWeek={programTimelineView.canGoToPreviousWeek}
                   canGoToNextWeek={programTimelineView.canGoToNextWeek}
                   showWeekButtons={isTablet}

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { borderRadius, fontSize, shadows, spacing } from '../../constants/colors';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import {
@@ -15,6 +15,7 @@ interface HistoricalNavigatorProps {
   eyebrow?: string | null;
   weekLabel?: string | null;
   contentWidth?: number;
+  isTabletPortrait?: boolean;
   canGoToPreviousWeek?: boolean;
   canGoToNextWeek?: boolean;
   showWeekButtons?: boolean;
@@ -34,6 +35,7 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
   eyebrow,
   weekLabel,
   contentWidth = 390,
+  isTabletPortrait = false,
   canGoToPreviousWeek = true,
   canGoToNextWeek = true,
   showWeekButtons = true,
@@ -46,6 +48,7 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
   const styles = useThemedStyles(createStyles);
   const showEyebrow = Boolean(eyebrow);
   const resolvedAccentColor = accentColor ?? theme.colors.primary;
+  const shouldStackHeaderActions = isTabletPortrait;
 
   const panResponder = useMemo(
     () =>
@@ -80,14 +83,15 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={styles.containerShell}>
+      <View style={styles.containerSurface}>
+      <View style={[styles.header, shouldStackHeaderActions ? styles.headerStacked : null]}>
         <View style={styles.headerCopy}>
           {showEyebrow ? (
             <Text style={[styles.eyebrow, { color: resolvedAccentColor }]}>{eyebrow}</Text>
           ) : null}
           <Text
-            numberOfLines={1}
+            numberOfLines={shouldStackHeaderActions ? 2 : 1}
             style={[
               styles.title,
               showEyebrow ? styles.titleWithEyebrow : null,
@@ -102,11 +106,17 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
           ) : null}
         </View>
 
-        <View style={styles.headerActions}>
+        <View
+          style={[
+            styles.headerActions,
+            shouldStackHeaderActions ? styles.headerActionsStacked : null,
+          ]}
+        >
           {weekLabel ? (
             <View
               style={[
                 styles.weekPill,
+                shouldStackHeaderActions ? styles.weekPillStacked : null,
                 {
                   backgroundColor: theme.colors.surfaceAlt,
                   borderColor: theme.colors.border,
@@ -122,7 +132,12 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
             </View>
           ) : null}
 
-          <View style={styles.actionRow}>
+          <View
+            style={[
+              styles.actionRow,
+              shouldStackHeaderActions ? styles.actionRowStacked : null,
+            ]}
+          >
             {showWeekButtons ? (
               <>
                 <Pressable
@@ -184,13 +199,21 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
         </View>
       </View>
 
-      <View style={styles.calendarWrap} {...panResponder.panHandlers}>
+      <View
+        style={[
+          styles.calendarWrap,
+          shouldStackHeaderActions ? styles.calendarWrapStacked : null,
+        ]}
+        {...panResponder.panHandlers}
+      >
         <SharedWeeklyCalendar
           days={days}
           heroSelectionMode="selected-only"
           density="tight-top"
           contentWidth={contentWidth}
+          isTabletPortrait={isTabletPortrait}
         />
+      </View>
       </View>
     </View>
   );
@@ -198,14 +221,30 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
 
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
-    container: {
+    containerShell: {
       borderRadius: borderRadius.lg,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
+      ...(Platform.OS === 'android' && theme.isDark
+        ? {
+            shadowColor: 'transparent',
+            shadowOpacity: 0,
+            shadowRadius: 0,
+            shadowOffset: { width: 0, height: 0 },
+            elevation: 0,
+          }
+        : shadows.sm),
+    },
+    containerSurface: {
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.isDark ? theme.colors.primarySoft : theme.colors.surface,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
+      borderColor:
+        Platform.OS === 'android' && theme.isDark
+          ? 'transparent'
+          : theme.isDark
+            ? theme.colors.primaryBorder
+            : theme.colors.border,
       paddingTop: spacing.sm,
       paddingBottom: 2,
-      ...shadows.sm,
     },
     header: {
       flexDirection: 'row',
@@ -213,6 +252,10 @@ const createStyles = (theme: AppTheme) =>
       justifyContent: 'space-between',
       gap: spacing.sm,
       paddingHorizontal: spacing.md,
+    },
+    headerStacked: {
+      alignItems: 'stretch',
+      flexWrap: 'wrap',
     },
     headerCopy: {
       flex: 1,
@@ -243,12 +286,20 @@ const createStyles = (theme: AppTheme) =>
       gap: 6,
       maxWidth: '52%',
     },
+    headerActionsStacked: {
+      width: '100%',
+      maxWidth: '100%',
+      alignItems: 'flex-start',
+    },
     weekPill: {
       paddingHorizontal: spacing.sm,
       paddingVertical: 6,
       borderRadius: borderRadius.full,
-      borderWidth: 1,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
       alignSelf: 'flex-end',
+    },
+    weekPillStacked: {
+      alignSelf: 'flex-start',
     },
     weekPillText: {
       fontSize: fontSize.xs,
@@ -263,6 +314,10 @@ const createStyles = (theme: AppTheme) =>
       gap: 6,
       flexWrap: 'wrap',
     },
+    actionRowStacked: {
+      justifyContent: 'flex-start',
+      width: '100%',
+    },
     navButton: {
       width: 30,
       height: 30,
@@ -270,7 +325,7 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surfaceAlt,
-      borderWidth: 1,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
       borderColor: theme.colors.border,
     },
     navButtonDisabled: {
@@ -281,7 +336,7 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       gap: 5,
       borderRadius: borderRadius.full,
-      borderWidth: 1,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
       paddingHorizontal: spacing.sm,
       paddingVertical: 6,
     },
@@ -291,6 +346,9 @@ const createStyles = (theme: AppTheme) =>
     },
     calendarWrap: {
       marginTop: -8,
+    },
+    calendarWrapStacked: {
+      marginTop: spacing.xs,
     },
   });
 
