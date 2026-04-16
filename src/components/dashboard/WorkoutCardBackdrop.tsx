@@ -20,7 +20,6 @@ import Animated, {
 import { brandColors } from '../../constants/colors';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 import type { ProgramTimelineCardSessionState } from '../../utils/programTimeline';
-import { normalizeComparableText } from '../../utils/text';
 
 type WorkoutCardVisualState = 'focused' | 'overdue' | 'in_progress' | 'completed' | 'abandoned';
 
@@ -42,6 +41,13 @@ interface WorkoutCardPalette {
 }
 
 const AnimatedView = Animated.createAnimatedComponent(View);
+
+const normalizeComparableText = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 
 const withAlpha = (color: string, alpha: number) => {
   const clampedAlpha = Math.max(0, Math.min(1, alpha));
