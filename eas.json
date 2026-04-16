@@ -34,6 +34,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "EXPO_PUBLIC_NUTRITION_API_URL": "https://nutrition-api.fitpilot.fit/v1",
         "EXPO_PUBLIC_TRAINING_API_URL": "https://training-api.fitpilot.fit/api",
