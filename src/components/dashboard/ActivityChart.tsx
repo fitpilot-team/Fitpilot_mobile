@@ -18,17 +18,15 @@ import { useAppTheme } from '../../theme';
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const MAX_MUSCLES_SHOWN = 6;
 const BAR_HEIGHT = 20;
-const SESSION_LANDMARK_MIN = 4;
 const SESSION_LANDMARK_MAX = 12;
+const TRACK_VERTICAL_PADDING = 4;
+const TRACK_HEIGHT = BAR_HEIGHT - TRACK_VERTICAL_PADDING * 2;
+const TRACK_RADIUS = 6;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
-const getSessionLandmarkFillRatio = (effectiveSets: number) =>
-  clamp(
-    (effectiveSets - SESSION_LANDMARK_MIN) / (SESSION_LANDMARK_MAX - SESSION_LANDMARK_MIN),
-    0,
-    1
-  );
+const getSessionVolumeFillRatio = (effectiveSets: number) =>
+  clamp(effectiveSets / SESSION_LANDMARK_MAX, 0, 1);
 
 interface ActivityChartProps {
   muscleVolume: MuscleVolumeResponse | null;
@@ -130,10 +128,6 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
         />
       </View>
 
-      <Text style={[styles.rangeLegend, { color: subtextColor }]}>
-        Rango RP por sesion: {SESSION_LANDMARK_MIN}-{SESSION_LANDMARK_MAX} series efectivas
-      </Text>
-
       <View style={styles.chartContainer}>
         {muscles.map((muscle) => (
           <MuscleBar
@@ -174,7 +168,8 @@ const MuscleBar: React.FC<MuscleBarProps> = ({
   barFill = colors.white,
   barBg = 'rgba(255,255,255,0.15)',
 }) => {
-  const barWidth = getSessionLandmarkFillRatio(muscle.effective_sets) * barAreaWidth;
+  const barWidth =
+    getSessionVolumeFillRatio(muscle.effective_sets) * barAreaWidth;
 
   const animatedProps = useAnimatedProps(() => ({
     width: barWidth * animationProgress.value,
@@ -189,17 +184,17 @@ const MuscleBar: React.FC<MuscleBarProps> = ({
         <Svg height={BAR_HEIGHT} width={barAreaWidth}>
           <Rect
             x={0}
-            y={4}
+            y={TRACK_VERTICAL_PADDING}
             width={barAreaWidth}
-            height={BAR_HEIGHT - 8}
-            rx={6}
+            height={TRACK_HEIGHT}
+            rx={TRACK_RADIUS}
             fill={barBg}
           />
           <AnimatedRect
             x={0}
-            y={4}
-            height={BAR_HEIGHT - 8}
-            rx={6}
+            y={TRACK_VERTICAL_PADDING}
+            height={TRACK_HEIGHT}
+            rx={TRACK_RADIUS}
             fill={barFill}
             fillOpacity={0.9}
             animatedProps={animatedProps}
@@ -264,12 +259,6 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
     marginTop: spacing.sm,
-  },
-  rangeLegend: {
-    fontSize: fontSize.xs,
-    color: 'rgba(255, 255, 255, 0.72)',
-    fontWeight: '500',
-    marginBottom: spacing.xs,
   },
   barRow: {
     flexDirection: 'row',
