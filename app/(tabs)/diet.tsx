@@ -46,7 +46,6 @@ import {
   getDashboardContentWidth,
   getPrimaryScreenHorizontalPadding,
   isTabletLayout,
-  isTabletPortraitLayout,
 } from '../../src/utils/layout';
 import {
   applyDietRotationMenuOptions,
@@ -234,7 +233,7 @@ export default function DietScreen() {
   const [isSavingSwap, setIsSavingSwap] = useState(false);
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const isTablet = isTabletLayout(width, height);
-  const isTabletPortrait = isTabletPortraitLayout(width, height);
+  const isTabletPortrait = isTablet && height > width;
 
   const selectedIngredient = selectedSwapTarget?.ingredient ?? null;
 

@@ -3,7 +3,7 @@ import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateFormShape from '../../../assets/date-form1.svg';
-import { brandColors, fontSize, spacing } from '../../constants/colors';
+import { brandColors, fontSize } from '../../constants/colors';
 import { useThemedStyles, type AppTheme } from '../../theme';
 
 const HERO_GEOMETRY = Object.freeze({
