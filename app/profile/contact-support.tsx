@@ -40,7 +40,7 @@ export default function ContactSupportScreen() {
     await openExternalUrl(
       buildSupportMailtoUrl(),
       'Correo no disponible',
-      'No pudimos abrir la aplicacion de correo en este dispositivo.',
+      'No pudimos abrir la aplicación de correo en este dispositivo.',
     );
   };
 
@@ -65,7 +65,7 @@ export default function ContactSupportScreen() {
           <Text style={styles.summaryTitle}>Estamos listos para ayudarte</Text>
           <Text style={styles.summaryDescription}>
             Comparte el mayor detalle posible sobre tu problema para darte una respuesta
-            mas rapida.
+            más rápida.
           </Text>
         </View>
       </View>
@@ -85,7 +85,9 @@ export default function ContactSupportScreen() {
         </Text>
         <Button
           title="Enviar correo"
+          appearance="profile"
           onPress={handleEmailPress}
+          fullWidth
           style={styles.channelButton}
         />
       </View>
@@ -101,12 +103,14 @@ export default function ContactSupportScreen() {
           </View>
         </View>
         <Text style={styles.channelDescription}>
-          Recomendado para resolver dudas rapidas o compartir tu problema en tiempo real.
+          Recomendado para resolver dudas rápidas o compartir tu problema en tiempo real.
         </Text>
         <Button
           title="Abrir WhatsApp"
           variant="secondary"
+          appearance="profile"
           onPress={handleWhatsAppPress}
+          fullWidth
           style={styles.channelButton}
         />
       </View>

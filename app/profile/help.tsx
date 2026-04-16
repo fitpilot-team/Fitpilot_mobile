@@ -68,7 +68,9 @@ export default function HelpScreen() {
         </Text>
         <Button
           title="Contactar soporte"
+          appearance="profile"
           onPress={() => router.push('/profile/contact-support')}
+          fullWidth
           style={styles.contactButton}
         />
       </View>

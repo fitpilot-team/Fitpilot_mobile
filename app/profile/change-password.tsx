@@ -30,21 +30,21 @@ export default function ChangePasswordScreen() {
     const nextErrors: FormErrors = {};
 
     if (!currentPassword.trim()) {
-      nextErrors.currentPassword = 'La contrasena actual es obligatoria.';
+      nextErrors.currentPassword = 'La contraseña actual es obligatoria.';
     }
 
     if (!newPassword.trim()) {
-      nextErrors.newPassword = 'La nueva contrasena es obligatoria.';
+      nextErrors.newPassword = 'La nueva contraseña es obligatoria.';
     } else if (newPassword.trim().length < 6) {
-      nextErrors.newPassword = 'La nueva contrasena debe tener al menos 6 caracteres.';
+      nextErrors.newPassword = 'La nueva contraseña debe tener al menos 6 caracteres.';
     } else if (newPassword === currentPassword) {
-      nextErrors.newPassword = 'La nueva contrasena debe ser distinta a la actual.';
+      nextErrors.newPassword = 'La nueva contraseña debe ser distinta a la actual.';
     }
 
     if (!confirmPassword.trim()) {
-      nextErrors.confirmPassword = 'Confirma tu nueva contrasena.';
+      nextErrors.confirmPassword = 'Confirma tu nueva contraseña.';
     } else if (confirmPassword !== newPassword) {
-      nextErrors.confirmPassword = 'La confirmacion no coincide con la nueva contrasena.';
+      nextErrors.confirmPassword = 'La confirmación no coincide con la nueva contraseña.';
     }
 
     setErrors(nextErrors);
@@ -69,14 +69,14 @@ export default function ChangePasswordScreen() {
       setConfirmPassword('');
 
       Alert.alert(
-        'Exito',
+        'Éxito',
         result.sessions_closed
-          ? 'Tu contrasena se actualizo y cerramos las demas sesiones activas.'
-          : 'Tu contrasena se actualizo correctamente.',
+          ? 'Tu contraseña se actualizó y cerramos las demás sesiones activas.'
+          : 'Tu contraseña se actualizó correctamente.',
         [{ text: 'OK', onPress: () => router.back() }],
       );
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'No fue posible actualizar tu contrasena.');
+      Alert.alert('Error', error.message || 'No fue posible actualizar tu contraseña.');
     } finally {
       setIsSubmitting(false);
     }
@@ -87,13 +87,17 @@ export default function ChangePasswordScreen() {
       <Button
         title="Cancelar"
         variant="secondary"
+        appearance="profile"
         onPress={() => router.back()}
+        fullWidth
         style={styles.footerButton}
       />
       <Button
-        title="Actualizar contrasena"
+        title="Actualizar contraseña"
+        appearance="profile"
         onPress={handleSubmit}
         isLoading={isSubmitting}
+        fullWidth
         style={styles.footerButton}
       />
     </View>
@@ -101,13 +105,13 @@ export default function ChangePasswordScreen() {
 
   return (
     <ProfileDetailScreen
-      title="Cambiar contrasena"
-      subtitle="Mantendremos esta sesion activa y cerraremos las demas al guardar el cambio."
+      title="Cambiar contraseña"
+      subtitle="Mantendremos esta sesión activa y cerraremos las demás al guardar el cambio."
       footer={footer}
     >
       <View style={styles.card}>
         <Input
-          label="Contrasena actual"
+          label="Contraseña actual"
           value={currentPassword}
           onChangeText={(value) => {
             setCurrentPassword(value);
@@ -119,7 +123,7 @@ export default function ChangePasswordScreen() {
         />
 
         <Input
-          label="Nueva contrasena"
+          label="Nueva contraseña"
           value={newPassword}
           onChangeText={(value) => {
             setNewPassword(value);
@@ -131,7 +135,7 @@ export default function ChangePasswordScreen() {
         />
 
         <Input
-          label="Confirmar nueva contrasena"
+          label="Confirmar nueva contraseña"
           value={confirmPassword}
           onChangeText={(value) => {
             setConfirmPassword(value);
@@ -143,7 +147,7 @@ export default function ChangePasswordScreen() {
         />
 
         <Text style={styles.helperText}>
-          La nueva contrasena debe tener al menos 6 caracteres.
+          La nueva contraseña debe tener al menos 6 caracteres.
         </Text>
       </View>
     </ProfileDetailScreen>

@@ -111,13 +111,17 @@ export default function PersonalInfoScreen() {
       <Button
         title="Cancelar"
         variant="secondary"
+        appearance="profile"
         onPress={() => router.back()}
+        fullWidth
         style={styles.footerButton}
       />
       <Button
         title="Guardar cambios"
+        appearance="profile"
         onPress={handleSubmit}
         isLoading={isSubmitting}
+        fullWidth
         style={styles.footerButton}
       />
     </View>

@@ -15,8 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
   borderRadius,
+  brandColors,
   fontSize,
-  shadows,
   spacing,
 } from '../../constants/colors';
 import { useAppTheme, useThemedStyles } from '../../theme';
@@ -50,7 +50,7 @@ export const ProfileDetailScreen: React.FC<ProfileDetailScreenProps> = ({
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            activeOpacity={0.7}
+            activeOpacity={0.9}
             onPress={() => router.back()}
           >
             <Ionicons name="arrow-back" size={20} color={theme.colors.icon} />
@@ -110,15 +110,23 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       paddingBottom: spacing.md,
     },
     backButton: {
-      width: 40,
-      height: 40,
+      width: 48,
+      height: 48,
       borderRadius: borderRadius.full,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.isDark
+        ? 'rgba(255,255,255,0.05)'
+        : 'rgba(255,255,255,0.94)',
       borderWidth: 1,
-      borderColor: theme.colors.border,
-      ...shadows.sm,
+      borderColor: theme.isDark
+        ? 'rgba(255,255,255,0.08)'
+        : 'rgba(24, 47, 80, 0.12)',
+      shadowColor: theme.isDark ? '#000000' : brandColors.navy,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: theme.isDark ? 0.22 : 0.1,
+      shadowRadius: 16,
+      elevation: 4,
     },
     headerContent: {
       flex: 1,
@@ -155,10 +163,19 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     footer: {
       paddingHorizontal: spacing.lg,
-      paddingTop: spacing.md,
-      paddingBottom: spacing.lg,
-      backgroundColor: theme.colors.background,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.xl,
+      backgroundColor: theme.isDark
+        ? 'rgba(8, 17, 31, 0.96)'
+        : 'rgba(248, 251, 255, 0.98)',
       borderTopWidth: 1,
-      borderTopColor: theme.colors.border,
+      borderTopColor: theme.isDark
+        ? 'rgba(255,255,255,0.08)'
+        : 'rgba(24, 47, 80, 0.08)',
+      shadowColor: theme.isDark ? '#000000' : brandColors.navy,
+      shadowOffset: { width: 0, height: -8 },
+      shadowOpacity: theme.isDark ? 0.2 : 0.08,
+      shadowRadius: 18,
+      elevation: 10,
     },
   });
