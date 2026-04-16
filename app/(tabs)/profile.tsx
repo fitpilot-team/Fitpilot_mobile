@@ -1,21 +1,48 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, Linking, useWindowDimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Image,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../src/store/authStore';
-import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
+import {
+  useBottomTabBarContentInset,
+  useBottomTabBarScroll,
+} from '../../src/hooks/useBottomTabBarVisibility';
 import { useCareTeam } from '../../src/hooks/useCareTeam';
-import { useAppTheme, useThemedStyles, getThemePreferenceLabel } from '../../src/theme';
+import {
+  getThemePreferenceLabel,
+  useAppTheme,
+  useThemedStyles,
+} from '../../src/theme';
 import {
   MEASUREMENT_PREFERENCE_LABELS,
   type MeasurementPreference,
   useMeasurementPreferenceStore,
 } from '../../src/store/measurementPreferenceStore';
-import { borderRadius, brandColors, fontSize, shadows, spacing } from '../../src/constants/colors';
-import { TabScreenWrapper } from '../../src/components/common';
+import {
+  borderRadius,
+  brandColors,
+  fontSize,
+  shadows,
+  spacing,
+} from '../../src/constants/colors';
+import {
+  ProfileImagePreviewModal,
+  TabScreenWrapper,
+} from '../../src/components/common';
 import { getPrimaryScreenHorizontalPadding } from '../../src/utils/layout';
+import { pickProfileImageFromLibrary } from '../../src/utils/profileImagePicker';
 
 type MenuItemProps = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -26,7 +53,14 @@ type MenuItemProps = {
   danger?: boolean;
 };
 
-const MenuItem = ({ icon, label, value, onPress, showChevron = true, danger = false }: MenuItemProps) => {
+const MenuItem = ({
+  icon,
+  label,
+  value,
+  onPress,
+  showChevron = true,
+  danger = false,
+}: MenuItemProps) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
 
@@ -37,15 +71,30 @@ const MenuItem = ({ icon, label, value, onPress, showChevron = true, danger = fa
       activeOpacity={0.7}
       disabled={!onPress}
     >
-      <View style={[styles.menuIconContainer, danger ? styles.menuIconContainerDanger : null]}>
-        <Ionicons name={icon} size={20} color={danger ? theme.colors.error : theme.colors.icon} />
+      <View
+        style={[
+          styles.menuIconContainer,
+          danger ? styles.menuIconContainerDanger : null,
+        ]}
+      >
+        <Ionicons
+          name={icon}
+          size={20}
+          color={danger ? theme.colors.error : theme.colors.icon}
+        />
       </View>
       <View style={styles.menuContent}>
-        <Text style={[styles.menuLabel, danger ? styles.menuLabelDanger : null]}>{label}</Text>
+        <Text style={[styles.menuLabel, danger ? styles.menuLabelDanger : null]}>
+          {label}
+        </Text>
         {value ? <Text style={styles.menuValue}>{value}</Text> : null}
       </View>
       {showChevron ? (
-        <Ionicons name="chevron-forward" size={20} color={theme.colors.iconMuted} />
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color={theme.colors.iconMuted}
+        />
       ) : null}
     </TouchableOpacity>
   );
@@ -54,58 +103,79 @@ const MenuItem = ({ icon, label, value, onPress, showChevron = true, danger = fa
 export default function ProfileScreen() {
   const { width, height } = useWindowDimensions();
   const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
-  const { user, logout, uploadAvatar, isLoading } = useAuthStore();
-  const { assignedCount, hasLoaded: hasLoadedCareTeam, isLoading: isLoadingCareTeam } = useCareTeam(
-    user?.id ?? null,
-  );
+  const { user, logout, uploadAvatar } = useAuthStore();
+  const {
+    assignedCount,
+    hasLoaded: hasLoadedCareTeam,
+    isLoading: isLoadingCareTeam,
+  } = useCareTeam(user?.id ?? null);
   const { preference, theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset();
-  const measurementPreference = useMeasurementPreferenceStore((state) => state.preference);
-  const initializeMeasurementPreference = useMeasurementPreferenceStore((state) => state.initialize);
-  const setMeasurementPreference = useMeasurementPreferenceStore((state) => state.setPreference);
+  const measurementPreference = useMeasurementPreferenceStore(
+    (state) => state.preference,
+  );
+  const initializeMeasurementPreference = useMeasurementPreferenceStore(
+    (state) => state.initialize,
+  );
+  const setMeasurementPreference = useMeasurementPreferenceStore(
+    (state) => state.setPreference,
+  );
+  const [hasProfileImageError, setHasProfileImageError] = useState(false);
+  const [isProfileImagePreviewVisible, setIsProfileImagePreviewVisible] = useState(false);
+  const [isProfileImageUploading, setIsProfileImageUploading] = useState(false);
 
   useEffect(() => {
     void initializeMeasurementPreference();
   }, [initializeMeasurementPreference]);
 
-  const handlePickImage = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  useEffect(() => {
+    setHasProfileImageError(false);
+  }, [user?.profilePictureUrl]);
 
-      if (status !== 'granted') {
+  const handleAvatarChange = async (uri: string) => {
+    setIsProfileImageUploading(true);
+    try {
+      await uploadAvatar(uri);
+    } finally {
+      setIsProfileImageUploading(false);
+    }
+  };
+
+  const handleCameraPress = async () => {
+    if (isProfileImageUploading) {
+      return;
+    }
+
+    try {
+      const result = await pickProfileImageFromLibrary();
+
+      if (result.status === 'permission_denied') {
         Alert.alert(
-          'Permiso denegado',
-          'Necesitamos permiso para acceder a tu galeria para cambiar tu foto de perfil.',
+          'Permiso requerido',
+          'Necesitamos acceso a tu galeria para actualizar tu foto de perfil.',
         );
         return;
       }
 
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0].uri) {
-        try {
-          await uploadAvatar(result.assets[0].uri);
-          Alert.alert('Exito', 'Foto de perfil actualizada correctamente');
-        } catch {
-          Alert.alert('Error', 'No se pudo actualizar la foto de perfil');
-        }
+      if (result.status !== 'selected') {
+        return;
       }
+
+      await handleAvatarChange(result.uri);
     } catch {
-      Alert.alert('Error', 'Ocurrio un error al seleccionar la imagen');
+      Alert.alert(
+        'No se pudo cambiar la foto',
+        'Intenta de nuevo en un momento.',
+      );
     }
   };
 
   const handleLogout = () => {
     Alert.alert(
       'Cerrar sesion',
-      'Estas seguro que deseas cerrar sesion?',
+      'Estas seguro de que deseas cerrar sesion?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -151,11 +221,28 @@ export default function ProfileScreen() {
     );
   };
 
-  const professionalsValue = !hasLoadedCareTeam && isLoadingCareTeam
-    ? 'Cargando'
-    : assignedCount > 0
-      ? `${assignedCount} asignado${assignedCount > 1 ? 's' : ''}`
-      : 'Sin asignacion';
+  const professionalsValue =
+    !hasLoadedCareTeam && isLoadingCareTeam
+      ? 'Cargando'
+      : assignedCount > 0
+        ? `${assignedCount} asignado${assignedCount > 1 ? 's' : ''}`
+        : 'Sin asignacion';
+
+  const profileImageUrl = user?.profilePictureUrl ?? undefined;
+  const hasProfileImage = Boolean(profileImageUrl && !hasProfileImageError);
+  const avatarContent = (
+    <View style={styles.avatar}>
+      {hasProfileImage ? (
+        <Image
+          source={{ uri: profileImageUrl }}
+          style={styles.avatarImage}
+          onError={() => setHasProfileImageError(true)}
+        />
+      ) : (
+        <Ionicons name="person" size={40} color={theme.colors.primary} />
+      )}
+    </View>
+  );
 
   return (
     <TabScreenWrapper>
@@ -168,7 +255,10 @@ export default function ProfileScreen() {
           style={styles.scrollView}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingHorizontal: horizontalPadding, paddingBottom: contentInsetBottom },
+            {
+              paddingHorizontal: horizontalPadding,
+              paddingBottom: contentInsetBottom,
+            },
           ]}
           onScroll={tabBarScroll.onScroll}
           scrollEventThrottle={tabBarScroll.scrollEventThrottle}
@@ -176,18 +266,23 @@ export default function ProfileScreen() {
         >
           <View style={styles.userCard}>
             <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
-                {user?.profilePictureUrl ? (
-                  <Image source={{ uri: user.profilePictureUrl }} style={styles.avatarImage} />
-                ) : (
-                  <Ionicons name="person" size={40} color={theme.colors.primary} />
-                )}
-              </View>
               <TouchableOpacity
-                style={styles.editAvatarButton}
+                activeOpacity={0.88}
+                onPress={() => setIsProfileImagePreviewVisible(true)}
+                style={styles.avatarPressable}
+              >
+                {avatarContent}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.editAvatarButton,
+                  isProfileImageUploading ? styles.editAvatarButtonDisabled : null,
+                ]}
                 activeOpacity={0.7}
-                onPress={handlePickImage}
-                disabled={isLoading}
+                onPress={() => {
+                  void handleCameraPress();
+                }}
+                disabled={isProfileImageUploading}
               >
                 <Ionicons name="camera" size={14} color="#ffffff" />
               </TouchableOpacity>
@@ -254,9 +349,11 @@ export default function ProfileScreen() {
             />
             <MenuItem
               icon="document-text-outline"
-              label="Términos y condiciones"
+              label="Terminos y condiciones"
               onPress={() => {
-                const url = process.env.EXPO_PUBLIC_TERMS_URL || 'https://pro.fitpilot.fit/es/terms';
+                const url =
+                  process.env.EXPO_PUBLIC_TERMS_URL ||
+                  'https://pro.fitpilot.fit/es/terms';
                 if (url) {
                   Linking.openURL(url);
                 } else {
@@ -266,9 +363,11 @@ export default function ProfileScreen() {
             />
             <MenuItem
               icon="shield-checkmark-outline"
-              label="Política de privacidad"
+              label="Politica de privacidad"
               onPress={() => {
-                const url = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://pro.fitpilot.fit/es/privacy';
+                const url =
+                  process.env.EXPO_PUBLIC_PRIVACY_URL ||
+                  'https://pro.fitpilot.fit/es/privacy';
                 if (url) {
                   Linking.openURL(url);
                 } else {
@@ -290,6 +389,15 @@ export default function ProfileScreen() {
 
           <Text style={styles.versionText}>FitPilot v1.0.0</Text>
         </ScrollView>
+
+        <ProfileImagePreviewModal
+          visible={isProfileImagePreviewVisible}
+          imageUrl={profileImageUrl}
+          title={user?.displayName || 'Foto de perfil'}
+          onClose={() => setIsProfileImagePreviewVisible(false)}
+          onChangeImage={handleAvatarChange}
+          isUploading={isProfileImageUploading}
+        />
       </SafeAreaView>
     </TabScreenWrapper>
   );
@@ -317,14 +425,27 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       paddingBottom: spacing.xxl,
     },
     userCard: {
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.isDark ? theme.colors.primarySoft : theme.colors.surface,
       borderRadius: borderRadius.lg,
       padding: spacing.xl,
       alignItems: 'center',
       marginBottom: spacing.lg,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      ...shadows.md,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
+      borderColor:
+        Platform.OS === 'android' && theme.isDark
+          ? 'transparent'
+          : theme.isDark
+            ? theme.colors.primaryBorder
+            : theme.colors.border,
+      ...(Platform.OS === 'android' && theme.isDark
+        ? {
+            shadowColor: 'transparent',
+            shadowOpacity: 0,
+            shadowRadius: 0,
+            shadowOffset: { width: 0, height: 0 },
+            elevation: 0,
+          }
+        : shadows.md),
     },
     avatarContainer: {
       position: 'relative',
@@ -334,10 +455,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: theme.colors.primarySoft,
+      backgroundColor: theme.isDark ? theme.colors.surfaceAlt : theme.colors.primarySoft,
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
+    },
+    avatarPressable: {
+      borderRadius: 40,
     },
     avatarImage: {
       width: '100%',
@@ -354,7 +478,10 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 2,
-      borderColor: theme.colors.surface,
+      borderColor: theme.isDark ? theme.colors.primarySoft : theme.colors.surface,
+    },
+    editAvatarButtonDisabled: {
+      opacity: 0.6,
     },
     userName: {
       fontSize: fontSize.xl,
@@ -367,7 +494,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginTop: spacing.xs,
     },
     roleBadge: {
-      backgroundColor: theme.colors.primarySoft,
+      backgroundColor: theme.isDark ? theme.colors.surface : theme.colors.primarySoft,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.xs,
       borderRadius: borderRadius.full,
