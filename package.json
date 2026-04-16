@@ -7,6 +7,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "build:android:production:local": "eas build --platform android --profile production --local",
     "lint": "eslint .",
     "typescript": "tsc --noEmit",
     "check:text-encoding": "node scripts/check-mojibake.mjs"
@@ -53,6 +54,7 @@
     "@babel/core": "^7.24.0",
     "@types/react": "~19.1.10",
     "babel-plugin-module-resolver": "^5.0.0",
+    "eas-cli": "^18.7.0",
     "eslint": "^9.39.4",
     "eslint-config-expo": "~10.0.0",
     "react-native-svg-transformer": "^1.5.3",
