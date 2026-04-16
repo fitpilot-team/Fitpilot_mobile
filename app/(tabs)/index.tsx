@@ -473,6 +473,8 @@ export default function HomeScreen() {
                 onStartPress={handleStartHighlightedSession}
                 onOpenSessions={handleOpenSessions}
                 isLoading={isStartingWorkout || (isLoading && !refreshing)}
+                muscleVolume={muscleVolume}
+                isMuscleVolumeLoading={!shouldLoadDeferredContent || isLoadingVolume}
                 contentWidth={contentWidth}
                 horizontalPadding={horizontalPadding}
               />
