@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -45,6 +46,7 @@ import {
   getDashboardContentWidth,
   getPrimaryScreenHorizontalPadding,
   isTabletLayout,
+  isTabletPortraitLayout,
 } from '../../src/utils/layout';
 import {
   applyDietRotationMenuOptions,
@@ -203,8 +205,8 @@ type LoadDietOptions = {
 
 export default function DietScreen() {
   const { width, height } = useWindowDimensions();
-  const contentWidth = getDashboardContentWidth(width);
   const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
+  const contentWidth = Math.max(0, getDashboardContentWidth(width) - horizontalPadding * 2);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
@@ -232,6 +234,7 @@ export default function DietScreen() {
   const [isSavingSwap, setIsSavingSwap] = useState(false);
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const isTablet = isTabletLayout(width, height);
+  const isTabletPortrait = isTabletPortraitLayout(width, height);
 
   const selectedIngredient = selectedSwapTarget?.ingredient ?? null;
 
@@ -915,6 +918,7 @@ export default function DietScreen() {
                   weekLabel={currentWeekLabel}
                   days={navigatorDays}
                   contentWidth={contentWidth}
+                  isTabletPortrait={isTabletPortrait}
                   showWeekButtons={isTablet}
                   accentColor={nutritionTheme.accentStrong}
                   datePickerLabel="Fecha"
@@ -942,41 +946,43 @@ export default function DietScreen() {
                 entering={getEntryAnimation(180)}
                 style={[styles.selectorSection, { paddingHorizontal: horizontalPadding }]}
               >
-                <TouchableOpacity
-                  style={[
-                    styles.selectorCard,
-                    !hasAvailableMenuOptions && styles.selectorCardDisabled,
-                  ]}
-                  onPress={handleOpenMenuSelector}
-                  disabled={!hasAvailableMenuOptions}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.selectorCopy}>
-                    <Text style={styles.selectorEyebrow}>Menu visible</Text>
-                    <Text style={styles.selectorTitle}>
-                      {visibleMenuLabel}
-                    </Text>
-                    <Text numberOfLines={2} style={styles.selectorSubtitle}>
-                      {isPreviewingMenu
-                        ? 'Estas revisando este menu antes de confirmarlo.'
-                        : hasPersistedOverride
-                          ? 'Elegiste una opcion distinta para este dia.'
-                          : selectorSubtitle}
-                    </Text>
-                  </View>
+                <View style={styles.selectorCardShell}>
+                  <TouchableOpacity
+                    style={[
+                      styles.selectorCard,
+                      !hasAvailableMenuOptions && styles.selectorCardDisabled,
+                    ]}
+                    onPress={handleOpenMenuSelector}
+                    disabled={!hasAvailableMenuOptions}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.selectorCopy}>
+                      <Text style={styles.selectorEyebrow}>Menu visible</Text>
+                      <Text style={styles.selectorTitle}>
+                        {visibleMenuLabel}
+                      </Text>
+                      <Text numberOfLines={2} style={styles.selectorSubtitle}>
+                        {isPreviewingMenu
+                          ? 'Estas revisando este menu antes de confirmarlo.'
+                          : hasPersistedOverride
+                            ? 'Elegiste una opcion distinta para este dia.'
+                            : selectorSubtitle}
+                      </Text>
+                    </View>
 
-                  <View style={styles.selectorAction}>
-                    {menuOptionsLoadingByDate[selectedDate] ? (
-                      <ActivityIndicator size="small" color={nutritionTheme.accentStrong} />
-                    ) : (
-                      <Ionicons
-                        name={hasAvailableMenuOptions ? 'chevron-forward-outline' : 'remove-outline'}
-                        size={20}
-                        color={hasAvailableMenuOptions ? nutritionTheme.accentStrong : theme.colors.iconMuted}
-                      />
-                    )}
-                  </View>
-                </TouchableOpacity>
+                    <View style={styles.selectorAction}>
+                      {menuOptionsLoadingByDate[selectedDate] ? (
+                        <ActivityIndicator size="small" color={nutritionTheme.accentStrong} />
+                      ) : (
+                        <Ionicons
+                          name={hasAvailableMenuOptions ? 'chevron-forward-outline' : 'remove-outline'}
+                          size={20}
+                          color={hasAvailableMenuOptions ? nutritionTheme.accentStrong : theme.colors.iconMuted}
+                        />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </View>
               </Animated.View>
 
               <Animated.View entering={getEntryAnimation(220)} style={styles.mealsSection}>
@@ -1199,13 +1205,16 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     selectorSection: {
       marginTop: spacing.md,
     },
+    selectorCardShell: {
+      borderRadius: borderRadius.md,
+    },
     selectorCard: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       borderRadius: borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
+      borderColor: theme.isDark ? 'rgba(36, 50, 71, 0.72)' : theme.colors.border,
       backgroundColor: theme.colors.surfaceAlt,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.sm,
@@ -1243,7 +1252,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface,
-      borderWidth: 1,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
       borderColor: theme.colors.border,
     },
     mealsSection: {

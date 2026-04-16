@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import {
   Alert,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -1594,7 +1595,18 @@ const createStyles = (theme: AppTheme) =>
     },
     summaryIntroCard: {
       backgroundColor: theme.colors.primarySoft,
-      borderColor: theme.colors.primaryBorder,
+      borderColor:
+        Platform.OS === 'android' && theme.isDark ? 'transparent' : theme.colors.primaryBorder,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
+      ...(Platform.OS === 'android' && theme.isDark
+        ? {
+            shadowColor: 'transparent',
+            shadowOpacity: 0,
+            shadowRadius: 0,
+            shadowOffset: { width: 0, height: 0 },
+            elevation: 0,
+          }
+        : {}),
     },
     summaryIntroEyebrow: {
       fontSize: fontSize.xs,
@@ -1617,6 +1629,17 @@ const createStyles = (theme: AppTheme) =>
     },
     overviewCard: {
       marginBottom: spacing.sm,
+      borderColor: Platform.OS === 'android' && theme.isDark ? 'transparent' : theme.colors.border,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
+      ...(Platform.OS === 'android' && theme.isDark
+        ? {
+            shadowColor: 'transparent',
+            shadowOpacity: 0,
+            shadowRadius: 0,
+            shadowOffset: { width: 0, height: 0 },
+            elevation: 0,
+          }
+        : {}),
     },
     overviewHeader: {
       flexDirection: 'row',

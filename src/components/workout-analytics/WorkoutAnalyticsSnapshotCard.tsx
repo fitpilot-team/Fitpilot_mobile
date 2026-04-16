@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Card } from '../common';
 import { borderRadius, fontSize, spacing } from '../../constants/colors';
 import type { WorkoutAnalyticsSnapshotSection } from '../../types';
@@ -36,6 +36,17 @@ const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     card: {
       gap: spacing.md,
+      borderColor: Platform.OS === 'android' && theme.isDark ? 'transparent' : theme.colors.border,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
+      ...(Platform.OS === 'android' && theme.isDark
+        ? {
+            shadowColor: 'transparent',
+            shadowOpacity: 0,
+            shadowRadius: 0,
+            shadowOffset: { width: 0, height: 0 },
+            elevation: 0,
+          }
+        : {}),
     },
     header: {
       gap: spacing.xs,
@@ -66,8 +77,8 @@ const createStyles = (theme: AppTheme) =>
       minWidth: '47%',
       flexGrow: 1,
       borderRadius: borderRadius.lg,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
+      borderColor: Platform.OS === 'android' && theme.isDark ? 'transparent' : theme.colors.border,
       backgroundColor: theme.colors.surface,
       padding: spacing.sm,
       gap: 4,

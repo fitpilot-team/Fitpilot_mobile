@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import Animated, {
   cancelAnimation,
   interpolate,
@@ -43,10 +44,13 @@ export const TabScreenWrapper = ({ children }: TabScreenWrapperProps) => {
   const animatedStyle = useAnimatedStyle(() => ({
     flex: 1,
     opacity: interpolate(progress.value, [FOCUS_ENTRY_START, 1], [FOCUS_ENTRY_OPACITY, 1]),
-    transform: [
-      { scale: interpolate(progress.value, [FOCUS_ENTRY_START, 1], [0.992, 1]) },
-      { translateY: interpolate(progress.value, [FOCUS_ENTRY_START, 1], [4, 0]) },
-    ],
+    transform:
+      Platform.OS === 'android'
+        ? [{ translateY: interpolate(progress.value, [FOCUS_ENTRY_START, 1], [4, 0]) }]
+        : [
+            { scale: interpolate(progress.value, [FOCUS_ENTRY_START, 1], [0.992, 1]) },
+            { translateY: interpolate(progress.value, [FOCUS_ENTRY_START, 1], [4, 0]) },
+          ],
   }));
 
   return <Animated.View style={animatedStyle}>{children}</Animated.View>;

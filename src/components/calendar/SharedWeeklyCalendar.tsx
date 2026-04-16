@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateFormShape from '../../../assets/date-form1.svg';
@@ -56,9 +56,11 @@ interface SharedWeeklyCalendarProps {
   heroSelectionMode?: SharedWeeklyCalendarHeroSelectionMode;
   density?: SharedWeeklyCalendarDensity;
   contentWidth?: number;
+  isTabletPortrait?: boolean;
 }
 
 interface CalendarMetrics {
+  usableWidth: number;
   dayGap: number;
   shapeSize: number;
   circleRadius: number;
@@ -209,6 +211,7 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
   heroSelectionMode = 'selected-or-today',
   density = 'default',
   contentWidth = 390,
+  isTabletPortrait = false,
 }) => {
   const styles = useThemedStyles(createStyles);
   const heroDayIndex = useMemo(
@@ -218,22 +221,22 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
   const hasHero = heroDayIndex !== -1;
 
   const metrics = useMemo<CalendarMetrics>(() => {
-    const usableWidth = Math.max(320, contentWidth - spacing.lg * 2);
+    const usableWidth = Math.max(0, contentWidth);
     const isCompact = usableWidth < 390;
     const isTablet = usableWidth >= 720;
-    const dayGap = isTablet ? 9 : isCompact ? 5 : 7;
-    const minBaseSlotWidth = isTablet ? 52 : isCompact ? 34 : 36;
-    const maxBaseSlotWidth = isTablet ? 74 : isCompact ? 44 : 56;
-    const defaultSlotWidth = clamp(
-      (usableWidth - dayGap * 6) / 7,
-      minBaseSlotWidth,
-      maxBaseSlotWidth,
-    );
+    const dayGap = isTabletPortrait ? 4 : isTablet ? 8 : isCompact ? 4 : 6;
+    const minBaseSlotWidth = isTabletPortrait ? 36 : isTablet ? 42 : isCompact ? 28 : 34;
+    const maxBaseSlotWidth = isTabletPortrait ? 56 : isTablet ? 68 : isCompact ? 42 : 54;
+    const computedSlotWidth = (usableWidth - dayGap * 6) / 7;
+    const defaultSlotWidth = clamp(computedSlotWidth, minBaseSlotWidth, maxBaseSlotWidth);
     const idealShapeSize = Math.max(
-      defaultSlotWidth + 54,
-      Math.min(isTablet ? 144 : 136, defaultSlotWidth + 92),
+      defaultSlotWidth + (isTabletPortrait ? 34 : isTablet ? 42 : 50),
+      Math.min(
+        isTabletPortrait ? 112 : isTablet ? 128 : 132,
+        defaultSlotWidth + (isTabletPortrait ? 56 : isTablet ? 74 : 86),
+      ),
     );
-    const heroSafePadding = isTablet ? 16 : isCompact ? 8 : 10;
+    const heroSafePadding = isTabletPortrait ? 4 : isTablet ? 10 : isCompact ? 6 : 8;
     const heroFootprintWidthRatio =
       (HERO_GEOMETRY.footprint.maxX - HERO_GEOMETRY.footprint.minX) / HERO_GEOMETRY.canvasWidth;
     const maxSelectedSlotWidth = Math.max(
@@ -258,6 +261,7 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
     const footprintMaxXScaled = HERO_GEOMETRY.footprint.maxX * scale;
 
     return {
+      usableWidth,
       dayGap,
       shapeSize,
       circleRadius,
@@ -272,9 +276,9 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
       circleCenterY: HERO_GEOMETRY.circleAnchor.y * scale,
       footprintMinXScaled,
       footprintMaxXScaled,
-      heroEdgeGutter: isTablet ? 8 : isCompact ? 2 : 4,
+      heroEdgeGutter: isTabletPortrait ? 0 : isTablet ? 8 : isCompact ? 2 : 4,
     };
-  }, [contentWidth, hasHero]);
+  }, [contentWidth, hasHero, isTabletPortrait]);
 
   const slotLayouts = useMemo(() => {
     let startX = 0;
@@ -321,14 +325,15 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
         density === 'tight-top' ? styles.containerTightTop : null,
       ]}
     >
-      <View
-        style={[
-          styles.daysRow,
-          {
-            gap: metrics.dayGap,
-          },
-        ]}
-      >
+        <View
+          style={[
+            styles.daysRow,
+            {
+              gap: metrics.dayGap,
+              width: metrics.usableWidth || undefined,
+            },
+          ]}
+        >
         {days.map((day, index) => {
           const slotLayout = slotLayouts[index];
           const showSpecialShape = slotLayout?.showSpecialShape ?? false;
@@ -574,7 +579,7 @@ const createStyles = (theme: AppTheme) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surfaceAlt,
-      borderWidth: 1,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
       borderColor: theme.colors.border,
     },
     dateCircleSelectedGhost: {
