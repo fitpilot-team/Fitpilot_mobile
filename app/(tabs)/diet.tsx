@@ -207,6 +207,54 @@ const getCitationHostname = (url: string) => {
   return hostname?.replace(/^www\./, '') || url;
 };
 
+const normalizeExchangeSystemName = (value: string | null | undefined) =>
+  value?.trim().replace(/\s+/g, ' ') ?? '';
+
+const resolveExchangeSystemLabels = (value: string | null | undefined) => {
+  const normalizedName = normalizeExchangeSystemName(value);
+  const fallbackLabel = 'Sistema del plan';
+  const smaeBaseName = 'Sistema Mexicano de Alimentos Equivalentes';
+
+  if (!normalizedName) {
+    return {
+      shortLabel: fallbackLabel,
+      collapsedSubtitle: null,
+      expandedLabel: fallbackLabel,
+    };
+  }
+
+  if (
+    normalizedName.toUpperCase().includes('SMAE') ||
+    normalizedName.toLowerCase() === smaeBaseName.toLowerCase()
+  ) {
+    return {
+      shortLabel: 'SMAE',
+      collapsedSubtitle: smaeBaseName,
+      expandedLabel: normalizedName.includes('(SMAE)')
+        ? normalizedName
+        : `${smaeBaseName} (SMAE)`,
+    };
+  }
+
+  const acronymMatch = normalizedName.match(/\(([^()]{2,12})\)\s*$/);
+  if (!acronymMatch) {
+    return {
+      shortLabel: normalizedName,
+      collapsedSubtitle: null,
+      expandedLabel: normalizedName,
+    };
+  }
+
+  const acronym = acronymMatch[1].trim();
+  const baseName = normalizedName.replace(/\s*\([^()]{2,12}\)\s*$/, '').trim();
+
+  return {
+    shortLabel: acronym || normalizedName,
+    collapsedSubtitle: baseName || null,
+    expandedLabel: normalizedName,
+  };
+};
+
 type LoadDietOptions = {
   mode?: 'initial' | 'refresh';
   anchorDate: string;
@@ -513,11 +561,21 @@ export default function DietScreen() {
   const sourceCountLabel = buildCitationCountLabel(visibleMenuSourceCitations.length);
   const hasSourceCitations = visibleMenuSourceCitations.length > 0;
   const previewCitation = visibleMenuSourceCitations[0] ?? null;
+  const exchangeSystemLabels = useMemo(
+    () => resolveExchangeSystemLabels(visibleMenuExchangeSystem?.name),
+    [visibleMenuExchangeSystem?.name],
+  );
   const displayedSourceCitations = isSourcesExpanded
     ? visibleMenuSourceCitations
     : previewCitation
       ? [previewCitation]
       : [];
+  const visibleSourceSystemLabel = isSourcesExpanded
+    ? exchangeSystemLabels.expandedLabel
+    : exchangeSystemLabels.shortLabel;
+  const visibleSourceSystemSubtitle = !isSourcesExpanded
+    ? exchangeSystemLabels.collapsedSubtitle
+    : null;
 
   const hasHydratedOptionsForSelectedDate = Boolean(menuOptionsHydratedByDate[selectedDate]);
   const hasAvailableMenuOptions = Boolean(selectedDay) && (
@@ -1001,10 +1059,18 @@ export default function DietScreen() {
                   <Card style={styles.sourcesCard}>
                     <View style={styles.sourcesHeader}>
                       <View style={styles.sourcesHeaderCopy}>
-                        <Text style={styles.sourcesEyebrow}>Fuentes del plan</Text>
-                        <Text style={styles.sourcesTitle}>
-                          {visibleMenuExchangeSystem?.name ?? 'Sistema del plan'}
+                        <Text style={styles.sourcesEyebrow}>Fuentes</Text>
+                        <Text
+                          numberOfLines={isSourcesExpanded ? 3 : visibleSourceSystemSubtitle ? 1 : 2}
+                          style={styles.sourcesTitle}
+                        >
+                          {visibleSourceSystemLabel}
                         </Text>
+                        {visibleSourceSystemSubtitle ? (
+                          <Text numberOfLines={1} style={styles.sourcesSystemSubtitle}>
+                            {visibleSourceSystemSubtitle}
+                          </Text>
+                        ) : null}
                         <View style={styles.sourcesMetaRow}>
                           <View style={styles.sourcesCountBadge}>
                             <Text style={styles.sourcesCountText}>
@@ -1013,7 +1079,7 @@ export default function DietScreen() {
                           </View>
                           {previewCitation && !isSourcesExpanded ? (
                             <Text numberOfLines={1} style={styles.sourcesPreviewHint}>
-                              Referencia visible desde esta vista
+                              Fuente visible aqui
                             </Text>
                           ) : null}
                         </View>
@@ -1027,8 +1093,8 @@ export default function DietScreen() {
                           accessibilityRole="button"
                           accessibilityLabel={
                             isSourcesExpanded
-                              ? 'Ocultar fuentes del plan'
-                              : `Ver ${sourceCountLabel} del plan`
+                              ? 'Ocultar fuentes'
+                              : `Ver ${sourceCountLabel}`
                           }
                         >
                           <Text style={styles.sourcesToggleText}>
@@ -1092,7 +1158,7 @@ export default function DietScreen() {
 
                     {!isSourcesExpanded && visibleMenuSourceCitations.length > 1 ? (
                       <Text style={styles.sourcesCollapsedNote}>
-                        Mostrando 1 de {visibleMenuSourceCitations.length} fuentes disponibles.
+                        1 de {visibleMenuSourceCitations.length} fuentes
                       </Text>
                     ) : null}
 
@@ -1380,6 +1446,11 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       color: theme.colors.textPrimary,
       fontSize: fontSize.sm,
       fontWeight: '800',
+    },
+    sourcesSystemSubtitle: {
+      color: theme.colors.textSecondary,
+      fontSize: fontSize.xs,
+      lineHeight: 18,
     },
     sourcesMetaRow: {
       flexDirection: 'row',

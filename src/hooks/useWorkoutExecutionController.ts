@@ -43,6 +43,7 @@ import {
   type MovementExecutionDraft,
   type StrengthExecutionDraft,
   type WorkoutExecutionDraft,
+  type WorkoutExecutionDraftOptions,
 } from '../utils/workoutSession';
 import type { WorkoutMutationResult } from '../store/workoutStore';
 
@@ -108,6 +109,12 @@ type UseWorkoutExecutionControllerParams = {
   deleteStrengthSet: (dayExerciseId: string, setNumber: number) => Promise<WorkoutMutationResult>;
   deleteCardioBlock: (cardioLogId: string) => Promise<WorkoutMutationResult>;
   deleteMovementBlock: (movementLogId: string) => Promise<WorkoutMutationResult>;
+};
+
+type ExecutionDraftTarget = {
+  dayExerciseId?: string;
+  exerciseIndex?: number;
+  setNumber?: number;
 };
 
 const getWorkoutScreenMode = (
@@ -273,7 +280,6 @@ export const useWorkoutExecutionController = ({
   const isReviewMode = screenMode === 'review';
   const isLiveMode = screenMode === 'live';
   const isHistoricalEditMode = screenMode === 'historicalEdit';
-  const shouldPrefillStrengthWeightFromFirstSet = isLiveMode;
 
   const capabilities = useMemo<WorkoutModeCapabilities>(
     () => ({
@@ -302,19 +308,21 @@ export const useWorkoutExecutionController = ({
   }, []);
 
   const createExecutionDraft = useCallback(
-    (nextWorkoutState: CurrentWorkoutState, target?: { dayExerciseId?: string; exerciseIndex?: number; setNumber?: number }) =>
-      createWorkoutExecutionDraft(nextWorkoutState, target, {
-        prefillStrengthWeightFromFirstSet: shouldPrefillStrengthWeightFromFirstSet,
-      }),
-    [shouldPrefillStrengthWeightFromFirstSet],
+    (
+      nextWorkoutState: CurrentWorkoutState,
+      target?: ExecutionDraftTarget,
+      options?: WorkoutExecutionDraftOptions,
+    ) => createWorkoutExecutionDraft(nextWorkoutState, target, options),
+    [],
   );
 
   const hydrateExecutionDraft = useCallback(
-    (nextWorkoutState: CurrentWorkoutState, draft: WorkoutExecutionDraft | null | undefined) =>
-      hydrateWorkoutExecutionDraft(nextWorkoutState, draft, {
-        prefillStrengthWeightFromFirstSet: shouldPrefillStrengthWeightFromFirstSet,
-      }),
-    [shouldPrefillStrengthWeightFromFirstSet],
+    (
+      nextWorkoutState: CurrentWorkoutState,
+      draft: WorkoutExecutionDraft | null | undefined,
+      options?: WorkoutExecutionDraftOptions,
+    ) => hydrateWorkoutExecutionDraft(nextWorkoutState, draft, options),
+    [],
   );
 
   useEffect(() => {
@@ -555,8 +563,12 @@ export const useWorkoutExecutionController = ({
   }, []);
 
   const syncActiveExecution = useCallback(
-    (nextWorkoutState: CurrentWorkoutState, target?: { dayExerciseId?: string; exerciseIndex?: number; setNumber?: number }) => {
-      const nextDraft = createExecutionDraft(nextWorkoutState, target);
+    (
+      nextWorkoutState: CurrentWorkoutState,
+      target?: ExecutionDraftTarget,
+      options?: WorkoutExecutionDraftOptions,
+    ) => {
+      const nextDraft = createExecutionDraft(nextWorkoutState, target, options);
       if (nextDraft) {
         setActiveExecution(nextDraft);
       }
@@ -833,6 +845,7 @@ export const useWorkoutExecutionController = ({
         nextSetNumber?: number;
         cardioDurationSeconds?: number;
         movementDurationSeconds?: number;
+        draftOptions?: WorkoutExecutionDraftOptions;
       },
     ) => {
       const { draft } = resolvedExecution;
@@ -876,7 +889,7 @@ export const useWorkoutExecutionController = ({
         // When changing to a different exercise, do NOT fall back to the current set number —
         // let createWorkoutExecutionDraft default to set 1 for the new exercise.
         setNumber: isChangingExercise ? options?.nextSetNumber : (options?.nextSetNumber ?? resolvedExecution.draft.currentSetNumber),
-      });
+      }, options?.draftOptions);
 
       return mutationResult.state;
     },
@@ -904,6 +917,9 @@ export const useWorkoutExecutionController = ({
         workoutState.exercises_progress,
         resolvedExecution.context.exerciseIndex,
       );
+      const shouldPrefillNextStrengthSet =
+        isStrengthExecutionDraft(resolvedExecution.draft) &&
+        resolvedExecution.draft.currentSetNumber < totalSets;
       const nextWorkoutState = await persistExecution(resolvedExecution, {
         nextExerciseIndex:
           resolvedExecution.draft.currentSetNumber >= totalSets
@@ -915,6 +931,9 @@ export const useWorkoutExecutionController = ({
             : Math.min(resolvedExecution.draft.currentSetNumber + 1, totalSets),
         cardioDurationSeconds: options?.cardioDurationSeconds,
         movementDurationSeconds: options?.movementDurationSeconds,
+        draftOptions: shouldPrefillNextStrengthSet
+          ? { strengthPrefillStrategy: 'previousCompletedSet' }
+          : undefined,
       });
 
       setExecutionInProgress((previous) => ({ ...previous, [executionKey]: false }));

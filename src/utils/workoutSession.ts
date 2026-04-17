@@ -85,8 +85,8 @@ type MovementDraftValues = {
   restSeconds: number;
 };
 
-type WorkoutExecutionDraftOptions = {
-  prefillStrengthWeightFromFirstSet?: boolean;
+export type WorkoutExecutionDraftOptions = {
+  strengthPrefillStrategy?: 'none' | 'previousCompletedSet';
 };
 
 export type WorkoutCardioBlockInput = {
@@ -254,34 +254,24 @@ const normalizeSegmentDrafts = (
   return normalizedSegments.map((segment, index) => cloneSegmentDraft(segment, index + 1));
 };
 
-const prefillStrengthWeightsFromFirstSet = (
-  dayExercise: DayExercise | undefined,
+const getPreviousCompletedSet = (
   progress: ExerciseProgress | undefined,
-  currentSegments: WorkoutSetSegmentDraft[],
-): WorkoutSetSegmentDraft[] => {
-  const firstSet = progress?.sets_data?.find((setGroup) => setGroup.set_number === 1);
-  if (!firstSet?.segments?.length) {
-    return currentSegments;
-  }
-
-  const firstSetSegments = normalizeSegmentDrafts(dayExercise, firstSet.segments);
-  let hasPrefilledWeight = false;
-
-  const nextSegments = currentSegments.map((segment, index) => {
-    const sourceWeight = firstSetSegments[index]?.weight_kg;
-    if (sourceWeight == null || sourceWeight <= 0) {
-      return segment;
+  targetSetNumber: number,
+): WorkoutSetGroup | undefined =>
+  (progress?.sets_data ?? []).reduce<WorkoutSetGroup | undefined>((closestSet, setGroup) => {
+    if (
+      setGroup.set_number >= targetSetNumber ||
+      (setGroup.segments?.length ?? 0) === 0
+    ) {
+      return closestSet;
     }
 
-    hasPrefilledWeight = true;
-    return {
-      ...segment,
-      weight_kg: sourceWeight,
-    };
-  });
+    if (!closestSet || setGroup.set_number > closestSet.set_number) {
+      return setGroup;
+    }
 
-  return hasPrefilledWeight ? nextSegments : currentSegments;
-};
+    return closestSet;
+  }, undefined);
 
 export const getStrengthDraftValues = (
   dayExercise?: DayExercise,
@@ -292,17 +282,18 @@ export const getStrengthDraftValues = (
   const preferredSet = targetSetNumber
     ? progress?.sets_data?.find((setGroup) => setGroup.set_number === targetSetNumber)
     : undefined;
-  const templateSegments = preferredSet?.segments ?? null;
-  const currentSegments = normalizeSegmentDrafts(dayExercise, templateSegments);
-  const shouldPrefillFromFirstSet =
-    options?.prefillStrengthWeightFromFirstSet &&
+  const shouldPrefillFromPreviousCompletedSet =
+    options?.strengthPrefillStrategy === 'previousCompletedSet' &&
     !preferredSet &&
     (targetSetNumber ?? 1) > 1;
+  const previousCompletedSet = shouldPrefillFromPreviousCompletedSet && targetSetNumber
+    ? getPreviousCompletedSet(progress, targetSetNumber)
+    : undefined;
+  const templateSegments = preferredSet?.segments ?? previousCompletedSet?.segments ?? null;
+  const currentSegments = normalizeSegmentDrafts(dayExercise, templateSegments);
 
   return {
-    currentSegments: shouldPrefillFromFirstSet
-      ? prefillStrengthWeightsFromFirstSet(dayExercise, progress, currentSegments)
-      : currentSegments,
+    currentSegments,
     restSeconds: dayExercise?.interval_rest_seconds || dayExercise?.rest_seconds || 90,
   };
 };
