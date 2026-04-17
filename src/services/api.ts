@@ -75,7 +75,6 @@ const TRAINING_API_URL = resolveRequiredUrl(
   process.env.EXPO_PUBLIC_TRAINING_API_URL || extra.trainingApiUrl,
   'EXPO_PUBLIC_TRAINING_API_URL',
 );
-const TRAINING_ASSET_BASE_URL = new URL(TRAINING_API_URL).origin;
 
 if (__DEV__) {
   console.log('[API] nutrition base URL:', NUTRITION_API_URL);
@@ -382,16 +381,40 @@ attachAuthInterceptors(trainingApi, 'training');
 export const nutritionClient = createClient(nutritionApi);
 export const trainingClient = createClient(trainingApi);
 
-export const getAssetUrl = (relativePath: string | null | undefined): string | null => {
-  if (!relativePath) return null;
-
-  if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
-    return relativePath;
+const resolveAbsoluteUrl = (
+  relativePath: string | null | undefined,
+  baseUrl: string,
+): string | null => {
+  const trimmedPath = relativePath?.trim();
+  if (!trimmedPath) {
+    return null;
   }
 
-  const normalizedPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-  return new URL(normalizedPath, `${TRAINING_ASSET_BASE_URL}/`).toString();
+  if (trimmedPath.startsWith('http://') || trimmedPath.startsWith('https://')) {
+    return trimmedPath;
+  }
+
+  const parsedBaseUrl = new URL(baseUrl);
+  const originBaseUrl = `${parsedBaseUrl.origin}/`;
+  const apiBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+
+  if (trimmedPath.startsWith('/')) {
+    return new URL(trimmedPath, originBaseUrl).toString();
+  }
+
+  return new URL(trimmedPath, apiBaseUrl).toString();
 };
+
+export const getNutritionAssetUrl = (
+  relativePath: string | null | undefined,
+): string | null => resolveAbsoluteUrl(relativePath, NUTRITION_API_URL);
+
+export const getTrainingAssetUrl = (
+  relativePath: string | null | undefined,
+): string | null => resolveAbsoluteUrl(relativePath, TRAINING_API_URL);
+
+export const getAssetUrl = (relativePath: string | null | undefined): string | null =>
+  getTrainingAssetUrl(relativePath);
 
 export const getVideoThumbnailUrl = (videoUrl: string | null | undefined): string | null => {
   if (!videoUrl) return null;

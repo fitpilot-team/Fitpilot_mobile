@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -7,6 +8,8 @@ import {
   Platform,
   ScrollView,
   Dimensions,
+  Linking,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -15,6 +18,7 @@ import { useAuthStore } from '../src/store/authStore';
 import { Button, Input, Logo } from '../src/components/common';
 import { TurnstileChallengeModal } from '../src/components/auth/TurnstileChallengeModal';
 import { brandColors, spacing, fontSize, borderRadius } from '../src/constants/colors';
+import { clientForgotPasswordUrl } from '../src/constants/support';
 import { useThemedStyles, type AppTheme } from '../src/theme';
 import type { LoginCredentials } from '../src/types';
 
@@ -103,6 +107,29 @@ export default function LoginScreen() {
     });
   };
 
+  const handleForgotPassword = async () => {
+    if (!clientForgotPasswordUrl) {
+      Alert.alert(
+        'Enlace no disponible',
+        'Todavia no hay una URL configurada para restablecer la contrasena.',
+      );
+      return;
+    }
+
+    try {
+      await Linking.openURL(clientForgotPasswordUrl);
+    } catch (forgotPasswordError) {
+      if (__DEV__) {
+        console.warn('[Auth] forgot password link error', forgotPasswordError);
+      }
+
+      Alert.alert(
+        'No se pudo abrir el enlace',
+        'Intenta de nuevo en unos minutos o contacta a soporte.',
+      );
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -172,6 +199,10 @@ export default function LoginScreen() {
           autoComplete="password"
           icon="lock-closed-outline"
         />
+
+        <Pressable onPress={handleForgotPassword} style={styles.forgotPasswordLink}>
+          <Text style={styles.forgotPasswordText}>Olvide mi contraseña</Text>
+        </Pressable>
 
         <Button
           title="Iniciar sesion"
@@ -292,6 +323,15 @@ const createStyles = (theme: AppTheme) =>
     },
     loginButton: {
       marginTop: spacing.md,
+    },
+    forgotPasswordLink: {
+      alignSelf: 'flex-end',
+      marginTop: spacing.xs,
+    },
+    forgotPasswordText: {
+      color: brandColors.sky,
+      fontSize: fontSize.sm,
+      fontWeight: '600',
     },
     infoCard: {
       marginTop: spacing.xl,
