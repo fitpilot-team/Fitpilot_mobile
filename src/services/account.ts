@@ -53,10 +53,6 @@ export const mapNutritionUserToUser = (payload: NutritionAuthUserResponse): User
     onboardingStatus: payload.onboarding_status ?? null,
     profilePictureUrl: payload.profile_picture ?? null,
     professionalRoles: normalizeProfessionalRoles(payload.professional_role),
-    currentSubscription: payload.current_subscription ?? null,
-    hasSubscription: payload.has_subscription ?? false,
-    hasActiveSubscription: payload.has_active_subscription ?? false,
-    subscriptionVigency: payload.subscription_vigency ?? null,
   };
 };
 
