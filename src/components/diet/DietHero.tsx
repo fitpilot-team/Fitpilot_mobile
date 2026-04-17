@@ -56,7 +56,7 @@ export const DietHero: React.FC<DietHeroProps> = ({
     >
       <View style={styles.topRow}>
         <View style={[styles.badge, { backgroundColor: badgeBg }]}>
-          <Ionicons name={badgeIcon} size={12} color={textPrimary} />
+          <Ionicons name={badgeIcon} size={11} color={textPrimary} />
           <Text style={[styles.badgeText, { color: textPrimary }]}>{badgeLabel}</Text>
         </View>
       </View>
@@ -82,7 +82,8 @@ export const DietHero: React.FC<DietHeroProps> = ({
 const styles = StyleSheet.create({
   container: {
     borderRadius: borderRadius.xl,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 18,
     ...shadows.lg,
   },
   topRow: {
@@ -92,34 +93,34 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: borderRadius.full,
     backgroundColor: 'rgba(255,255,255,0.14)',
   },
   badgeText: {
     color: colors.white,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   title: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xs + 2,
     color: colors.white,
-    fontSize: fontSize['2xl'],
+    fontSize: fontSize.xl,
     fontWeight: '800',
   },
   subtitle: {
-    marginTop: 10,
+    marginTop: 6,
     color: 'rgba(255,255,255,0.8)',
     fontSize: fontSize.sm,
-    lineHeight: 20,
+    lineHeight: 18,
   },
   statsRail: {
     flexDirection: 'row',
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     borderRadius: borderRadius.lg,
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
@@ -128,8 +129,8 @@ const styles = StyleSheet.create({
   },
   statItem: {
     flex: 1,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
   },
   statDivider: {
     width: 1,
@@ -137,11 +138,11 @@ const styles = StyleSheet.create({
   },
   statValue: {
     color: colors.white,
-    fontSize: fontSize.lg,
+    fontSize: fontSize.base,
     fontWeight: '800',
   },
   statLabel: {
-    marginTop: 2,
+    marginTop: 1,
     color: 'rgba(255,255,255,0.68)',
     fontSize: fontSize.xs,
     fontWeight: '600',

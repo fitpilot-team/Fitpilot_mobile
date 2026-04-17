@@ -197,6 +197,16 @@ const applyUpdatedMenuToWeekDays = (
 
 const buildDietMenuLabel = (index: number) => `Menu ${index + 1}`;
 
+const buildCitationCountLabel = (count: number) => `${count} fuente${count === 1 ? '' : 's'}`;
+
+const getCitationHostname = (url: string) => {
+  const hostname =
+    url.match(/^https?:\/\/([^/]+)/i)?.[1] ??
+    url.replace(/^https?:\/\//, '').split('/')[0];
+
+  return hostname?.replace(/^www\./, '') || url;
+};
+
 type LoadDietOptions = {
   mode?: 'initial' | 'refresh';
   anchorDate: string;
@@ -233,6 +243,7 @@ export default function DietScreen() {
   const [swapFoodsError, setSwapFoodsError] = useState<string | null>(null);
   const [isSavingSwap, setIsSavingSwap] = useState(false);
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
+  const [isSourcesExpanded, setIsSourcesExpanded] = useState(false);
   const isTablet = isTabletLayout(width, height);
   const isTabletPortrait = isTablet && height > width;
 
@@ -490,13 +501,23 @@ export default function DietScreen() {
     ? menuLabelsById.get(visibleMenu.menuId) ?? buildDietMenuLabel(0)
     : 'Sin menu asignado';
   const visibleMenuExchangeSystem = visibleMenu?.exchangeSystem ?? null;
-  const visibleMenuSourceCitations = (visibleMenuExchangeSystem?.citations ?? [])
-    .slice()
-    .sort(
-      (left, right) =>
-        left.sortOrder - right.sortOrder || left.title.localeCompare(right.title),
-    )
-    .slice(0, 2);
+  const visibleMenuSourceCitations = useMemo(
+    () => (visibleMenuExchangeSystem?.citations ?? [])
+      .slice()
+      .sort(
+        (left, right) =>
+          left.sortOrder - right.sortOrder || left.title.localeCompare(right.title),
+      ),
+    [visibleMenuExchangeSystem],
+  );
+  const sourceCountLabel = buildCitationCountLabel(visibleMenuSourceCitations.length);
+  const hasSourceCitations = visibleMenuSourceCitations.length > 0;
+  const previewCitation = visibleMenuSourceCitations[0] ?? null;
+  const displayedSourceCitations = isSourcesExpanded
+    ? visibleMenuSourceCitations
+    : previewCitation
+      ? [previewCitation]
+      : [];
 
   const hasHydratedOptionsForSelectedDate = Boolean(menuOptionsHydratedByDate[selectedDate]);
   const hasAvailableMenuOptions = Boolean(selectedDay) && (
@@ -521,6 +542,10 @@ export default function DietScreen() {
       clearPreviewMenuForDate(selectedDate);
     }
   }, [clearPreviewMenuForDate, previewMenu, selectedDate, selectedPreviewMenuId]);
+
+  useEffect(() => {
+    setIsSourcesExpanded(false);
+  }, [selectedDate, visibleMenu?.menuId]);
 
   const navigatorDays = useMemo<SharedWeeklyCalendarDay[]>(
     () =>
@@ -704,6 +729,10 @@ export default function DietScreen() {
     } catch {
       Alert.alert('Fuente no disponible', 'No fue posible abrir este enlace.');
     }
+  }, []);
+
+  const handleToggleSources = useCallback(() => {
+    setIsSourcesExpanded((currentState) => !currentState);
   }, []);
 
   const loadSwapFoods = useCallback(async (ingredient: ClientDietIngredientRow | null) => {
@@ -970,16 +999,53 @@ export default function DietScreen() {
                   style={[styles.sourcesSection, { paddingHorizontal: horizontalPadding }]}
                 >
                   <Card style={styles.sourcesCard}>
-                    <View style={styles.sourceCopy}>
-                      <Text style={styles.sourcesEyebrow}>Fuentes del plan</Text>
-                      <Text style={styles.sourcesTitle}>
-                        {visibleMenuExchangeSystem?.name ?? 'Sistema del plan'}
-                      </Text>
+                    <View style={styles.sourcesHeader}>
+                      <View style={styles.sourcesHeaderCopy}>
+                        <Text style={styles.sourcesEyebrow}>Fuentes del plan</Text>
+                        <Text style={styles.sourcesTitle}>
+                          {visibleMenuExchangeSystem?.name ?? 'Sistema del plan'}
+                        </Text>
+                        <View style={styles.sourcesMetaRow}>
+                          <View style={styles.sourcesCountBadge}>
+                            <Text style={styles.sourcesCountText}>
+                              {visibleMenuSourceCitations.length > 0 ? sourceCountLabel : 'Sin fuentes'}
+                            </Text>
+                          </View>
+                          {previewCitation && !isSourcesExpanded ? (
+                            <Text numberOfLines={1} style={styles.sourcesPreviewHint}>
+                              Referencia visible desde esta vista
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+
+                      {hasSourceCitations ? (
+                        <TouchableOpacity
+                          style={styles.sourcesToggle}
+                          onPress={handleToggleSources}
+                          activeOpacity={0.85}
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            isSourcesExpanded
+                              ? 'Ocultar fuentes del plan'
+                              : `Ver ${sourceCountLabel} del plan`
+                          }
+                        >
+                          <Text style={styles.sourcesToggleText}>
+                            {isSourcesExpanded ? 'Ocultar' : 'Ver fuentes'}
+                          </Text>
+                          <Ionicons
+                            name={isSourcesExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+                            size={16}
+                            color={nutritionTheme.accentStrong}
+                          />
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
 
-                    {visibleMenuSourceCitations.length > 0 ? (
+                    {displayedSourceCitations.length > 0 ? (
                       <View style={styles.sourcesList}>
-                        {visibleMenuSourceCitations.map((citation) => (
+                        {displayedSourceCitations.map((citation) => (
                           <TouchableOpacity
                             key={`${citation.sortOrder}-${citation.url}`}
                             style={styles.sourceLink}
@@ -988,22 +1054,30 @@ export default function DietScreen() {
                             }}
                             activeOpacity={0.85}
                             accessibilityRole="button"
-                            accessibilityLabel={`Abrir fuente ${citation.title}`}
+                            accessibilityLabel={`Abrir fuente ${citation.title}${citation.publisher ? ` de ${citation.publisher}` : ''}`}
                           >
                             <View style={styles.sourceCopy}>
-                              <Text style={styles.sourceTitle}>{citation.title}</Text>
+                              <Text
+                                numberOfLines={isSourcesExpanded ? 2 : 1}
+                                style={styles.sourceTitle}
+                              >
+                                {citation.title}
+                              </Text>
                               {citation.publisher ? (
-                                <Text style={styles.sourcePublisher}>{citation.publisher}</Text>
+                                <Text numberOfLines={1} style={styles.sourcePublisher}>
+                                  {citation.publisher}
+                                </Text>
                               ) : null}
                               <Text numberOfLines={1} style={styles.sourceUrl}>
-                                {citation.url}
+                                {getCitationHostname(citation.url)}
                               </Text>
                             </View>
 
-                            <View style={styles.sourceAction}>
+                            <View style={styles.sourceActionPill}>
+                              <Text style={styles.sourceActionText}>Abrir</Text>
                               <Ionicons
                                 name="open-outline"
-                                size={18}
+                                size={13}
                                 color={nutritionTheme.accentStrong}
                               />
                             </View>
@@ -1012,10 +1086,15 @@ export default function DietScreen() {
                       </View>
                     ) : (
                       <Text style={styles.sourceEmptyState}>
-                        La referencia oficial de este sistema se mostrara aqui cuando este
-                        disponible.
+                        La referencia oficial de este sistema aparecera aqui cuando este disponible.
                       </Text>
                     )}
+
+                    {!isSourcesExpanded && visibleMenuSourceCitations.length > 1 ? (
+                      <Text style={styles.sourcesCollapsedNote}>
+                        Mostrando 1 de {visibleMenuSourceCitations.length} fuentes disponibles.
+                      </Text>
+                    ) : null}
 
                     <Text style={styles.sourcesDescription}>
                       Consulta a tu medico antes de tomar decisiones medicas.
@@ -1274,17 +1353,21 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginTop: spacing.md,
     },
     sourcesCard: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.md,
+      padding: spacing.md,
       borderWidth: 1,
       borderColor: theme.colors.primaryBorder,
       backgroundColor: theme.colors.primarySoft,
     },
     sourcesHeader: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'space-between',
       gap: spacing.sm,
+    },
+    sourcesHeaderCopy: {
+      flex: 1,
+      gap: spacing.xs,
+      paddingRight: spacing.sm,
     },
     sourcesEyebrow: {
       color: nutritionTheme.accentStrong,
@@ -1295,18 +1378,58 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     sourcesTitle: {
       color: theme.colors.textPrimary,
-      fontSize: fontSize.base,
+      fontSize: fontSize.sm,
       fontWeight: '800',
+    },
+    sourcesMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+    },
+    sourcesCountBadge: {
+      borderRadius: borderRadius.full,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+    },
+    sourcesCountText: {
+      color: nutritionTheme.accentStrong,
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+    },
+    sourcesPreviewHint: {
+      flexShrink: 1,
+      color: theme.colors.textMuted,
+      fontSize: fontSize.xs,
+    },
+    sourcesToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      borderRadius: borderRadius.full,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+    },
+    sourcesToggleText: {
+      color: nutritionTheme.accentStrong,
+      fontSize: fontSize.xs,
+      fontWeight: '700',
     },
     sourcesDescription: {
       marginTop: spacing.sm,
       color: theme.colors.textMuted,
-      fontSize: fontSize.sm,
-      lineHeight: 20,
+      fontSize: fontSize.xs,
+      lineHeight: 18,
     },
     sourcesList: {
       marginTop: spacing.sm,
-      gap: spacing.sm,
+      gap: spacing.xs,
     },
     sourceLink: {
       borderRadius: borderRadius.md,
@@ -1317,8 +1440,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: spacing.sm,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.xs,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
     },
     sourceCopy: {
       flex: 1,
@@ -1329,15 +1452,21 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       fontSize: fontSize.sm,
       fontWeight: '700',
     },
-    sourceAction: {
-      width: 38,
-      height: 38,
+    sourceActionPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
       borderRadius: borderRadius.full,
       borderWidth: 1,
       borderColor: theme.colors.primaryBorder,
       backgroundColor: theme.colors.surface,
-      alignItems: 'center',
-      justifyContent: 'center',
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+    },
+    sourceActionText: {
+      color: nutritionTheme.accentStrong,
+      fontSize: fontSize.xs,
+      fontWeight: '700',
     },
     sourcePublisher: {
       color: theme.colors.textSecondary,
@@ -1351,8 +1480,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     sourceEmptyState: {
       marginTop: spacing.sm,
       color: theme.colors.textMuted,
-      fontSize: fontSize.sm,
-      lineHeight: 20,
+      fontSize: fontSize.xs,
+      lineHeight: 18,
+    },
+    sourcesCollapsedNote: {
+      marginTop: spacing.xs,
+      color: theme.colors.textMuted,
+      fontSize: fontSize.xs,
     },
     sectionHeader: {
       marginTop: spacing.lg,
