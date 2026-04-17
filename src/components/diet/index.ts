@@ -1,5 +1,5 @@
 export { DietHero } from './DietHero';
 export { DietMenuSelectorModal } from './DietMenuSelectorModal';
 export { DietMealCard } from './DietMealCard';
-export { SmaeGroupIcon } from './SmaeGroupIcon';
+export { ExchangeGroupIcon } from './ExchangeGroupIcon';
 export { RecipeIngredientSwapModal } from './RecipeIngredientSwapModal';

@@ -29,9 +29,17 @@ export interface NutritionAuthUserResponse {
 }
 
 export interface Citation {
+  sortOrder: number;
   title: string;
   url: string;
   publisher?: string | null;
+}
+
+export interface ClientDietExchangeSystem {
+  id: number;
+  name: string;
+  countryCode?: string | null;
+  citations: Citation[];
 }
 
 export interface LoginCredentials {
@@ -876,7 +884,7 @@ export interface ClientDietMenu {
   assignedDate: string;
   title: string;
   description: string | null;
-  citations: Citation[];
+  exchangeSystem: ClientDietExchangeSystem | null;
   meals: ClientDietMeal[];
   totalMeals: number;
   totalCalories: number | null;

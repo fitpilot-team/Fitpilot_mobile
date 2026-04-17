@@ -489,6 +489,14 @@ export default function DietScreen() {
   const visibleMenuLabel = visibleMenu
     ? menuLabelsById.get(visibleMenu.menuId) ?? buildDietMenuLabel(0)
     : 'Sin menu asignado';
+  const visibleMenuExchangeSystem = visibleMenu?.exchangeSystem ?? null;
+  const visibleMenuSourceCitations = (visibleMenuExchangeSystem?.citations ?? [])
+    .slice()
+    .sort(
+      (left, right) =>
+        left.sortOrder - right.sortOrder || left.title.localeCompare(right.title),
+    )
+    .slice(0, 2);
 
   const hasHydratedOptionsForSelectedDate = Boolean(menuOptionsHydratedByDate[selectedDate]);
   const hasAvailableMenuOptions = Boolean(selectedDay) && (
@@ -962,26 +970,25 @@ export default function DietScreen() {
                   style={[styles.sourcesSection, { paddingHorizontal: horizontalPadding }]}
                 >
                   <Card style={styles.sourcesCard}>
-                    <View style={styles.sourcesHeader}>
-                      <Text style={styles.sourcesEyebrow}>Fuentes y metodologia del plan</Text>
+                    <View style={styles.sourceCopy}>
+                      <Text style={styles.sourcesEyebrow}>Fuentes del plan</Text>
                       <Text style={styles.sourcesTitle}>
-                        Referencias visibles para este menu
-                      </Text>
-                      <Text style={styles.sourcesDescription}>
-                        Consulta a tu medico o profesional de salud antes de tomar decisiones medicas.
+                        {visibleMenuExchangeSystem?.name ?? 'Sistema del plan'}
                       </Text>
                     </View>
 
-                    {visibleMenu.citations.length > 0 ? (
+                    {visibleMenuSourceCitations.length > 0 ? (
                       <View style={styles.sourcesList}>
-                        {visibleMenu.citations.map((citation, index) => (
+                        {visibleMenuSourceCitations.map((citation) => (
                           <TouchableOpacity
-                            key={`${visibleMenu.id}-citation-${index}`}
+                            key={`${citation.sortOrder}-${citation.url}`}
                             style={styles.sourceLink}
                             onPress={() => {
                               void handleOpenCitation(citation.url);
                             }}
                             activeOpacity={0.85}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Abrir fuente ${citation.title}`}
                           >
                             <View style={styles.sourceCopy}>
                               <Text style={styles.sourceTitle}>{citation.title}</Text>
@@ -992,17 +999,27 @@ export default function DietScreen() {
                                 {citation.url}
                               </Text>
                             </View>
-                            <Ionicons name="open-outline" size={18} color={nutritionTheme.accentStrong} />
+
+                            <View style={styles.sourceAction}>
+                              <Ionicons
+                                name="open-outline"
+                                size={18}
+                                color={nutritionTheme.accentStrong}
+                              />
+                            </View>
                           </TouchableOpacity>
                         ))}
                       </View>
                     ) : (
-                      <View style={styles.sourcesEmptyState}>
-                        <Text style={styles.sourcesEmptyText}>
-                          Tu profesional aun no ha cargado referencias visibles para este menu.
-                        </Text>
-                      </View>
+                      <Text style={styles.sourceEmptyState}>
+                        La referencia oficial de este sistema se mostrara aqui cuando este
+                        disponible.
+                      </Text>
                     )}
+
+                    <Text style={styles.sourcesDescription}>
+                      Consulta a tu medico antes de tomar decisiones medicas.
+                    </Text>
                   </Card>
                 </Animated.View>
               ) : null}
@@ -1257,14 +1274,17 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginTop: spacing.md,
     },
     sourcesCard: {
-      paddingVertical: spacing.lg,
+      paddingVertical: spacing.md,
       paddingHorizontal: spacing.md,
       borderWidth: 1,
       borderColor: theme.colors.primaryBorder,
       backgroundColor: theme.colors.primarySoft,
     },
     sourcesHeader: {
-      gap: spacing.xs,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
     },
     sourcesEyebrow: {
       color: nutritionTheme.accentStrong,
@@ -1275,28 +1295,30 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     sourcesTitle: {
       color: theme.colors.textPrimary,
-      fontSize: fontSize.lg,
+      fontSize: fontSize.base,
       fontWeight: '800',
     },
     sourcesDescription: {
+      marginTop: spacing.sm,
       color: theme.colors.textMuted,
       fontSize: fontSize.sm,
       lineHeight: 20,
     },
     sourcesList: {
-      marginTop: spacing.md,
+      marginTop: spacing.sm,
       gap: spacing.sm,
     },
     sourceLink: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
       borderRadius: borderRadius.md,
       borderWidth: 1,
       borderColor: theme.colors.primaryBorder,
       backgroundColor: theme.colors.surface,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
       paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
+      paddingVertical: spacing.xs,
     },
     sourceCopy: {
       flex: 1,
@@ -1307,6 +1329,16 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       fontSize: fontSize.sm,
       fontWeight: '700',
     },
+    sourceAction: {
+      width: 38,
+      height: 38,
+      borderRadius: borderRadius.full,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     sourcePublisher: {
       color: theme.colors.textSecondary,
       fontSize: fontSize.xs,
@@ -1316,17 +1348,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       color: theme.colors.textMuted,
       fontSize: fontSize.xs,
     },
-    sourcesEmptyState: {
-      marginTop: spacing.md,
-      borderRadius: borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      borderStyle: 'dashed',
-      backgroundColor: theme.colors.surface,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.md,
-    },
-    sourcesEmptyText: {
+    sourceEmptyState: {
+      marginTop: spacing.sm,
       color: theme.colors.textMuted,
       fontSize: fontSize.sm,
       lineHeight: 20,

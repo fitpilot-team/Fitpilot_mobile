@@ -1,10 +1,10 @@
 import React from 'react';
 import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { borderRadius } from '../../constants/colors';
-import { getSmaeGroupVisual } from '../../constants/smaeIcons';
+import { getExchangeGroupVisual } from '../../constants/exchangeGroupVisuals';
 import type { LucideIconProps } from '../../vendor/lucide';
 
-interface SmaeGroupIconProps {
+interface ExchangeGroupIconProps {
   groupName?: string | null;
   size?: number;
   color?: string;
@@ -14,7 +14,7 @@ interface SmaeGroupIconProps {
   iconStyle?: LucideIconProps['style'];
 }
 
-export const SmaeGroupIcon: React.FC<SmaeGroupIconProps> = ({
+export const ExchangeGroupIcon: React.FC<ExchangeGroupIconProps> = ({
   groupName,
   size = 18,
   color,
@@ -23,7 +23,7 @@ export const SmaeGroupIcon: React.FC<SmaeGroupIconProps> = ({
   style,
   iconStyle,
 }) => {
-  const visual = getSmaeGroupVisual(groupName);
+  const visual = getExchangeGroupVisual(groupName);
   const Icon = visual.icon;
   const iconColor = color ?? visual.iconColor;
   const containerSize = Math.round(size + 24);

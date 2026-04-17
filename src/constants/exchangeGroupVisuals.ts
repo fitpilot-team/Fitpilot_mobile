@@ -13,7 +13,7 @@ import {
 import type { LucideIcon, LucideIconProps } from '../vendor/lucide';
 import { brandColors } from './colors';
 
-export type SmaeGroupKey =
+export type ExchangeGroupVisualKey =
   | 'verduras'
   | 'frutas'
   | 'cereales_tuberculos'
@@ -24,7 +24,7 @@ export type SmaeGroupKey =
   | 'azucares'
   | 'unknown';
 
-type SmaeGroupVisualDefinition = {
+type ExchangeGroupVisualDefinition = {
   label: string;
   aliases: readonly string[];
   icon: LucideIcon;
@@ -34,18 +34,18 @@ type SmaeGroupVisualDefinition = {
   borderColor: string;
 };
 
-export type SmaeGroupVisual = SmaeGroupVisualDefinition & {
-  key: SmaeGroupKey;
+export type ExchangeGroupVisual = ExchangeGroupVisualDefinition & {
+  key: ExchangeGroupVisualKey;
 };
 
-const normalizeSmaeGroupName = (value: string | null | undefined) =>
+const normalizeExchangeGroupName = (value: string | null | undefined) =>
   (value || '')
     .trim()
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
-export const SMAE_GROUP_VISUALS = {
+export const EXCHANGE_GROUP_VISUALS = {
   verduras: {
     label: 'Verduras',
     aliases: ['verdura', 'verduras', 'vegetal', 'vegetales'],
@@ -153,9 +153,9 @@ export const SMAE_GROUP_VISUALS = {
     backgroundColor: '#E8F0F8',
     borderColor: '#D8E7F4',
   },
-} as const satisfies Record<SmaeGroupKey, SmaeGroupVisualDefinition>;
+} as const satisfies Record<ExchangeGroupVisualKey, ExchangeGroupVisualDefinition>;
 
-const SMAE_GROUP_MATCH_ORDER: readonly SmaeGroupKey[] = [
+const EXCHANGE_GROUP_MATCH_ORDER: readonly ExchangeGroupVisualKey[] = [
   'verduras',
   'frutas',
   'cereales_tuberculos',
@@ -169,15 +169,17 @@ const SMAE_GROUP_MATCH_ORDER: readonly SmaeGroupKey[] = [
 const matchesAlias = (groupName: string, aliases: readonly string[]) =>
   aliases.some((alias) => groupName === alias || groupName.includes(alias));
 
-export const getSmaeGroupKey = (groupName: string | null | undefined): SmaeGroupKey => {
-  const normalizedGroupName = normalizeSmaeGroupName(groupName);
+export const getExchangeGroupVisualKey = (
+  groupName: string | null | undefined,
+): ExchangeGroupVisualKey => {
+  const normalizedGroupName = normalizeExchangeGroupName(groupName);
 
   if (!normalizedGroupName) {
     return 'unknown';
   }
 
-  for (const key of SMAE_GROUP_MATCH_ORDER) {
-    if (matchesAlias(normalizedGroupName, SMAE_GROUP_VISUALS[key].aliases)) {
+  for (const key of EXCHANGE_GROUP_MATCH_ORDER) {
+    if (matchesAlias(normalizedGroupName, EXCHANGE_GROUP_VISUALS[key].aliases)) {
       return key;
     }
   }
@@ -185,10 +187,12 @@ export const getSmaeGroupKey = (groupName: string | null | undefined): SmaeGroup
   return 'unknown';
 };
 
-export const getSmaeGroupVisual = (groupName: string | null | undefined): SmaeGroupVisual => {
-  const key = getSmaeGroupKey(groupName);
+export const getExchangeGroupVisual = (
+  groupName: string | null | undefined,
+): ExchangeGroupVisual => {
+  const key = getExchangeGroupVisualKey(groupName);
   return {
     key,
-    ...SMAE_GROUP_VISUALS[key],
+    ...EXCHANGE_GROUP_VISUALS[key],
   };
 };

@@ -1,6 +1,7 @@
 import { nutritionClient } from './api';
 import type {
   Citation,
+  ClientDietExchangeSystem,
   ClientDietFoodRow,
   ClientDietIngredientRow,
   ClientDietMenu,
@@ -105,9 +106,17 @@ type NutritionFoodSwapCandidateResponse = {
 };
 
 type NutritionCitationResponse = {
+  sort_order?: number | string | null;
   title?: string | null;
   url?: string | null;
   publisher?: string | null;
+};
+
+type NutritionExchangeSystemResponse = {
+  id?: number | null;
+  name?: string | null;
+  country_code?: string | null;
+  citations?: NutritionCitationResponse[] | null;
 };
 
 type NutritionMenuItemResponse = {
@@ -148,7 +157,7 @@ type NutritionMenuResponse = {
   id: number;
   title?: string | null;
   description_?: string | null;
-  citations?: NutritionCitationResponse[] | null;
+  exchange_system?: NutritionExchangeSystemResponse | null;
   menu_meals?: NutritionMenuMealResponse[];
 };
 
@@ -224,26 +233,54 @@ const formatDisplayNumber = (value: number | null) => {
   return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, '');
 };
 
+const normalizeCitation = (
+  citation?: NutritionCitationResponse | null,
+): Citation | null => {
+  const title = citation?.title?.trim() || '';
+  const url = citation?.url?.trim() || '';
+  const publisher = citation?.publisher?.trim() || null;
+  const sortOrder = toNumber(citation?.sort_order) ?? 1;
+
+  if (!title || !url || !url.toLowerCase().startsWith('https://')) {
+    return null;
+  }
+
+  return {
+    sortOrder,
+    title,
+    url,
+    publisher,
+  };
+};
+
 const normalizeCitations = (
   citations?: NutritionCitationResponse[] | null,
 ): Citation[] =>
-  Array.isArray(citations)
-    ? citations.flatMap((citation) => {
-        const title = citation?.title?.trim() || '';
-        const url = citation?.url?.trim() || '';
-        const publisher = citation?.publisher?.trim() || null;
+  (citations ?? [])
+    .map((citation) => normalizeCitation(citation))
+    .filter((citation): citation is Citation => Boolean(citation))
+    .sort(
+      (left, right) =>
+        left.sortOrder - right.sortOrder || left.title.localeCompare(right.title),
+    );
 
-        if (!title || !url || !url.toLowerCase().startsWith('https://')) {
-          return [];
-        }
+const normalizeExchangeSystem = (
+  exchangeSystem?: NutritionExchangeSystemResponse | null,
+): ClientDietExchangeSystem | null => {
+  const id = toNumber(exchangeSystem?.id);
+  const name = exchangeSystem?.name?.trim() || '';
 
-        return [{
-          title,
-          url,
-          publisher,
-        }];
-      })
-    : [];
+  if (id === null || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    countryCode: exchangeSystem?.country_code?.trim() || null,
+    citations: normalizeCitations(exchangeSystem?.citations),
+  };
+};
 
 const resolveFoodBaseServingSize = (food?: NutritionFoodResponse | null) =>
   toNumber(food?.food_nutrition_values?.[0]?.base_serving_size) ??
@@ -665,7 +702,7 @@ const mapDietMenu = (
     assignedDate,
     title: menu.title?.trim() || 'Tu dieta',
     description: menu.description_?.trim() || null,
-    citations: normalizeCitations(menu.citations),
+    exchangeSystem: normalizeExchangeSystem(menu.exchange_system),
     meals,
     totalMeals: meals.length,
     totalCalories,
