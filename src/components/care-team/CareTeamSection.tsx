@@ -10,6 +10,10 @@ import type {
   AssignedProfessionalDomain,
   AssignedProfessionalSummary,
 } from '../../types';
+import {
+  areSameAssignedProfessionals,
+  mergeAssignedProfessionalSummaries,
+} from '../../utils/careTeam';
 import { AssignedProfessionalCard } from './AssignedProfessionalCard';
 
 type CareTeamSectionProps = {
@@ -28,18 +32,6 @@ type CareTeamCardModel = {
   state: 'loading' | 'assigned' | 'unassigned' | 'error';
   summary: AssignedProfessionalSummary | null;
   errorMessage: string | null;
-};
-
-const mergeDistinctText = (...values: (string | null | undefined)[]) => {
-  const uniqueValues = Array.from(
-    new Set(
-      values
-        .map((value) => value?.trim())
-        .filter((value): value is string => Boolean(value)),
-    ),
-  );
-
-  return uniqueValues.length ? uniqueValues.join(' • ') : null;
 };
 
 const buildCareTeamCards = (
@@ -77,28 +69,18 @@ const buildCareTeamCards = (
   const canMergeAssignedProfessional =
     !errors.training &&
     !errors.nutrition &&
-    trainingSummary?.status === 'assigned' &&
-    nutritionSummary?.status === 'assigned' &&
-    Boolean(trainingSummary.id) &&
-    trainingSummary.id === nutritionSummary.id;
+    areSameAssignedProfessionals(trainingSummary, nutritionSummary);
 
-  if (canMergeAssignedProfessional) {
+  if (canMergeAssignedProfessional && trainingSummary && nutritionSummary) {
     return [
       {
-        key: `merged-${trainingSummary.id}`,
+        key: `merged-${trainingSummary.id ?? nutritionSummary.id ?? 'professional'}`,
         domains: ['training', 'nutrition'],
         state: 'assigned',
-        summary: {
-          ...trainingSummary,
-          roleLabel: mergeDistinctText(
-            trainingSummary.roleLabel,
-            nutritionSummary.roleLabel,
-          ),
-          contextLabel: mergeDistinctText(
-            trainingSummary.contextLabel,
-            nutritionSummary.contextLabel,
-          ),
-        },
+        summary: mergeAssignedProfessionalSummaries(
+          trainingSummary,
+          nutritionSummary,
+        ),
         errorMessage: null,
       },
     ];

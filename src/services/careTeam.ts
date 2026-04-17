@@ -1,4 +1,9 @@
-import { nutritionClient, trainingClient } from './api';
+import {
+  getNutritionAssetUrl,
+  getTrainingAssetUrl,
+  nutritionClient,
+  trainingClient,
+} from './api';
 import type {
   AssignedProfessionalDomain,
   AssignedProfessionalSummary,
@@ -6,7 +11,7 @@ import type {
 } from '../types';
 
 type AssignedProfessionalApiResponse = {
-  id?: string | null;
+  id?: string | number | null;
   full_name?: string | null;
   role_label?: string | null;
   avatar_url?: string | null;
@@ -25,8 +30,8 @@ export type CareTeamDomainResults = Record<
   CareTeamDomainResult
 >;
 
-const normalizeOptionalText = (value: string | null | undefined) => {
-  const trimmedValue = value?.trim() ?? '';
+const normalizeOptionalText = (value: string | number | null | undefined) => {
+  const trimmedValue = String(value ?? '').trim();
   return trimmedValue || null;
 };
 
@@ -37,7 +42,10 @@ const mapAssignedProfessionalSummary = (
   id: normalizeOptionalText(payload.id),
   fullName: normalizeOptionalText(payload.full_name),
   roleLabel: normalizeOptionalText(payload.role_label),
-  avatarUrl: normalizeOptionalText(payload.avatar_url),
+  avatarUrl:
+    fallbackDomain === 'training'
+      ? getTrainingAssetUrl(payload.avatar_url)
+      : getNutritionAssetUrl(payload.avatar_url),
   domain: payload.domain ?? fallbackDomain,
   contextLabel: normalizeOptionalText(payload.context_label),
   status: payload.status === 'assigned' ? 'assigned' : 'unassigned',

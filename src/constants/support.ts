@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 type PublicExtra = {
   termsUrl?: string;
   privacyUrl?: string;
+  clientForgotPasswordUrl?: string;
 };
 
 type SupportFaqItem = {
@@ -30,6 +31,10 @@ export const supportWhatsApp = '+528719708890';
 export const supportWhatsAppE164 = '528719708890';
 export const supportWhatsAppDefaultMessage =
   'Hola, necesito ayuda con mi cuenta de FitPilot.';
+export const clientForgotPasswordUrl = resolveOptionalUrl(
+  process.env.EXPO_PUBLIC_CLIENT_FORGOT_PASSWORD_URL ||
+    extra.clientForgotPasswordUrl,
+);
 
 export const supportFaqItems: SupportFaqItem[] = [
   {

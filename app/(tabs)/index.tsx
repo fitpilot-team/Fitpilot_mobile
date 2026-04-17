@@ -257,7 +257,11 @@ export default function HomeScreen() {
   }, [dashboardDataVersion, showInitialLoadingState]);
 
   useEffect(() => {
-    setFocusedDateKey(programTimelineModel.initialFocusedDateKey);
+    setFocusedDateKey((currentDateKey) => (
+      currentDateKey === programTimelineModel.initialFocusedDateKey
+        ? currentDateKey
+        : programTimelineModel.initialFocusedDateKey
+    ));
     setIsSessionPickerVisible(false);
     setIsDatePickerVisible(false);
   }, [dashboardDataVersion, programTimelineModel.initialFocusedDateKey]);
@@ -511,17 +515,6 @@ export default function HomeScreen() {
             </Animated.View>
 
             <Animated.View entering={getEntryAnimation(80)}>
-              <CareTeamSection
-                summaries={homeCareTeamSummaries}
-                errors={careTeamErrors}
-                isLoading={isLoadingCareTeam}
-                compact
-                subtitle="Quienes elaboran tus planes actuales."
-                horizontalPadding={horizontalPadding}
-              />
-            </Animated.View>
-
-            <Animated.View entering={getEntryAnimation(160)}>
               <View style={{ paddingHorizontal: horizontalPadding }}>
                 <HistoricalNavigator
                   eyebrow="Entrenamiento"
@@ -537,6 +530,17 @@ export default function HomeScreen() {
                   onOpenDatePicker={canOpenDatePicker ? handleOpenDatePicker : undefined}
                 />
               </View>
+            </Animated.View>
+
+            <Animated.View entering={getEntryAnimation(160)}>
+              <CareTeamSection
+                summaries={homeCareTeamSummaries}
+                errors={careTeamErrors}
+                isLoading={isLoadingCareTeam}
+                compact
+                subtitle="Quienes elaboran tus planes actuales."
+                horizontalPadding={horizontalPadding}
+              />
             </Animated.View>
 
             <Animated.View entering={getEntryAnimation(240)}>

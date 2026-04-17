@@ -6,6 +6,7 @@ type PublicExtra = {
   turnstileBridgeUrl?: string;
   termsUrl?: string;
   privacyUrl?: string;
+  clientForgotPasswordUrl?: string;
 };
 
 const resolveRequiredUrl = (
@@ -53,6 +54,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     process.env.EXPO_PUBLIC_PRIVACY_URL,
     extra.privacyUrl,
   );
+  const clientForgotPasswordUrl = resolveOptionalValue(
+    process.env.EXPO_PUBLIC_CLIENT_FORGOT_PASSWORD_URL,
+    extra.clientForgotPasswordUrl,
+  );
   const turnstileBridgeUrl = resolveOptionalValue(
     process.env.EXPO_PUBLIC_TURNSTILE_BRIDGE_URL,
     extra.turnstileBridgeUrl,
@@ -61,6 +66,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   return {
     ...config,
+    owner: 'fitpilot',
     name: 'FitPilot',
     slug: 'fitpilot-mobile',
     version: '1.0.0',
@@ -98,6 +104,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       favicon: './assets/favicon.png',
     },
     plugins: [
+      './plugins/withDisableRoutingCapability',
       'expo-dev-client',
       'expo-router',
       'expo-secure-store',
@@ -123,6 +130,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       turnstileBridgeUrl,
       termsUrl,
       privacyUrl,
+      clientForgotPasswordUrl,
       appEnv,
     },
   };

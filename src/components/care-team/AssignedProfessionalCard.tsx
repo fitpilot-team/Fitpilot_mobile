@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -50,6 +50,12 @@ export const AssignedProfessionalCard: React.FC<AssignedProfessionalCardProps> =
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const [hasImageError, setHasImageError] = useState(false);
+
+  useEffect(() => {
+    setHasImageError(false);
+  }, [summary?.avatarUrl]);
+
   const initials = useMemo(() => {
     const sourceLabel = summary?.fullName ?? joinDomainLabels(domains);
     return sourceLabel
@@ -64,6 +70,8 @@ export const AssignedProfessionalCard: React.FC<AssignedProfessionalCardProps> =
     domains.length === 1
       ? EMPTY_MESSAGES[domains[0]]
       : 'Aun no tienes profesionales asignados para tus planes actuales.';
+  const canRenderAvatarImage =
+    state === 'assigned' && Boolean(summary?.avatarUrl) && !hasImageError;
 
   if (state === 'loading') {
     return (
@@ -118,8 +126,12 @@ export const AssignedProfessionalCard: React.FC<AssignedProfessionalCardProps> =
                 : null,
           ]}
         >
-          {state === 'assigned' && summary?.avatarUrl ? (
-            <Image source={{ uri: summary.avatarUrl }} style={styles.avatarImage} />
+          {canRenderAvatarImage ? (
+            <Image
+              source={{ uri: summary?.avatarUrl ?? '' }}
+              style={styles.avatarImage}
+              onError={() => setHasImageError(true)}
+            />
           ) : state === 'error' ? (
             <Ionicons name="alert-circle-outline" size={compact ? 22 : 24} color={theme.colors.error} />
           ) : state === 'unassigned' ? (
