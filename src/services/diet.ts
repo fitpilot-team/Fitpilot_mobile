@@ -1,5 +1,6 @@
 import { nutritionClient } from './api';
 import type {
+  Citation,
   ClientDietFoodRow,
   ClientDietIngredientRow,
   ClientDietMenu,
@@ -103,6 +104,12 @@ type NutritionFoodSwapCandidateResponse = {
   }[] | null;
 };
 
+type NutritionCitationResponse = {
+  title?: string | null;
+  url?: string | null;
+  publisher?: string | null;
+};
+
 type NutritionMenuItemResponse = {
   id: number;
   food_id?: number | null;
@@ -141,6 +148,7 @@ type NutritionMenuResponse = {
   id: number;
   title?: string | null;
   description_?: string | null;
+  citations?: NutritionCitationResponse[] | null;
   menu_meals?: NutritionMenuMealResponse[];
 };
 
@@ -215,6 +223,27 @@ const formatDisplayNumber = (value: number | null) => {
 
   return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, '');
 };
+
+const normalizeCitations = (
+  citations?: NutritionCitationResponse[] | null,
+): Citation[] =>
+  Array.isArray(citations)
+    ? citations.flatMap((citation) => {
+        const title = citation?.title?.trim() || '';
+        const url = citation?.url?.trim() || '';
+        const publisher = citation?.publisher?.trim() || null;
+
+        if (!title || !url || !url.toLowerCase().startsWith('https://')) {
+          return [];
+        }
+
+        return [{
+          title,
+          url,
+          publisher,
+        }];
+      })
+    : [];
 
 const resolveFoodBaseServingSize = (food?: NutritionFoodResponse | null) =>
   toNumber(food?.food_nutrition_values?.[0]?.base_serving_size) ??
@@ -636,6 +665,7 @@ const mapDietMenu = (
     assignedDate,
     title: menu.title?.trim() || 'Tu dieta',
     description: menu.description_?.trim() || null,
+    citations: normalizeCitations(menu.citations),
     meals,
     totalMeals: meals.length,
     totalCalories,

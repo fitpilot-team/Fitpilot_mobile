@@ -13,10 +13,6 @@ export interface User {
   onboardingStatus: string | null;
   profilePictureUrl: string | null;
   professionalRoles: string[];
-  currentSubscription: Record<string, unknown> | null;
-  hasSubscription: boolean;
-  hasActiveSubscription: boolean;
-  subscriptionVigency: Record<string, unknown> | null;
 }
 
 export interface NutritionAuthUserResponse {
@@ -30,10 +26,12 @@ export interface NutritionAuthUserResponse {
   onboarding_status?: string | null;
   profile_picture?: string | null;
   professional_role?: string[] | string | null;
-  current_subscription?: Record<string, unknown> | null;
-  has_subscription?: boolean;
-  has_active_subscription?: boolean;
-  subscription_vigency?: Record<string, unknown> | null;
+}
+
+export interface Citation {
+  title: string;
+  url: string;
+  publisher?: string | null;
 }
 
 export interface LoginCredentials {
@@ -878,6 +876,7 @@ export interface ClientDietMenu {
   assignedDate: string;
   title: string;
   description: string | null;
+  citations: Citation[];
   meals: ClientDietMeal[];
   totalMeals: number;
   totalCalories: number | null;

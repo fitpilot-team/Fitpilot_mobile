@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
   RefreshControl,
   ScrollView,
@@ -683,6 +684,20 @@ export default function DietScreen() {
     setIsMenuSelectorVisible(false);
   }, [clearPreviewMenuForDate, isPersistingMenuSelection, selectedDay]);
 
+  const handleOpenCitation = useCallback(async (url: string) => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        Alert.alert('Fuente no disponible', 'No fue posible abrir este enlace.');
+        return;
+      }
+
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Fuente no disponible', 'No fue posible abrir este enlace.');
+    }
+  }, []);
+
   const loadSwapFoods = useCallback(async (ingredient: ClientDietIngredientRow | null) => {
     if (!ingredient?.exchangeGroupId) {
       setSwapFoods([]);
@@ -941,8 +956,59 @@ export default function DietScreen() {
                 </Animated.View>
               ) : null}
 
+              {visibleMenu ? (
+                <Animated.View
+                  entering={getEntryAnimation(180)}
+                  style={[styles.sourcesSection, { paddingHorizontal: horizontalPadding }]}
+                >
+                  <Card style={styles.sourcesCard}>
+                    <View style={styles.sourcesHeader}>
+                      <Text style={styles.sourcesEyebrow}>Fuentes y metodologia del plan</Text>
+                      <Text style={styles.sourcesTitle}>
+                        Referencias visibles para este menu
+                      </Text>
+                      <Text style={styles.sourcesDescription}>
+                        Consulta a tu medico o profesional de salud antes de tomar decisiones medicas.
+                      </Text>
+                    </View>
+
+                    {visibleMenu.citations.length > 0 ? (
+                      <View style={styles.sourcesList}>
+                        {visibleMenu.citations.map((citation, index) => (
+                          <TouchableOpacity
+                            key={`${visibleMenu.id}-citation-${index}`}
+                            style={styles.sourceLink}
+                            onPress={() => {
+                              void handleOpenCitation(citation.url);
+                            }}
+                            activeOpacity={0.85}
+                          >
+                            <View style={styles.sourceCopy}>
+                              <Text style={styles.sourceTitle}>{citation.title}</Text>
+                              {citation.publisher ? (
+                                <Text style={styles.sourcePublisher}>{citation.publisher}</Text>
+                              ) : null}
+                              <Text numberOfLines={1} style={styles.sourceUrl}>
+                                {citation.url}
+                              </Text>
+                            </View>
+                            <Ionicons name="open-outline" size={18} color={nutritionTheme.accentStrong} />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : (
+                      <View style={styles.sourcesEmptyState}>
+                        <Text style={styles.sourcesEmptyText}>
+                          Tu profesional aun no ha cargado referencias visibles para este menu.
+                        </Text>
+                      </View>
+                    )}
+                  </Card>
+                </Animated.View>
+              ) : null}
+
               <Animated.View
-                entering={getEntryAnimation(180)}
+                entering={getEntryAnimation(220)}
                 style={[styles.selectorSection, { paddingHorizontal: horizontalPadding }]}
               >
                 <View style={styles.selectorCardShell}>
@@ -984,7 +1050,7 @@ export default function DietScreen() {
                 </View>
               </Animated.View>
 
-              <Animated.View entering={getEntryAnimation(220)} style={styles.mealsSection}>
+              <Animated.View entering={getEntryAnimation(260)} style={styles.mealsSection}>
                 <View style={[styles.sectionHeader, { paddingHorizontal: horizontalPadding }]}>
                   <View>
                     <Text style={styles.sectionTitle}>Comidas del dia</Text>
@@ -1186,6 +1252,84 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     heroSection: {
       marginTop: spacing.lg,
+    },
+    sourcesSection: {
+      marginTop: spacing.md,
+    },
+    sourcesCard: {
+      paddingVertical: spacing.lg,
+      paddingHorizontal: spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.primarySoft,
+    },
+    sourcesHeader: {
+      gap: spacing.xs,
+    },
+    sourcesEyebrow: {
+      color: nutritionTheme.accentStrong,
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 0.7,
+    },
+    sourcesTitle: {
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.lg,
+      fontWeight: '800',
+    },
+    sourcesDescription: {
+      color: theme.colors.textMuted,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+    },
+    sourcesList: {
+      marginTop: spacing.md,
+      gap: spacing.sm,
+    },
+    sourceLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    sourceCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    sourceTitle: {
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+    },
+    sourcePublisher: {
+      color: theme.colors.textSecondary,
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+    },
+    sourceUrl: {
+      color: theme.colors.textMuted,
+      fontSize: fontSize.xs,
+    },
+    sourcesEmptyState: {
+      marginTop: spacing.md,
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderStyle: 'dashed',
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+    },
+    sourcesEmptyText: {
+      color: theme.colors.textMuted,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
     },
     sectionHeader: {
       marginTop: spacing.lg,
