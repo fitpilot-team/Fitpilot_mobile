@@ -36,6 +36,20 @@ export interface NutritionAuthUserResponse {
   subscription_vigency?: Record<string, unknown> | null;
 }
 
+export interface Citation {
+  sortOrder: number;
+  title: string;
+  url: string;
+  publisher?: string | null;
+}
+
+export interface ClientDietExchangeSystem {
+  id: number;
+  name: string;
+  countryCode?: string | null;
+  citations: Citation[];
+}
+
 export interface LoginCredentials {
   email: string;
   password: string;
@@ -878,6 +892,7 @@ export interface ClientDietMenu {
   assignedDate: string;
   title: string;
   description: string | null;
+  exchangeSystem: ClientDietExchangeSystem | null;
   meals: ClientDietMeal[];
   totalMeals: number;
   totalCalories: number | null;

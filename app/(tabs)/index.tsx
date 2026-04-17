@@ -35,6 +35,11 @@ import { spacing } from '../../src/constants/colors';
 import { useBottomTabBarContentInset, useBottomTabBarScroll } from '../../src/hooks/useBottomTabBarVisibility';
 import { useCareTeam } from '../../src/hooks/useCareTeam';
 import { getMuscleVolume } from '../../src/services/api';
+import {
+  calculateWeeklyVisibleDietCaloriesAverage,
+  getClientEffectiveDietWeek,
+  getTodayDietDateKey,
+} from '../../src/services/diet';
 import type { TipContext } from '../../src/utils/contextualTips';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type {
@@ -87,6 +92,7 @@ export default function HomeScreen() {
   } = useWorkoutStore();
 
   const [refreshing, setRefreshing] = useState(false);
+  const [currentWeekDietCaloriesAverage, setCurrentWeekDietCaloriesAverage] = useState<number | null>(null);
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeResponse | null>(null);
   const [isLoadingVolume, setIsLoadingVolume] = useState(false);
   const [countSecondaryMuscles, setCountSecondaryMuscles] = useState(true);
@@ -170,6 +176,28 @@ export default function HomeScreen() {
     },
     [loadDashboardData, user?.id, workoutLogsVersion],
   );
+  const loadCurrentWeekDietCaloriesAverage = useCallback(async () => {
+    if (!user?.id) {
+      setCurrentWeekDietCaloriesAverage(null);
+      return;
+    }
+
+    try {
+      const currentWeekDays = await getClientEffectiveDietWeek(
+        user.id,
+        getTodayDietDateKey(),
+      );
+      setCurrentWeekDietCaloriesAverage(
+        calculateWeeklyVisibleDietCaloriesAverage(currentWeekDays),
+      );
+    } catch (loadError) {
+      console.error(
+        'Error loading current week diet calories average:',
+        loadError,
+      );
+      setCurrentWeekDietCaloriesAverage(null);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (!isFocused || !user?.id) {
@@ -185,6 +213,19 @@ export default function HomeScreen() {
 
     void syncDashboardData(workoutLogsVersion);
   }, [dashboardDataVersion, isFocused, syncDashboardData, user?.id, workoutLogsVersion]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCurrentWeekDietCaloriesAverage(null);
+      return;
+    }
+
+    if (!isFocused) {
+      return;
+    }
+
+    void loadCurrentWeekDietCaloriesAverage();
+  }, [isFocused, loadCurrentWeekDietCaloriesAverage, user?.id]);
 
   useEffect(() => {
     if (!shouldAnimateEntry) {
@@ -268,10 +309,20 @@ export default function HomeScreen() {
     }
 
     setRefreshing(true);
-    await Promise.all([loadDashboardData(), refreshCareTeam()]);
+    await Promise.all([
+      loadDashboardData(),
+      refreshCareTeam(),
+      loadCurrentWeekDietCaloriesAverage(),
+    ]);
     lastLoadedWorkoutLogsVersionRef.current = workoutLogsVersion;
     setRefreshing(false);
-  }, [loadDashboardData, refreshCareTeam, user?.id, workoutLogsVersion]);
+  }, [
+    loadCurrentWeekDietCaloriesAverage,
+    loadDashboardData,
+    refreshCareTeam,
+    user?.id,
+    workoutLogsVersion,
+  ]);
 
   const openWorkoutSession = useCallback(
     async (session: MicrocycleSessionProgress) => {
@@ -379,6 +430,37 @@ export default function HomeScreen() {
       programTimelineView.workoutTotal,
     ],
   );
+  const nutritionContextOverride = useMemo(
+    () => (
+      currentWeekDietCaloriesAverage === null
+        ? null
+        : `Promedio semanal: ${currentWeekDietCaloriesAverage} kcal/dia`
+    ),
+    [currentWeekDietCaloriesAverage],
+  );
+  const homeCareTeamSummaries = useMemo(() => {
+    const nutritionSummary = careTeamSummaries.nutrition;
+
+    if (
+      !nutritionSummary ||
+      nutritionSummary.status !== 'assigned' ||
+      !nutritionContextOverride
+    ) {
+      return careTeamSummaries;
+    }
+
+    if (nutritionSummary.contextLabel === nutritionContextOverride) {
+      return careTeamSummaries;
+    }
+
+    return {
+      ...careTeamSummaries,
+      nutrition: {
+        ...nutritionSummary,
+        contextLabel: nutritionContextOverride,
+      },
+    };
+  }, [careTeamSummaries, nutritionContextOverride]);
   const handleOpenScienceTip = useCallback((tip: ScienceTip) => {
     router.push({
       pathname: '/recommendations/[tipId]',
@@ -430,7 +512,7 @@ export default function HomeScreen() {
 
             <Animated.View entering={getEntryAnimation(80)}>
               <CareTeamSection
-                summaries={careTeamSummaries}
+                summaries={homeCareTeamSummaries}
                 errors={careTeamErrors}
                 isLoading={isLoadingCareTeam}
                 compact

@@ -17,9 +17,9 @@ import type {
   ClientDietMeal,
   ClientDietRecipeCard,
 } from '../../types';
-import { getSmaeGroupVisual } from '../../constants/smaeIcons';
+import { getExchangeGroupVisual } from '../../constants/exchangeGroupVisuals';
 import { getDietPortionDisplayItems } from '../../utils/dietPortions';
-import { SmaeGroupIcon } from './SmaeGroupIcon';
+import { ExchangeGroupIcon } from './ExchangeGroupIcon';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 
 interface DietMealCardProps {
@@ -174,7 +174,7 @@ const IngredientRow: React.FC<{
   theme,
   onPress,
 }) => {
-  const foodGroupVisual = getSmaeGroupVisual(ingredient.exchangeGroupName);
+  const foodGroupVisual = getExchangeGroupVisual(ingredient.exchangeGroupName);
   const isDarkRecipe = theme.isDark && accent === 'recipe';
   const borderColor = accent === 'recipe'
     ? undefined
@@ -189,7 +189,7 @@ const IngredientRow: React.FC<{
   const content = (
     <>
       <View style={[styles.foodIcon, { backgroundColor: foodGroupVisual.backgroundColor }]}>
-        <SmaeGroupIcon
+        <ExchangeGroupIcon
           groupName={ingredient.exchangeGroupName}
           size={18}
           strokeWidth={2}

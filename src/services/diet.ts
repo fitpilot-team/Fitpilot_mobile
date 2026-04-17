@@ -1,5 +1,7 @@
 import { nutritionClient } from './api';
 import type {
+  Citation,
+  ClientDietExchangeSystem,
   ClientDietFoodRow,
   ClientDietIngredientRow,
   ClientDietMenu,
@@ -17,6 +19,10 @@ import {
   getTodayDateKey,
   toLocalDateKey,
 } from '../utils/date';
+import {
+  applyDietRotationMenuOptions,
+  resolveVisibleDietMenu,
+} from '../utils/dietMenuSelection';
 
 type NutritionPortionResponse = {
   household_label?: string | null;
@@ -103,6 +109,20 @@ type NutritionFoodSwapCandidateResponse = {
   }[] | null;
 };
 
+type NutritionCitationResponse = {
+  sort_order?: number | string | null;
+  title?: string | null;
+  url?: string | null;
+  publisher?: string | null;
+};
+
+type NutritionExchangeSystemResponse = {
+  id?: number | null;
+  name?: string | null;
+  country_code?: string | null;
+  citations?: NutritionCitationResponse[] | null;
+};
+
 type NutritionMenuItemResponse = {
   id: number;
   food_id?: number | null;
@@ -141,6 +161,7 @@ type NutritionMenuResponse = {
   id: number;
   title?: string | null;
   description_?: string | null;
+  exchange_system?: NutritionExchangeSystemResponse | null;
   menu_meals?: NutritionMenuMealResponse[];
 };
 
@@ -214,6 +235,55 @@ const formatDisplayNumber = (value: number | null) => {
   }
 
   return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, '');
+};
+
+const normalizeCitation = (
+  citation?: NutritionCitationResponse | null,
+): Citation | null => {
+  const title = citation?.title?.trim() || '';
+  const url = citation?.url?.trim() || '';
+  const publisher = citation?.publisher?.trim() || null;
+  const sortOrder = toNumber(citation?.sort_order) ?? 1;
+
+  if (!title || !url || !url.toLowerCase().startsWith('https://')) {
+    return null;
+  }
+
+  return {
+    sortOrder,
+    title,
+    url,
+    publisher,
+  };
+};
+
+const normalizeCitations = (
+  citations?: NutritionCitationResponse[] | null,
+): Citation[] =>
+  (citations ?? [])
+    .map((citation) => normalizeCitation(citation))
+    .filter((citation): citation is Citation => Boolean(citation))
+    .sort(
+      (left, right) =>
+        left.sortOrder - right.sortOrder || left.title.localeCompare(right.title),
+    );
+
+const normalizeExchangeSystem = (
+  exchangeSystem?: NutritionExchangeSystemResponse | null,
+): ClientDietExchangeSystem | null => {
+  const id = toNumber(exchangeSystem?.id);
+  const name = exchangeSystem?.name?.trim() || '';
+
+  if (id === null || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    countryCode: exchangeSystem?.country_code?.trim() || null,
+    citations: normalizeCitations(exchangeSystem?.citations),
+  };
 };
 
 const resolveFoodBaseServingSize = (food?: NutritionFoodResponse | null) =>
@@ -636,6 +706,7 @@ const mapDietMenu = (
     assignedDate,
     title: menu.title?.trim() || 'Tu dieta',
     description: menu.description_?.trim() || null,
+    exchangeSystem: normalizeExchangeSystem(menu.exchange_system),
     meals,
     totalMeals: meals.length,
     totalCalories,
@@ -814,6 +885,84 @@ export const getClientDietCalendar = async (
       menuOptions: assignedMenu ? [assignedMenu] : [],
     };
   });
+};
+
+const getRotationMenuPoolCandidates = (
+  resolvedAnchorDate: string,
+  preferredSelectedDate: string,
+  baseDays: ClientDietWeekDay[],
+) =>
+  Array.from(
+    new Set(
+      [
+        preferredSelectedDate,
+        resolvedAnchorDate,
+        ...baseDays
+          .filter((day) => day.backendPrimaryMenuId !== null)
+          .map((day) => day.assignedDate),
+      ].filter(Boolean),
+    ),
+  );
+
+const loadClientDietRotationMenuPool = async (
+  clientId: string,
+  resolvedAnchorDate: string,
+  preferredSelectedDate: string,
+  baseDays: ClientDietWeekDay[],
+) => {
+  const candidateDates = getRotationMenuPoolCandidates(
+    resolvedAnchorDate,
+    preferredSelectedDate,
+    baseDays,
+  );
+
+  for (const candidateDate of candidateDates) {
+    try {
+      const poolMenus = await getClientDietMenuPool(clientId, candidateDate);
+      if (poolMenus.length > 0) {
+        return poolMenus;
+      }
+    } catch {
+      // Fall back to the next candidate date and keep the week usable without rotation.
+    }
+  }
+
+  return [] as ClientDietMenu[];
+};
+
+export const getClientEffectiveDietWeek = async (
+  clientId: string,
+  date: string = getTodayDateKey(),
+  options?: { selectedDate?: string },
+): Promise<ClientDietWeekDay[]> => {
+  const todayDate = getTodayDateKey();
+  const resolvedAnchorDate = normalizeDateKey(date) || todayDate;
+  const preferredSelectedDate =
+    normalizeDateKey(options?.selectedDate) || resolvedAnchorDate;
+  const baseDays = await getClientDietCalendar(clientId, resolvedAnchorDate);
+  const rotationMenus = await loadClientDietRotationMenuPool(
+    clientId,
+    resolvedAnchorDate,
+    preferredSelectedDate,
+    baseDays,
+  );
+
+  return applyDietRotationMenuOptions(baseDays, rotationMenus);
+};
+
+export const calculateWeeklyVisibleDietCaloriesAverage = (
+  days: ClientDietWeekDay[],
+): number | null => {
+  const visibleCalories = days
+    .map((day) => resolveVisibleDietMenu(day)?.totalCalories ?? null)
+    .filter((value): value is number => value !== null && Number.isFinite(value));
+
+  if (visibleCalories.length === 0) {
+    return null;
+  }
+
+  const totalCalories = visibleCalories.reduce((sum, value) => sum + value, 0);
+  return Math.round(totalCalories / visibleCalories.length);
 };
 
 export const getClientDietMenuCalendar = async (
