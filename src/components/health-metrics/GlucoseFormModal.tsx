@@ -25,6 +25,7 @@ import type {
   GlucoseRecord,
 } from '../../types';
 import {
+  getTodayDateInput,
   isValidMeasurementDateInput,
   parseMeasurementNumber,
 } from '../../utils/measurements';
@@ -34,7 +35,6 @@ import {
   isValidTimeInput,
   splitRecordedAtToLocalInputs,
 } from '../../utils/healthMetrics';
-import { getTodayDateInput } from '../../utils/measurements';
 
 type GlucoseFormState = {
   date: string;

@@ -93,7 +93,7 @@ const MEASUREMENTS_TABS = [
   { key: 'summary', label: 'Resumen' },
   { key: 'body', label: 'Corporal' },
   { key: 'glucose', label: 'Glucosa' },
-] satisfies Array<{ key: MeasurementsTab; label: string }>;
+] satisfies { key: MeasurementsTab; label: string }[];
 
 const CREATE_ACTIONS = [
   {
@@ -108,12 +108,12 @@ const CREATE_ACTIONS = [
     description: 'Lectura con fecha, hora y contexto clinico.',
     icon: 'water-outline',
   },
-] satisfies Array<{
+] satisfies {
   key: MeasurementCreateAction;
   title: string;
   description: string;
   icon: keyof typeof Ionicons.glyphMap;
-}>;
+}[];
 
 const getChangeAppearance = (
   change: number | null,
@@ -177,7 +177,36 @@ export default function MeasurementsScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreateMenuVisible, setIsCreateMenuVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const glucose = useGlucoseRecords(HISTORY_PAGE_SIZE);
+  const {
+    records: glucoseRecords,
+    pagination: glucosePagination,
+    latestRecord: latestGlucoseRecord,
+    latestError: glucoseLatestError,
+    historyError: glucoseHistoryError,
+    hasLoadedHistory: hasLoadedGlucoseHistory,
+    isLoadingLatest: isLoadingLatestGlucose,
+    isLoadingHistory: isLoadingGlucoseHistory,
+    isLoadingMore: isLoadingMoreGlucose,
+    isDetailVisible: isGlucoseDetailVisible,
+    selectedRecord: selectedGlucoseRecord,
+    isDetailLoading: isGlucoseDetailLoading,
+    isFormVisible: isGlucoseFormVisible,
+    editingRecord: editingGlucoseRecord,
+    isSubmitting: isSubmittingGlucose,
+    isDeleting: isDeletingGlucose,
+    loadLatestPreview: loadLatestGlucosePreview,
+    ensureHistoryLoaded: ensureGlucoseHistoryLoaded,
+    refreshData: refreshGlucoseData,
+    loadMore: loadMoreGlucose,
+    openDetail: openGlucoseDetailRecord,
+    closeDetail: closeGlucoseDetail,
+    openCreateForm: openCreateGlucoseForm,
+    openEditForm: openEditGlucoseForm,
+    closeForm: closeGlucoseForm,
+    submitRecord: submitGlucoseRecord,
+    deleteSelectedRecord: deleteSelectedGlucoseRecord,
+    resetUi: resetGlucoseUi,
+  } = useGlucoseRecords(HISTORY_PAGE_SIZE);
 
   const latestMeasurement = measurements[0] ?? null;
   const latestMeasurementDetail = latestMeasurement
@@ -264,12 +293,12 @@ export default function MeasurementsScreen() {
       setIsFormVisible(false);
       setEditingMeasurementId(null);
       setIsCreateMenuVisible(false);
-      glucose.resetUi();
+      resetGlucoseUi();
       return;
     }
 
-    void glucose.loadLatestPreview();
-  }, [glucose.loadLatestPreview, glucose.resetUi, isFocused]);
+    void loadLatestGlucosePreview();
+  }, [isFocused, loadLatestGlucosePreview, resetGlucoseUi]);
 
   useEffect(() => {
     if (!isFocused) {
@@ -296,8 +325,8 @@ export default function MeasurementsScreen() {
       return;
     }
 
-    void glucose.ensureHistoryLoaded();
-  }, [activeTab, glucose.ensureHistoryLoaded, isFocused]);
+    void ensureGlucoseHistoryLoaded();
+  }, [activeTab, ensureGlucoseHistoryLoaded, isFocused]);
 
   const summaryMetrics = useMemo(() => {
     if (!latestMeasurement) {
@@ -354,7 +383,7 @@ export default function MeasurementsScreen() {
   }, [latestMeasurementDetail]);
 
   const previewCalculations = recentCalculations.slice(0, 3);
-  const summaryGlucoseRecord = glucose.latestRecord;
+  const summaryGlucoseRecord = latestGlucoseRecord;
   const summaryGlucoseContextLabel = summaryGlucoseRecord?.glucose_context
     ? GLUCOSE_CONTEXT_LABELS[summaryGlucoseRecord.glucose_context]
     : null;
@@ -424,11 +453,11 @@ export default function MeasurementsScreen() {
     setIsRefreshing(true);
 
     try {
-      await Promise.all([loadMeasurements(), glucose.refreshData()]);
+      await Promise.all([loadMeasurements(), refreshGlucoseData()]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [glucose.refreshData, loadMeasurements]);
+  }, [loadMeasurements, refreshGlucoseData]);
 
   const handleLoadMore = useCallback(async () => {
     if (!pagination || measurements.length >= pagination.total || isLoadingMore) {
@@ -535,10 +564,10 @@ export default function MeasurementsScreen() {
       scrollViewRef.current?.scrollTo({ y: 0, animated: true });
 
       if (nextTab === 'glucose') {
-        void glucose.ensureHistoryLoaded();
+        void ensureGlucoseHistoryLoaded();
       }
     },
-    [glucose.ensureHistoryLoaded],
+    [ensureGlucoseHistoryLoaded],
   );
 
   const handleSelectCreateAction = useCallback(
@@ -550,15 +579,15 @@ export default function MeasurementsScreen() {
         return;
       }
 
-      glucose.openCreateForm();
+      openCreateGlucoseForm();
     },
-    [glucose.openCreateForm, openCreateMeasurementForm],
+    [openCreateGlucoseForm, openCreateMeasurementForm],
   );
 
   const handleOpenGlucoseDetail = useCallback(
     async (recordId: string) => {
       try {
-        await glucose.openDetail(recordId);
+        await openGlucoseDetailRecord(recordId);
       } catch (detailError) {
         const message =
           detailError instanceof Error
@@ -568,13 +597,13 @@ export default function MeasurementsScreen() {
         Alert.alert('Error', message);
       }
     },
-    [glucose.openDetail],
+    [openGlucoseDetailRecord],
   );
 
   const handleSubmitGlucose = useCallback(
-    async (payload: Parameters<typeof glucose.submitRecord>[0]) => {
+    async (payload: Parameters<typeof submitGlucoseRecord>[0]) => {
       try {
-        const result = await glucose.submitRecord(payload);
+        const result = await submitGlucoseRecord(payload);
 
         Alert.alert(
           result.mode === 'updated' ? 'Glucosa actualizada' : 'Glucosa registrada',
@@ -590,12 +619,12 @@ export default function MeasurementsScreen() {
         );
       }
     },
-    [glucose.submitRecord],
+    [submitGlucoseRecord],
   );
 
   const confirmDeleteGlucose = useCallback(async () => {
     try {
-      const wasDeleted = await glucose.deleteSelectedRecord();
+      const wasDeleted = await deleteSelectedGlucoseRecord();
 
       if (wasDeleted) {
         Alert.alert('Registro eliminado', 'La lectura se elimino correctamente.');
@@ -607,14 +636,14 @@ export default function MeasurementsScreen() {
         apiError.message || 'No fue posible eliminar la lectura.',
       );
     }
-  }, [glucose.deleteSelectedRecord]);
+  }, [deleteSelectedGlucoseRecord]);
 
   const handleDeleteGlucose = useCallback(() => {
-    if (!glucose.selectedRecord) {
+    if (!selectedGlucoseRecord) {
       return;
     }
 
-    if (hasAdditionalHealthMetrics(glucose.selectedRecord)) {
+    if (hasAdditionalHealthMetrics(selectedGlucoseRecord)) {
       Alert.alert(
         'Eliminacion no disponible',
         'Este registro tambien incluye otras metricas clinicas y no puede eliminarse desde la app.',
@@ -636,7 +665,7 @@ export default function MeasurementsScreen() {
         },
       ],
     );
-  }, [confirmDeleteGlucose, glucose.selectedRecord]);
+  }, [confirmDeleteGlucose, selectedGlucoseRecord]);
 
   const measurementErrorCard = error ? (
     <Card style={styles.errorCard}>
@@ -646,16 +675,16 @@ export default function MeasurementsScreen() {
     </Card>
   ) : null;
 
-  const glucoseErrorCard = glucose.historyError ? (
+  const glucoseErrorCard = glucoseHistoryError ? (
     <Card style={styles.errorCard}>
       <Text style={styles.errorTitle}>No fue posible cargar tus glucosas</Text>
-      <Text style={styles.errorText}>{glucose.historyError}</Text>
+      <Text style={styles.errorText}>{glucoseHistoryError}</Text>
       <Button
         title="Reintentar"
         onPress={() =>
-          void (glucose.hasLoadedHistory
-            ? glucose.refreshData()
-            : glucose.ensureHistoryLoaded())
+          void (hasLoadedGlucoseHistory
+            ? refreshGlucoseData()
+            : ensureGlucoseHistoryLoaded())
         }
       />
     </Card>
@@ -885,7 +914,7 @@ export default function MeasurementsScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {glucose.isLoadingLatest && !summaryGlucoseRecord ? (
+                {isLoadingLatestGlucose && !summaryGlucoseRecord ? (
                   <Text style={styles.loadingLabel}>Cargando ultima lectura...</Text>
                 ) : summaryGlucoseRecord ? (
                   <>
@@ -905,7 +934,7 @@ export default function MeasurementsScreen() {
                     <TouchableOpacity
                       style={styles.inlineAction}
                       activeOpacity={0.88}
-                      onPress={glucose.openCreateForm}
+                      onPress={openCreateGlucoseForm}
                     >
                       <Ionicons
                         name="add-outline"
@@ -920,13 +949,13 @@ export default function MeasurementsScreen() {
                 ) : (
                   <>
                     <Text style={styles.overviewEmptyText}>
-                      {glucose.latestError ??
+                      {glucoseLatestError ??
                         'Aun no tienes glucosas registradas en tu seguimiento.'}
                     </Text>
                     <TouchableOpacity
                       style={styles.inlineAction}
                       activeOpacity={0.88}
-                      onPress={glucose.openCreateForm}
+                      onPress={openCreateGlucoseForm}
                     >
                       <Ionicons
                         name="add-outline"
@@ -1336,7 +1365,7 @@ export default function MeasurementsScreen() {
             <>
               {glucoseErrorCard}
 
-              {!glucose.hasLoadedHistory && glucose.isLoadingHistory ? (
+              {!hasLoadedGlucoseHistory && isLoadingGlucoseHistory ? (
                 <Card style={styles.loadingCard}>
                   <LoadingSpinner text="Cargando tus glucosas..." />
                 </Card>
@@ -1378,8 +1407,8 @@ export default function MeasurementsScreen() {
               ) : null}
 
               {!summaryGlucoseRecord &&
-              !glucose.isLoadingHistory &&
-              !glucose.isLoadingLatest ? (
+              !isLoadingGlucoseHistory &&
+              !isLoadingLatestGlucose ? (
                 <Card style={styles.emptyCard}>
                   <Ionicons
                     name="water-outline"
@@ -1395,33 +1424,33 @@ export default function MeasurementsScreen() {
                   </Text>
                   <Button
                     title="Registrar mi primera glucosa"
-                    onPress={glucose.openCreateForm}
+                    onPress={openCreateGlucoseForm}
                     icon={<Ionicons name="add-outline" size={18} color="#ffffff" />}
                   />
                 </Card>
               ) : null}
 
-              {glucose.hasLoadedHistory ? (
+              {hasLoadedGlucoseHistory ? (
                 <Card style={styles.sectionCard}>
                   <View style={styles.sectionHeader}>
                     <View style={styles.sectionHeaderContent}>
                       <Text style={styles.sectionTitle}>Historial de glucosa</Text>
                       <Text style={styles.sectionDescription}>
-                        {glucose.pagination?.total ?? glucose.records.length} registros
+                        {glucosePagination?.total ?? glucoseRecords.length} registros
                         disponibles.
                       </Text>
                     </View>
                     <TouchableOpacity
                       style={styles.sectionHeaderAction}
-                      onPress={glucose.openCreateForm}
+                      onPress={openCreateGlucoseForm}
                     >
                       <Text style={styles.sectionLink}>Registrar nueva</Text>
                     </TouchableOpacity>
                   </View>
 
-                  {glucose.records.length > 0 ? (
+                  {glucoseRecords.length > 0 ? (
                     <View style={styles.historyList}>
-                      {glucose.records.map((record) => {
+                      {glucoseRecords.map((record) => {
                         const mixedRecord = hasAdditionalHealthMetrics(record);
 
                         return (
@@ -1470,13 +1499,13 @@ export default function MeasurementsScreen() {
                     </Text>
                   )}
 
-                  {glucose.pagination &&
-                  glucose.records.length < glucose.pagination.total ? (
+                  {glucosePagination &&
+                  glucoseRecords.length < glucosePagination.total ? (
                     <Button
                       title="Cargar mas"
-                      onPress={() => void glucose.loadMore()}
+                      onPress={() => void loadMoreGlucose()}
                       variant="secondary"
-                      isLoading={glucose.isLoadingMore}
+                      isLoading={isLoadingMoreGlucose}
                     />
                   ) : null}
                 </Card>
@@ -1517,20 +1546,20 @@ export default function MeasurementsScreen() {
         />
 
         <GlucoseDetailModal
-          visible={isFocused && glucose.isDetailVisible}
-          record={glucose.selectedRecord}
-          isLoading={glucose.isDetailLoading}
-          isDeleting={glucose.isDeleting}
-          onClose={glucose.closeDetail}
-          onEdit={glucose.openEditForm}
+          visible={isFocused && isGlucoseDetailVisible}
+          record={selectedGlucoseRecord}
+          isLoading={isGlucoseDetailLoading}
+          isDeleting={isDeletingGlucose}
+          onClose={closeGlucoseDetail}
+          onEdit={openEditGlucoseForm}
           onDelete={handleDeleteGlucose}
         />
 
         <GlucoseFormModal
-          visible={isFocused && glucose.isFormVisible}
-          isSubmitting={glucose.isSubmitting}
-          initialRecord={glucose.editingRecord}
-          onClose={glucose.closeForm}
+          visible={isFocused && isGlucoseFormVisible}
+          isSubmitting={isSubmittingGlucose}
+          initialRecord={editingGlucoseRecord}
+          onClose={closeGlucoseForm}
           onSubmit={handleSubmitGlucose}
         />
       </SafeAreaView>
