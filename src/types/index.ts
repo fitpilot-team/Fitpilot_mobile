@@ -101,6 +101,30 @@ export type CardioSubclass = 'liss' | 'hiit' | 'miss';
 export type PlyometricMetricType = 'height_cm' | 'distance_cm';
 export type ExerciseType = 'multiarticular' | 'monoarticular';
 export type ResistanceProfile = 'ascending' | 'descending' | 'flat' | 'bell_shaped';
+export type AdaptiveGuidanceAction = 'increase' | 'maintain' | 'decrease';
+export type AdaptiveContextPhase = 'bulk' | 'cut' | 'maintenance';
+
+export interface AdaptiveGuidance {
+  strategy: 'double_progression';
+  recommended_action: AdaptiveGuidanceAction;
+  suggested_start_weight_kg?: number | null;
+  delta_kg?: number | null;
+  reason_code: string;
+  reason_text: string;
+  applies_on_first_exposure_only: boolean;
+}
+
+export interface MacrocycleAdaptiveConfig {
+  generation_strategy: string;
+  planned_total_weeks: number;
+  planned_total_days: number;
+  generated_microcycles: number;
+  generated_blocks: number;
+  decision_block_microcycles: number;
+  context_phase: AdaptiveContextPhase;
+  goal_profile_version: string;
+  last_completed_microcycle: number;
+}
 
 export interface ExerciseMechanics {
   type: ExerciseType;
@@ -150,6 +174,7 @@ export interface DayExercise {
   interval_rest_seconds?: number | null;
   plyometric_metric_type?: PlyometricMetricType | null;
   analytics_profile_override?: string | null;
+  adaptive_guidance?: AdaptiveGuidance | null;
   notes?: string | null;
 }
 
@@ -199,6 +224,7 @@ export interface Macrocycle {
   trainer_id: string;
   start_date: string;
   end_date: string;
+  adaptive_config?: MacrocycleAdaptiveConfig | null;
   mesocycles: Mesocycle[];
 }
 
