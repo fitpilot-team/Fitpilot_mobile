@@ -333,6 +333,11 @@ export default function ProfileScreen() {
               value={MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
               onPress={handleMeasurementPreferencePress}
             />
+            <MenuItem
+              icon="heart-outline"
+              label="Salud conectada"
+              onPress={() => router.push('/profile/connected-health' as never)}
+            />
           </View>
 
           <Text style={styles.sectionTitle}>Soporte</Text>
