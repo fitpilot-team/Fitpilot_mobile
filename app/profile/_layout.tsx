@@ -15,6 +15,7 @@ export default function ProtectedProfileLayout() {
         <Stack.Screen name="professionals" />
         <Stack.Screen name="change-password" />
         <Stack.Screen name="notifications-settings" />
+        <Stack.Screen name="connected-health" />
         <Stack.Screen name="help" />
         <Stack.Screen name="contact-support" />
         <Stack.Screen name="legal/[document]" />

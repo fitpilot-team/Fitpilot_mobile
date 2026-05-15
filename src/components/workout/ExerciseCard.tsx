@@ -51,7 +51,7 @@ import {
 } from '../../utils/workoutSession';
 import { VideoPlayerModal, YouTubePlayerModal } from '../video';
 
-const EXERCISE_PLACEHOLDER = require('../../../assets/exercise-placeholder.png');
+const EXERCISE_PLACEHOLDER = require('../../../assets/exercise-placeholder.jpg');
 const YOUTUBE_RED = '#FF0000';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - spacing.lg * 2;
@@ -123,6 +123,48 @@ const formatCompact = (value: number | null | undefined) => {
   }
 
   return Number.isInteger(value) ? `${value}` : value.toFixed(1).replace(/\.0$/, '');
+};
+
+const getAdaptiveGuidanceCopy = (dayExercise: DayExercise) => {
+  const guidance = dayExercise.adaptive_guidance;
+  if (!guidance) {
+    return null;
+  }
+
+  const deltaKg = Math.abs(guidance.delta_kg ?? 0);
+  let title = 'Mantén la carga';
+  if (guidance.recommended_action === 'increase' && deltaKg > 0) {
+    title = `Sube ${formatCompact(deltaKg)} kg`;
+  } else if (guidance.recommended_action === 'decrease' && deltaKg > 0) {
+    title = `Reduce ${formatCompact(deltaKg)} kg`;
+  }
+
+  return {
+    title,
+    reason: guidance.reason_text?.trim() || null,
+  };
+};
+
+const AdaptiveGuidanceNotice = ({
+  dayExercise,
+  styles,
+}: {
+  dayExercise: DayExercise;
+  styles: ReturnType<typeof createStyles>;
+}) => {
+  const guidanceCopy = getAdaptiveGuidanceCopy(dayExercise);
+  if (!guidanceCopy) {
+    return null;
+  }
+
+  return (
+    <View style={styles.adaptiveGuidanceBox}>
+      <Text style={styles.adaptiveGuidanceTitle}>{guidanceCopy.title}</Text>
+      {guidanceCopy.reason ? (
+        <Text style={styles.adaptiveGuidanceReason}>{guidanceCopy.reason}</Text>
+      ) : null}
+    </View>
+  );
 };
 
 const formatCardioBlockChipLabel = (
@@ -521,24 +563,27 @@ const StrengthExerciseBody = ({
   if (!isEditing) {
     return (
       <TouchableOpacity activeOpacity={0.88} onPress={onAdvance} disabled={!onAdvance || isSavingSet}>
-        <View style={styles.inlineStaticMetricsStack}>
-          <InlineStaticMetric
-            styles={styles}
-            label={`Reps ${dayExercise.reps_min ?? '-'}-${dayExercise.reps_max ?? '-'}`}
-            value={`${primarySegment?.reps_completed ?? dayExercise.reps_min ?? 0}`}
-          />
-          <View style={styles.inlineDivider} />
-          <InlineStaticMetric
-            styles={styles}
-            label="Peso (kg)"
-            value={`${formatCompact(primarySegment?.weight_kg ?? 0)} kg`}
-          />
-          {showStrengthEffort ? (
-            <>
-              <View style={styles.inlineDivider} />
-              <InlineStaticMetric styles={styles} label="Intensidad" value={currentEffortLabel} />
-            </>
-          ) : null}
+        <View style={styles.inlineGuidanceStack}>
+          <View style={styles.inlineStaticMetricsStack}>
+            <InlineStaticMetric
+              styles={styles}
+              label={`Reps ${dayExercise.reps_min ?? '-'}-${dayExercise.reps_max ?? '-'}`}
+              value={`${primarySegment?.reps_completed ?? dayExercise.reps_min ?? 0}`}
+            />
+            <View style={styles.inlineDivider} />
+            <InlineStaticMetric
+              styles={styles}
+              label="Peso (kg)"
+              value={`${formatCompact(primarySegment?.weight_kg ?? 0)} kg`}
+            />
+            {showStrengthEffort ? (
+              <>
+                <View style={styles.inlineDivider} />
+                <InlineStaticMetric styles={styles} label="Intensidad" value={currentEffortLabel} />
+              </>
+            ) : null}
+          </View>
+          <AdaptiveGuidanceNotice dayExercise={dayExercise} styles={styles} />
         </View>
       </TouchableOpacity>
     );
@@ -600,6 +645,7 @@ const StrengthExerciseBody = ({
           )
         ) : null}
       </View>
+      <AdaptiveGuidanceNotice dayExercise={dayExercise} styles={styles} />
 
       {onAdvance ? (
         <View style={[styles.inlineActionDock, { width: actionDockWidth }]}>
@@ -669,6 +715,8 @@ const StrengthSegmentEditor = ({
           </TouchableOpacity>
         ) : null}
       </View>
+
+      <AdaptiveGuidanceNotice dayExercise={dayExercise} styles={styles} />
 
       {draft.currentSegments.map((segment, segmentIndex) => (
         <View key={`${draft.currentSetNumber}-${segment.segment_index}`} style={styles.segmentCard}>
@@ -1618,6 +1666,10 @@ const createStyles = (theme: AppTheme) =>
       width: '100%',
       paddingTop: spacing.xs,
     },
+    inlineGuidanceStack: {
+      width: '100%',
+      gap: spacing.sm,
+    },
     inlineMetricRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1824,6 +1876,25 @@ const createStyles = (theme: AppTheme) =>
       borderColor: theme.colors.border,
       padding: spacing.md,
       gap: spacing.sm,
+    },
+    adaptiveGuidanceBox: {
+      borderRadius: borderRadius.lg,
+      backgroundColor: theme.colors.primarySoft,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      gap: 4,
+    },
+    adaptiveGuidanceTitle: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.primary,
+    },
+    adaptiveGuidanceReason: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textSecondary,
+      lineHeight: 18,
     },
     segmentHeader: {
       flexDirection: 'row',

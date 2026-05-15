@@ -207,12 +207,25 @@ const buildBaseSegmentDraft = (
     weight_kg?: number | null;
     effort_value?: number | null;
   } | null,
+  suggestedWeightKg?: number | null,
 ): WorkoutSetSegmentDraft => ({
   segment_index: 1,
   reps_completed: sourceSegment?.reps_completed ?? (dayExercise?.reps_min ?? 12),
-  weight_kg: sourceSegment?.weight_kg ?? 0,
+  weight_kg: sourceSegment?.weight_kg ?? suggestedWeightKg ?? 0,
   effort_value: sourceSegment?.effort_value ?? getExerciseEffortDefault(dayExercise),
 });
+
+const getAdaptiveSuggestedWeight = (
+  dayExercise?: DayExercise,
+  targetSetNumber: number = 1,
+): number | null => {
+  const guidance = dayExercise?.adaptive_guidance;
+  if (!guidance?.applies_on_first_exposure_only || targetSetNumber !== 1) {
+    return null;
+  }
+
+  return guidance.suggested_start_weight_kg ?? null;
+};
 
 const normalizeSegmentDrafts = (
   dayExercise: DayExercise | undefined,
@@ -289,7 +302,12 @@ export const getStrengthDraftValues = (
   const previousCompletedSet = shouldPrefillFromPreviousCompletedSet && targetSetNumber
     ? getPreviousCompletedSet(progress, targetSetNumber)
     : undefined;
-  const templateSegments = preferredSet?.segments ?? previousCompletedSet?.segments ?? null;
+  const adaptiveSuggestedWeight = !preferredSet && !previousCompletedSet
+    ? getAdaptiveSuggestedWeight(dayExercise, targetSetNumber ?? 1)
+    : null;
+  const templateSegments = preferredSet?.segments
+    ?? previousCompletedSet?.segments
+    ?? (adaptiveSuggestedWeight != null ? [{ weight_kg: adaptiveSuggestedWeight }] : null);
   const currentSegments = normalizeSegmentDrafts(dayExercise, templateSegments);
 
   return {
