@@ -105,6 +105,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     plugins: [
       './plugins/withDisableRoutingCapability',
+      './plugins/withFitpilotHealth',
       'expo-dev-client',
       'expo-router',
       'expo-secure-store',

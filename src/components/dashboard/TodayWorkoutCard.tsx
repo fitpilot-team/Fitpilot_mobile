@@ -230,10 +230,6 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   const currentMuscleVolume =
     muscleVolume?.training_day_id === trainingDay.id ? muscleVolume : null;
   const bodyMapMuscles = currentMuscleVolume?.muscles ?? [];
-  const bodyMapTextMaxWidth = Math.max(
-    168,
-    cardWidth - spacing.lg * 2 - bodyMapLayout.panelWidth - spacing.sm,
-  );
   const showNeutralBodyMapLoadingState = isMuscleVolumeLoading && !currentMuscleVolume;
 
   return (
@@ -271,17 +267,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
               </View>
 
               <View style={styles.heroBody}>
-                <View
-                  style={[
-                    styles.titleArea,
-                    {
-                      maxWidth: Math.min(
-                        bodyMapTextMaxWidth,
-                        cardWidth - chamferHorizontal - spacing.lg,
-                      ),
-                    },
-                  ]}
-                >
+                <View style={styles.titleArea}>
                   {isOverdueRecommendation ? (
                     <View style={styles.overduePill}>
                       <Text style={styles.overduePillText}>Entrenamiento atrasado</Text>
@@ -489,16 +475,19 @@ const createStyles = (theme: AppTheme) =>
       color: colors.white,
     },
     titleArea: {
-      flexShrink: 1,
+      flex: 1,
+      minWidth: 0,
       marginTop: 4,
     },
     heroBody: {
+      width: '100%',
       marginTop: spacing.xs,
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: spacing.sm,
     },
     bodyMapPanel: {
+      marginLeft: 'auto',
       flexShrink: 0,
       paddingTop: spacing.xs,
       paddingHorizontal: spacing.xs,
