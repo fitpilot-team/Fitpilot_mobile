@@ -121,8 +121,7 @@ function withFitpilotHealth(config) {
 
   config = withEntitlementsPlist(config, (mod) => {
     mod.modResults['com.apple.developer.healthkit'] = true;
-    mod.modResults['com.apple.developer.healthkit.access'] =
-      mod.modResults['com.apple.developer.healthkit.access'] ?? [];
+    delete mod.modResults['com.apple.developer.healthkit.access'];
     return mod;
   });
 
