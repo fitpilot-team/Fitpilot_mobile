@@ -12,8 +12,13 @@ import type {
   ClientDietWeekDay,
   ClientFoodSwapCandidate,
   ClientRecipeSummary,
+  ClientShoppingList,
+  ClientShoppingListDaySelection,
+  ClientShoppingListItem,
+  ClientShoppingListItemPayload,
 } from '../types';
 import {
+  addDaysToDateKey,
   getLocalWeekDateKeys,
   getStartOfLocalWeekDateKey,
   getTodayDateKey,
@@ -159,6 +164,7 @@ type NutritionMenuMealResponse = {
 
 type NutritionMenuResponse = {
   id: number;
+  source_template_id?: number | string | null;
   title?: string | null;
   description_?: string | null;
   exchange_system?: NutritionExchangeSystemResponse | null;
@@ -190,6 +196,40 @@ type NutritionDailyPrimarySelectionResponse = {
   menu_id: number;
 };
 
+type NutritionShoppingListItemResponse = {
+  id: number;
+  source_type: 'generated' | 'manual';
+  item_key: string | null;
+  food_id: number | null;
+  name: string;
+  category: string | null;
+  quantity_label: string | null;
+  grams: number | string | null;
+  checked: boolean;
+  checked_at: string | null;
+  note: string | null;
+  sort_order: number;
+};
+
+type NutritionShoppingListResponse = {
+  id: number;
+  client_id: number;
+  professional_id: number | null;
+  start_date: string;
+  end_date: string;
+  status: string;
+  source_signature: string;
+  current_signature: string;
+  needs_regeneration: boolean;
+  days: {
+    id: number;
+    date: string;
+    menu_id: number;
+    menu_title: string | null;
+  }[];
+  items: NutritionShoppingListItemResponse[];
+};
+
 type RecipeGroupAccumulator = {
   summary: ClientRecipeSummary;
   detail: NutritionEmbeddedRecipeDetailResponse | null;
@@ -198,6 +238,19 @@ type RecipeGroupAccumulator = {
 };
 
 const DIET_LOOKAHEAD_DAYS = 7;
+export const MAX_CLIENT_SHOPPING_LIST_DAYS = 30;
+
+const buildDateRangeKeys = (startDate: string, days: number) =>
+  Array.from({ length: days }, (_, index) => addDaysToDateKey(startDate, index) ?? startDate);
+
+const normalizeShoppingListDayCount = (value: number | undefined) => {
+  const nextValue = Math.trunc(value ?? DIET_LOOKAHEAD_DAYS);
+  if (!Number.isFinite(nextValue)) {
+    return DIET_LOOKAHEAD_DAYS;
+  }
+
+  return Math.min(Math.max(nextValue, 1), MAX_CLIENT_SHOPPING_LIST_DAYS);
+};
 
 const toNumber = (value: number | string | null | undefined): number | null => {
   if (value === null || value === undefined || value === '') {
@@ -703,6 +756,7 @@ const mapDietMenu = (
   return {
     id: `${menu.id}-${assignedDate}`,
     menuId: menu.id,
+    sourceTemplateId: toNumber(menu.source_template_id),
     assignedDate,
     title: menu.title?.trim() || 'Tu dieta',
     description: menu.description_?.trim() || null,
@@ -736,6 +790,55 @@ const mapDietRecipeDetailResponse = (
     ingredients,
   };
 };
+
+const mapShoppingListItemResponse = (
+  item: NutritionShoppingListItemResponse,
+): ClientShoppingListItem => ({
+  id: item.id,
+  sourceType: item.source_type,
+  itemKey: item.item_key,
+  foodId: item.food_id,
+  name: item.name,
+  category: item.category,
+  quantityLabel: item.quantity_label,
+  grams: toNumber(item.grams),
+  checked: item.checked,
+  checkedAt: item.checked_at,
+  note: item.note,
+  sortOrder: item.sort_order,
+});
+
+const mapShoppingListResponse = (
+  list: NutritionShoppingListResponse,
+): ClientShoppingList => ({
+  id: list.id,
+  clientId: list.client_id,
+  professionalId: list.professional_id,
+  startDate: normalizeDateKey(list.start_date) || list.start_date,
+  endDate: normalizeDateKey(list.end_date) || list.end_date,
+  status: list.status,
+  sourceSignature: list.source_signature,
+  currentSignature: list.current_signature,
+  needsRegeneration: list.needs_regeneration,
+  days: list.days.map((day) => ({
+    id: day.id,
+    date: normalizeDateKey(day.date) || day.date,
+    menuId: day.menu_id,
+    menuTitle: day.menu_title,
+  })),
+  items: list.items.map(mapShoppingListItemResponse),
+});
+
+const mapShoppingListItemPayload = (
+  payload: ClientShoppingListItemPayload,
+) => ({
+  name: payload.name,
+  category: payload.category,
+  quantity_label: payload.quantityLabel,
+  grams: payload.grams,
+  note: payload.note,
+  checked: payload.checked,
+});
 
 export const getDietRecipeDetail = async (
   recipeId: number,
@@ -887,6 +990,58 @@ export const getClientDietCalendar = async (
   });
 };
 
+export const getClientDietRange = async (
+  clientId: string,
+  startDate: string = getTodayDateKey(),
+  days: number = DIET_LOOKAHEAD_DAYS,
+): Promise<ClientDietWeekDay[]> => {
+  const numericClientId = Number(clientId);
+
+  if (!Number.isInteger(numericClientId)) {
+    throw new Error('No se pudo resolver el cliente autenticado para cargar la dieta.');
+  }
+
+  const todayDate = getTodayDateKey();
+  const anchorDate = normalizeDateKey(startDate) || todayDate;
+  const dateKeys = buildDateRangeKeys(anchorDate, days);
+  const dailyMenus = await nutritionClient.get<NutritionDailyBatchResponseItem[]>(
+    `/menus/daily/batch?client_id=${numericClientId}&date=${anchorDate}&days=${days}`,
+    { skipErrorLogging: true },
+  );
+
+  const recipeSummaryMap = await buildRecipeSummaryMap(dailyMenus);
+  const menusByDate = new Map<string, ClientDietMenu>();
+
+  for (const menu of dailyMenus) {
+    const assignedDate = normalizeDateKey(menu.assigned_date);
+    if (!assignedDate) {
+      continue;
+    }
+
+    if (!dateKeys.includes(assignedDate) || menusByDate.has(assignedDate)) {
+      continue;
+    }
+
+    menusByDate.set(
+      assignedDate,
+      mapDietMenu(menu, assignedDate, recipeSummaryMap),
+    );
+  }
+
+  return dateKeys.map((assignedDate) => {
+    const assignedMenu = menusByDate.get(assignedDate) ?? null;
+
+    return {
+      id: assignedDate,
+      assignedDate,
+      isToday: assignedDate === todayDate,
+      backendPrimaryMenuId: assignedMenu?.menuId ?? null,
+      rotationMenuOptions: [],
+      menuOptions: assignedMenu ? [assignedMenu] : [],
+    };
+  });
+};
+
 const getRotationMenuPoolCandidates = (
   resolvedAnchorDate: string,
   preferredSelectedDate: string,
@@ -940,6 +1095,31 @@ export const getClientEffectiveDietWeek = async (
   const preferredSelectedDate =
     normalizeDateKey(options?.selectedDate) || resolvedAnchorDate;
   const baseDays = await getClientDietCalendar(clientId, resolvedAnchorDate);
+  const rotationMenus = await loadClientDietRotationMenuPool(
+    clientId,
+    resolvedAnchorDate,
+    preferredSelectedDate,
+    baseDays,
+  );
+
+  return applyDietRotationMenuOptions(baseDays, rotationMenus);
+};
+
+export const getClientEffectiveDietRange = async (
+  clientId: string,
+  startDate: string = getTodayDateKey(),
+  options?: { selectedDate?: string; days?: number },
+): Promise<ClientDietWeekDay[]> => {
+  const todayDate = getTodayDateKey();
+  const resolvedAnchorDate = normalizeDateKey(startDate) || todayDate;
+  const preferredSelectedDate =
+    normalizeDateKey(options?.selectedDate) || resolvedAnchorDate;
+  const days = normalizeShoppingListDayCount(options?.days);
+  const baseDays = await getClientDietRange(
+    clientId,
+    resolvedAnchorDate,
+    days,
+  );
   const rotationMenus = await loadClientDietRotationMenuPool(
     clientId,
     resolvedAnchorDate,
@@ -1032,3 +1212,93 @@ export const getClientDietMenuPool = async (
 
   return dedupedPoolMenus.map((menu) => mapDietMenu(menu, targetDate, recipeSummaryMap));
 };
+
+export const getClientShoppingListCurrent = async (
+  clientId: string,
+  startDate: string,
+  endDate?: string,
+): Promise<ClientShoppingList | null> => {
+  const numericClientId = Number(clientId);
+  const targetStartDate = normalizeDateKey(startDate);
+  const targetEndDate = normalizeDateKey(endDate);
+
+  if (!Number.isInteger(numericClientId) || !targetStartDate) {
+    throw new Error('No se pudo resolver el rango para cargar la lista del mandado.');
+  }
+
+  const query = [
+    `client_id=${numericClientId}`,
+    `start_date=${encodeURIComponent(targetStartDate)}`,
+    targetEndDate ? `end_date=${encodeURIComponent(targetEndDate)}` : null,
+  ].filter(Boolean).join('&');
+
+  const list = await nutritionClient.get<NutritionShoppingListResponse | null>(
+    `/shopping-lists/current?${query}`,
+    { skipErrorLogging: true },
+  );
+
+  return list ? mapShoppingListResponse(list) : null;
+};
+
+export const generateClientShoppingList = async (
+  clientId: string,
+  startDate: string,
+  days: ClientShoppingListDaySelection[],
+): Promise<ClientShoppingList> => {
+  const numericClientId = Number(clientId);
+  const targetStartDate = normalizeDateKey(startDate);
+
+  if (
+    !Number.isInteger(numericClientId) ||
+    !targetStartDate ||
+    days.length < 1 ||
+    days.length > MAX_CLIENT_SHOPPING_LIST_DAYS
+  ) {
+    throw new Error(`Selecciona entre 1 y ${MAX_CLIENT_SHOPPING_LIST_DAYS} dias para generar la lista.`);
+  }
+
+  const list = await nutritionClient.post<NutritionShoppingListResponse>(
+    '/shopping-lists/generate',
+    {
+      client_id: numericClientId,
+      start_date: targetStartDate,
+      days: days.map((day) => ({
+        date: normalizeDateKey(day.date) || day.date,
+        menu_id: day.menuId,
+      })),
+    },
+  );
+
+  return mapShoppingListResponse(list);
+};
+
+export const addClientShoppingListItem = async (
+  listId: number,
+  payload: ClientShoppingListItemPayload,
+): Promise<ClientShoppingListItem> => {
+  const item = await nutritionClient.post<NutritionShoppingListItemResponse>(
+    `/shopping-lists/${listId}/items`,
+    mapShoppingListItemPayload(payload),
+  );
+
+  return mapShoppingListItemResponse(item);
+};
+
+export const updateClientShoppingListItem = async (
+  listId: number,
+  itemId: number,
+  payload: ClientShoppingListItemPayload,
+): Promise<ClientShoppingListItem> => {
+  const item = await nutritionClient.patch<NutritionShoppingListItemResponse>(
+    `/shopping-lists/${listId}/items/${itemId}`,
+    mapShoppingListItemPayload(payload),
+  );
+
+  return mapShoppingListItemResponse(item);
+};
+
+export const deleteClientShoppingListItem = async (
+  listId: number,
+  itemId: number,
+): Promise<{ success: boolean }> =>
+  nutritionClient.delete<{ success: boolean }>(`/shopping-lists/${listId}/items/${itemId}`);

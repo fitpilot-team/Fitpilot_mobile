@@ -1,4 +1,4 @@
-import { NativeModule, requireNativeModule } from 'expo';
+import { NativeModule, requireOptionalNativeModule } from 'expo';
 
 import type {
   FitpilotHealthAvailability,
@@ -16,11 +16,32 @@ declare class FitpilotHealthModule extends NativeModule<FitpilotHealthModuleEven
   openSettings(): Promise<void>;
 }
 
-const nativeModule = requireNativeModule<FitpilotHealthModule>('FitpilotHealth');
+const nativeModule =
+  requireOptionalNativeModule<FitpilotHealthModule>('FitpilotHealth');
 
-export const isAvailable = () => nativeModule.isAvailable();
-export const requestPermissions = () => nativeModule.requestPermissions();
-export const getGrantedPermissions = () => nativeModule.getGrantedPermissions();
+const unavailableMessage =
+  'Salud conectada requiere una build nativa de FitPilot con el modulo FitpilotHealth instalado.';
+
+const unsupportedAvailability = async (): Promise<FitpilotHealthAvailability> => ({
+  available: false,
+  platform: 'unsupported',
+  status: 'unsupported',
+  message: unavailableMessage,
+});
+
+const unsupportedPermissions = async (): Promise<FitpilotHealthPermissionStatus> => ({
+  platform: 'unsupported',
+  granted: [],
+  missing: [],
+});
+
+export const isAvailable = () =>
+  nativeModule?.isAvailable() ?? unsupportedAvailability();
+export const requestPermissions = () =>
+  nativeModule?.requestPermissions() ?? unsupportedPermissions();
+export const getGrantedPermissions = () =>
+  nativeModule?.getGrantedPermissions() ?? unsupportedPermissions();
 export const syncRange = (range: FitpilotHealthSyncRange) =>
-  nativeModule.syncRange(range);
-export const openSettings = () => nativeModule.openSettings();
+  nativeModule?.syncRange(range) ??
+  Promise.reject(new Error(unavailableMessage));
+export const openSettings = () => nativeModule?.openSettings() ?? Promise.resolve();

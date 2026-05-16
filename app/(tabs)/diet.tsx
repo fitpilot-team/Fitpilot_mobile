@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useRouter, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
 import {
@@ -262,6 +263,7 @@ type LoadDietOptions = {
 };
 
 export default function DietScreen() {
+  const router = useRouter();
   const { width, height } = useWindowDimensions();
   const horizontalPadding = getPrimaryScreenHorizontalPadding(width, height);
   const contentWidth = Math.max(0, getDashboardContentWidth(width) - horizontalPadding * 2);
@@ -703,6 +705,10 @@ export default function DietScreen() {
   const handleCloseMenuSelector = useCallback(() => {
     setIsMenuSelectorVisible(false);
   }, []);
+
+  const handleOpenShoppingList = useCallback(() => {
+    router.push(`/diet/shopping-list?startDate=${encodeURIComponent(anchorDate)}` as Href);
+  }, [anchorDate, router]);
 
   const handleRetryMenuOptions = useCallback(async () => {
     await loadMenuCalendar(selectedDate);
@@ -1173,6 +1179,28 @@ export default function DietScreen() {
                 entering={getEntryAnimation(220)}
                 style={[styles.selectorSection, { paddingHorizontal: horizontalPadding }]}
               >
+                <TouchableOpacity
+                  style={styles.shoppingListCard}
+                  onPress={handleOpenShoppingList}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Abrir lista del mandado"
+                >
+                  <View style={styles.shoppingListIcon}>
+                    <Ionicons name="cart-outline" size={21} color={nutritionTheme.accentStrong} />
+                  </View>
+                  <View style={styles.shoppingListCopy}>
+                    <Text style={styles.shoppingListEyebrow}>Compra semanal</Text>
+                    <Text style={styles.shoppingListTitle}>Lista del mandado</Text>
+                    <Text numberOfLines={2} style={styles.shoppingListSubtitle}>
+                      Elige los menus de 7 dias y marca lo que ya compraste.
+                    </Text>
+                  </View>
+                  <View style={styles.shoppingListArrow}>
+                    <Ionicons name="chevron-forward-outline" size={19} color={nutritionTheme.accentStrong} />
+                  </View>
+                </TouchableOpacity>
+
                 <View style={styles.selectorCardShell}>
                   <TouchableOpacity
                     style={[
@@ -1575,6 +1603,59 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     selectorSection: {
       marginTop: spacing.md,
+      gap: spacing.sm,
+    },
+    shoppingListCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      borderRadius: borderRadius.md,
+      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.primarySoft,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    shoppingListIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryBorder,
+    },
+    shoppingListCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+    shoppingListEyebrow: {
+      color: nutritionTheme.accentStrong,
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    shoppingListTitle: {
+      marginTop: 2,
+      color: theme.colors.textPrimary,
+      fontSize: fontSize.sm,
+      fontWeight: '800',
+    },
+    shoppingListSubtitle: {
+      marginTop: 2,
+      color: theme.colors.textMuted,
+      fontSize: fontSize.xs,
+      lineHeight: 18,
+    },
+    shoppingListArrow: {
+      width: 30,
+      height: 30,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
     },
     selectorCardShell: {
       borderRadius: borderRadius.md,

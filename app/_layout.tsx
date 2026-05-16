@@ -115,6 +115,14 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen
+            name="diet"
+            options={{
+              headerShown: false,
+              presentation: 'card',
+              animation: 'slide_from_right',
+            }}
+          />
+          <Stack.Screen
             name="recommendations/[tipId]"
             options={{
               presentation: 'card',
