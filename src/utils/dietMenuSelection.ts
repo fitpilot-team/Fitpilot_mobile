@@ -24,16 +24,28 @@ const selectPreferredDietMenu = (
   return incomingMenu;
 };
 
+const getDietMenuOriginId = (menu: ClientDietMenu) =>
+  menu.sourceTemplateId ?? menu.menuId;
+
+const hasDietMenuOrigin = (
+  menus: ClientDietMenu[],
+  targetMenu: ClientDietMenu,
+) => {
+  const targetOriginId = getDietMenuOriginId(targetMenu);
+  return menus.some((menu) => getDietMenuOriginId(menu) === targetOriginId);
+};
+
 export const dedupeDietMenus = (menus: ClientDietMenu[]) =>
   Array.from(
     menus.reduce((menuMap, menu) => {
-      const currentMenu = menuMap.get(menu.menuId);
+      const menuOriginId = getDietMenuOriginId(menu);
+      const currentMenu = menuMap.get(menuOriginId);
       if (!currentMenu) {
-        menuMap.set(menu.menuId, menu);
+        menuMap.set(menuOriginId, menu);
         return menuMap;
       }
 
-      menuMap.set(menu.menuId, selectPreferredDietMenu(currentMenu, menu));
+      menuMap.set(menuOriginId, selectPreferredDietMenu(currentMenu, menu));
       return menuMap;
     }, new Map<number, ClientDietMenu>()).values(),
   );
@@ -50,18 +62,26 @@ export const applyDietRotationMenuOptions = (
   const nextRotationMenus = dedupeDietMenus(rotationMenus);
 
   return days.map((day) => {
-    const nextMenuOptions = mergeDietMenuOptions(nextRotationMenus, day.menuOptions);
+    const dayMenuOptions = dedupeDietMenus(day.menuOptions);
+    const currentRotationMenus = dedupeDietMenus(day.rotationMenuOptions);
+    const hasAssignedMenuOptions =
+      day.backendPrimaryMenuId !== null ||
+      dayMenuOptions.some((menu) => !hasDietMenuOrigin(currentRotationMenus, menu));
+    const nextDayRotationMenus = hasAssignedMenuOptions ? [] : nextRotationMenus;
+    const nextMenuOptions = hasAssignedMenuOptions
+      ? dayMenuOptions
+      : nextRotationMenus;
     const didChange =
       nextMenuOptions.length !== day.menuOptions.length ||
       nextMenuOptions.some((menu, index) => menu !== day.menuOptions[index]) ||
-      nextRotationMenus.length !== day.rotationMenuOptions.length ||
-      nextRotationMenus.some((menu, index) => menu !== day.rotationMenuOptions[index]);
+      nextDayRotationMenus.length !== day.rotationMenuOptions.length ||
+      nextDayRotationMenus.some((menu, index) => menu !== day.rotationMenuOptions[index]);
 
     return !didChange
       ? day
       : {
           ...day,
-          rotationMenuOptions: nextRotationMenus,
+          rotationMenuOptions: nextDayRotationMenus,
           menuOptions: nextMenuOptions,
         };
   });

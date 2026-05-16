@@ -9,12 +9,16 @@ type PublicExtra = {
   clientForgotPasswordUrl?: string;
 };
 
+const DEFAULT_NUTRITION_API_URL = 'http://localhost:3000/v1';
+const DEFAULT_TRAINING_API_URL = 'http://localhost:8010/api';
+
 const resolveRequiredUrl = (
   envValue: string | undefined,
   configValue: string | undefined,
+  defaultValue: string,
   envKey: 'EXPO_PUBLIC_NUTRITION_API_URL' | 'EXPO_PUBLIC_TRAINING_API_URL',
 ) => {
-  const resolved = envValue?.trim() || configValue?.trim();
+  const resolved = envValue?.trim() || configValue?.trim() || defaultValue;
 
   if (!resolved) {
     throw new Error(
@@ -39,11 +43,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const nutritionApiUrl = resolveRequiredUrl(
     process.env.EXPO_PUBLIC_NUTRITION_API_URL,
     extra.nutritionApiUrl,
+    DEFAULT_NUTRITION_API_URL,
     'EXPO_PUBLIC_NUTRITION_API_URL',
   );
   const trainingApiUrl = resolveRequiredUrl(
     process.env.EXPO_PUBLIC_TRAINING_API_URL,
     extra.trainingApiUrl,
+    DEFAULT_TRAINING_API_URL,
     'EXPO_PUBLIC_TRAINING_API_URL',
   );
   const termsUrl = resolveOptionalValue(
@@ -63,16 +69,22 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     extra.turnstileBridgeUrl,
   );
   const isProd = appEnv === 'production';
+  const isDevelopment = appEnv === 'development';
+  const appName = isDevelopment ? 'FitPilot Dev' : 'FitPilot';
+  const nativeScheme = isDevelopment ? 'fitpilot-dev' : 'fitpilot';
+  const nativeIdentifier = isDevelopment
+    ? 'com.fitpilot.mobile.dev'
+    : 'com.fitpilot.mobile';
 
   return {
     ...config,
     owner: 'fitpilot',
-    name: 'FitPilot',
+    name: appName,
     slug: 'fitpilot-mobile',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/AppIcon.png',
-    scheme: 'fitpilot',
+    scheme: nativeScheme,
     userInterfaceStyle: 'automatic',
     splash: {
       image: './assets/splash.png',
@@ -82,7 +94,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     assetBundlePatterns: ['**/*'],
     ios: {
       supportsTablet: false,
-      bundleIdentifier: 'com.fitpilot.mobile',
+      bundleIdentifier: nativeIdentifier,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSAppTransportSecurity: {
@@ -96,7 +108,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#3b82f6',
       },
-      package: 'com.fitpilot.mobile',
+      package: nativeIdentifier,
     },
     web: {
       bundler: 'metro',

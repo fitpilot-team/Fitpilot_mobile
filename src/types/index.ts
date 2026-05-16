@@ -915,6 +915,7 @@ export interface ClientDietMeal {
 export interface ClientDietMenu {
   id: string;
   menuId: number;
+  sourceTemplateId: number | null;
   assignedDate: string;
   title: string;
   description: string | null;
@@ -935,6 +936,58 @@ export interface ClientDietWeekDay {
   backendPrimaryMenuId: number | null;
   rotationMenuOptions: ClientDietMenu[];
   menuOptions: ClientDietMenu[];
+}
+
+export interface ClientShoppingListDaySelection {
+  date: string;
+  menuId: number;
+}
+
+export type ClientShoppingListItemSource = 'generated' | 'manual';
+
+export interface ClientShoppingListDay {
+  id: number;
+  date: string;
+  menuId: number;
+  menuTitle: string | null;
+}
+
+export interface ClientShoppingListItem {
+  id: number;
+  sourceType: ClientShoppingListItemSource;
+  itemKey: string | null;
+  foodId: number | null;
+  name: string;
+  category: string | null;
+  quantityLabel: string | null;
+  grams: number | null;
+  checked: boolean;
+  checkedAt: string | null;
+  note: string | null;
+  sortOrder: number;
+}
+
+export interface ClientShoppingList {
+  id: number;
+  clientId: number;
+  professionalId: number | null;
+  startDate: string;
+  endDate: string;
+  status: string;
+  sourceSignature: string;
+  currentSignature: string;
+  needsRegeneration: boolean;
+  days: ClientShoppingListDay[];
+  items: ClientShoppingListItem[];
+}
+
+export interface ClientShoppingListItemPayload {
+  name?: string;
+  category?: string | null;
+  quantityLabel?: string | null;
+  grams?: number | null;
+  note?: string | null;
+  checked?: boolean;
 }
 
 // API types
