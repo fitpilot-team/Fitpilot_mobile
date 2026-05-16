@@ -128,7 +128,7 @@ export const ConnectedHealthMetricTile = ({
         >
           <Ionicons name={metric.icon} size={15} color={colors.color} />
         </View>
-        <Text style={styles.metricLabel} numberOfLines={1}>
+        <Text style={styles.metricLabel} numberOfLines={2}>
           {metric.label}
         </Text>
       </View>
@@ -285,26 +285,27 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
     },
     metricTile: {
-      flex: 1,
-      minWidth: 148,
-      minHeight: 116,
-      padding: spacing.md,
+      width: '48%',
+      minWidth: 0,
+      minHeight: 104,
+      flexGrow: 0,
+      flexShrink: 0,
+      padding: spacing.sm,
       borderRadius: borderRadius.lg,
       backgroundColor: theme.colors.surfaceAlt,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      justifyContent: 'space-between',
-      gap: spacing.sm,
+      justifyContent: 'flex-start',
+      gap: spacing.xs,
     },
     metricTileCompact: {
       width: '48%',
-      minWidth: 0,
-      minHeight: 96,
+      minHeight: 88,
       padding: spacing.sm,
     },
     metricHeader: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       gap: spacing.xs,
     },
     metricIcon: {
@@ -321,16 +322,18 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       color: theme.colors.textMuted,
       textTransform: 'uppercase',
-      letterSpacing: 0.3,
+      lineHeight: 15,
     },
     metricValue: {
-      fontSize: fontSize.xl,
+      fontSize: fontSize.lg,
       fontWeight: '800',
       color: theme.colors.textPrimary,
       fontVariant: ['tabular-nums'],
+      marginTop: spacing.xs,
     },
     metricValueCompact: {
       fontSize: fontSize.base,
+      marginTop: 0,
     },
     metricHelper: {
       fontSize: fontSize.xs,

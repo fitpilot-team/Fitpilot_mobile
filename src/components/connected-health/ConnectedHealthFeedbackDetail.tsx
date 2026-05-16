@@ -159,7 +159,7 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
             />
           </View>
 
-          <Card style={styles.sectionCard} padding="lg">
+          <Card style={styles.sectionCard} padding="md">
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Metricas relevantes</Text>
               <Button
@@ -175,12 +175,12 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
             </View>
             <View style={styles.metricsGrid}>
               {feedback.metrics.map((metric) => (
-                <ConnectedHealthMetricTile key={metric.key} metric={metric} />
+                <ConnectedHealthMetricTile key={metric.key} metric={metric} compact />
               ))}
             </View>
           </Card>
 
-          <Card style={styles.sectionCard} padding="lg">
+          <Card style={styles.sectionCard} padding="md">
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Senales accionables</Text>
               <Text style={styles.sectionMeta}>{range} dias</Text>
