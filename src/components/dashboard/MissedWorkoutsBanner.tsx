@@ -29,7 +29,7 @@ const getRelativeDateLabel = (dateString: string) => {
   }
 
   if (diffDays < 7) {
-    return `Hace ${diffDays} dias`;
+    return `Hace ${diffDays} días`;
   }
 
   return formatLocalDate(dateString, { day: 'numeric', month: 'short' }, 'es-ES');
@@ -66,7 +66,7 @@ export const MissedWorkoutsBanner: React.FC<MissedWorkoutsBannerProps> = ({
                 : `Tienes ${missedWorkouts.length} entrenamientos pendientes`}
             </Text>
             <Text style={styles.subtitle}>
-              No dejes que se acumulen. Ponte al dia.
+              No dejes que se acumulen. Ponte al día.
             </Text>
           </View>
         </View>

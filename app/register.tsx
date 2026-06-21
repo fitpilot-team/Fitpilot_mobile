@@ -7,17 +7,20 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Input, PhoneInput } from '../src/components/common';
 import { TurnstileChallengeModal } from '../src/components/auth/TurnstileChallengeModal';
-import { brandColors, borderRadius, fontSize, spacing } from '../src/constants/colors';
+import { brandColors, borderRadius, fontSize, scaledFontSize, spacing } from '../src/constants/colors';
 import { registrationService } from '../src/services/registration';
 import { useAuthStore } from '../src/store/authStore';
 import { useThemedStyles, type AppTheme } from '../src/theme';
+import { getResponsiveMaxWidth } from '../src/utils/responsive';
 import type { ApiError } from '../src/types';
 
 type PhoneAvailabilityStatus =
@@ -44,7 +47,21 @@ const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 export default function RegisterScreen() {
   const styles = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { completeSignupSession, isAuthenticated, user } = useAuthStore();
+
+  const scaledText = useMemo(
+    () => ({
+      headerTitle: { fontSize: scaledFontSize('2xl', width) },
+      headerSubtitle: { fontSize: scaledFontSize('xs', width) },
+      stepPillText: { fontSize: scaledFontSize('xs', width) },
+      cardSubtitle: { fontSize: scaledFontSize('sm', width) },
+      errorText: { fontSize: scaledFontSize('sm', width) },
+      signInText: { fontSize: scaledFontSize('sm', width) },
+    }),
+    [width],
+  );
 
   const [step, setStep] = useState<RegisterStep>('details');
   const [firstName, setFirstName] = useState('');
@@ -153,11 +170,11 @@ export default function RegisterScreen() {
 
   const phoneHelperText = (() => {
     if (!phoneNumber) {
-      return 'Usaremos este numero para identificar tu cuenta.';
+      return 'Usaremos este número para identificar tu cuenta.';
     }
 
     if (phoneAvailability === 'checking') return 'Validando disponibilidad...';
-    if (phoneAvailability === 'available') return 'Telefono disponible.';
+    if (phoneAvailability === 'available') return 'Teléfono disponible.';
     if (phoneAvailability === 'unavailable') return undefined;
     if (phoneAvailability === 'error') return undefined;
     return undefined;
@@ -168,9 +185,9 @@ export default function RegisterScreen() {
       return undefined;
     }
 
-    if (phoneAvailability === 'invalid') return 'Ingresa un telefono valido.';
-    if (phoneAvailability === 'unavailable') return 'Este telefono ya esta registrado.';
-    if (phoneAvailability === 'error') return 'No pudimos validar el telefono. Intenta de nuevo.';
+    if (phoneAvailability === 'invalid') return 'Ingresa un teléfono válido.';
+    if (phoneAvailability === 'unavailable') return 'Este teléfono ya está registrado.';
+    if (phoneAvailability === 'error') return 'No pudimos validar el teléfono. Intenta de nuevo.';
     return undefined;
   })();
 
@@ -181,22 +198,22 @@ export default function RegisterScreen() {
     }
 
     if (!isEmailValid) {
-      setFormError('Ingresa un correo electronico valido.');
+      setFormError('Ingresa un correo electrónico válido.');
       return false;
     }
 
     if (!isPhoneFormatValid || phoneAvailability !== 'available') {
-      setFormError(phoneError || 'Valida tu telefono antes de continuar.');
+      setFormError(phoneError || 'Valida tu teléfono antes de continuar.');
       return false;
     }
 
     if (!isPasswordValid) {
-      setFormError('Tu contrasena debe tener al menos 8 caracteres.');
+      setFormError('Tu contraseña debe tener al menos 8 caracteres.');
       return false;
     }
 
     if (!doPasswordsMatch) {
-      setFormError('Las contrasenas no coinciden.');
+      setFormError('Las contraseñas no coinciden.');
       return false;
     }
 
@@ -233,11 +250,11 @@ export default function RegisterScreen() {
 
       setStep('verify-email');
       setVerificationCode('');
-      setVerificationMessage(`Te enviamos un codigo a ${normalizedEmail}.`);
+      setVerificationMessage(`Te enviamos un código a ${normalizedEmail}.`);
       setResendAvailableAt(Date.now() + response.nextCooldownSeconds * 1000);
     } catch (error) {
       const apiError = error as ApiError;
-      setFormError(apiError.message || 'No pudimos enviar el codigo. Intenta de nuevo.');
+      setFormError(apiError.message || 'No pudimos enviar el código. Intenta de nuevo.');
     } finally {
       setIsSendingCode(false);
     }
@@ -245,7 +262,7 @@ export default function RegisterScreen() {
 
   const verifyAndCreateAccount = async () => {
     if (verificationCode.trim().length !== 6) {
-      setFormError('Ingresa el codigo de 6 digitos.');
+      setFormError('Ingresa el código de 6 dígitos.');
       return;
     }
 
@@ -277,7 +294,7 @@ export default function RegisterScreen() {
       const refreshToken = signupResponse.refresh_token;
 
       if (!accessToken || !refreshToken) {
-        throw new Error('La respuesta de registro no incluyo una sesion valida.');
+        throw new Error('La respuesta de registro no incluyó una sesión válida.');
       }
 
       const authResult = await completeSignupSession({
@@ -286,7 +303,7 @@ export default function RegisterScreen() {
       });
 
       if (authResult.status !== 'success') {
-        throw new Error('No fue posible iniciar sesion despues del registro.');
+        throw new Error('No fue posible iniciar sesión después del registro.');
       }
 
       router.replace('/onboarding');
@@ -321,38 +338,50 @@ export default function RegisterScreen() {
         colors={[brandColors.navy, brandColors.sky]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.header}
+        style={[styles.header, { paddingTop: insets.top + spacing.md }]}
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Volver al inicio de sesion"
+          accessibilityLabel="Volver al inicio de sesión"
           onPress={() => router.replace('/login')}
           style={styles.backButton}
         >
           <Ionicons name="chevron-back" size={20} color="#ffffff" />
         </Pressable>
 
-        <Text style={styles.headerTitle}>Crea tu cuenta</Text>
-        <Text style={styles.headerSubtitle}>
+        <Text style={[styles.headerTitle, scaledText.headerTitle]}>Crea tu cuenta</Text>
+        <Text
+          style={[
+            styles.headerSubtitle,
+            scaledText.headerSubtitle,
+            { maxWidth: getResponsiveMaxWidth(320, spacing.md, width) },
+          ]}
+        >
           Verifica tu correo y completa tu onboarding personalizado.
         </Text>
       </LinearGradient>
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          {
+            flexGrow: 1,
+            paddingBottom: Math.max(insets.bottom + spacing.xl, spacing.xl),
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.stepPill}>
-          <Text style={styles.stepPillText}>
-            {step === 'details' ? '1 de 2 - Datos de cuenta' : '2 de 2 - Verificacion'}
+          <Text style={[styles.stepPillText, scaledText.stepPillText]}>
+            {step === 'details' ? '1 de 2 - Datos de cuenta' : '2 de 2 - Verificación'}
           </Text>
         </View>
 
         {formError ? (
           <View style={styles.errorCard}>
             <Ionicons name="alert-circle-outline" size={20} color={styles.errorText.color} />
-            <Text style={styles.errorText}>{formError}</Text>
+            <Text style={[styles.errorText, scaledText.errorText]}>{formError}</Text>
           </View>
         ) : null}
 
@@ -396,12 +425,12 @@ export default function RegisterScreen() {
               autoComplete="email"
               keyboardType="email-address"
               icon="mail-outline"
-              error={email.trim() && !isEmailValid ? 'Correo invalido.' : undefined}
+              error={email.trim() && !isEmailValid ? 'Correo inválido.' : undefined}
               compact
             />
 
             <PhoneInput
-              label="Telefono"
+              label="Teléfono"
               value={phoneNumber}
               onChangeValue={(value) => {
                 setPhoneNumber(value);
@@ -413,8 +442,8 @@ export default function RegisterScreen() {
             />
 
             <Input
-              label="Contrasena"
-              placeholder="Minimo 8 caracteres"
+              label="Contraseña"
+              placeholder="Mínimo 8 caracteres"
               value={password}
               onChangeText={(value) => {
                 setPassword(value);
@@ -428,8 +457,8 @@ export default function RegisterScreen() {
             />
 
             <Input
-              label="Confirmar contrasena"
-              placeholder="Repite tu contrasena"
+              label="Confirmar contraseña"
+              placeholder="Repite tu contraseña"
               value={confirmPassword}
               onChangeText={(value) => {
                 setConfirmPassword(value);
@@ -447,12 +476,12 @@ export default function RegisterScreen() {
             />
 
             <Button
-              title="Enviar codigo de verificacion"
+              title="Enviar código de verificación"
               onPress={openCaptcha}
               isLoading={isSendingCode}
               disabled={!canSendCode}
               fullWidth
-              size="sm"
+              size="md"
               style={styles.primaryAction}
             />
           </View>
@@ -464,8 +493,8 @@ export default function RegisterScreen() {
               </View>
               <View style={styles.verificationCopy}>
                 <Text style={styles.cardTitle}>Verifica tu correo</Text>
-                <Text style={styles.cardSubtitle}>
-                  Captura el codigo de 6 digitos que enviamos a {normalizedEmail}.
+                <Text style={[styles.cardSubtitle, scaledText.cardSubtitle]}>
+                  Captura el código de 6 dígitos que enviamos a {normalizedEmail}.
                 </Text>
               </View>
             </View>
@@ -521,7 +550,7 @@ export default function RegisterScreen() {
         )}
 
         <Pressable onPress={() => router.replace('/login')} style={styles.signInLink}>
-          <Text style={styles.signInText}>Ya tengo cuenta</Text>
+          <Text style={[styles.signInText, scaledText.signInText]}>Ya tengo cuenta</Text>
         </Pressable>
       </ScrollView>
 
@@ -542,7 +571,6 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.background,
     },
     header: {
-      paddingTop: Platform.OS === 'ios' ? 58 : 42,
       paddingHorizontal: spacing.md,
       paddingBottom: 20,
       borderBottomLeftRadius: 22,
@@ -564,8 +592,6 @@ const createStyles = (theme: AppTheme) =>
     },
     headerSubtitle: {
       marginTop: spacing.xs,
-      maxWidth: 320,
-      fontSize: fontSize.xs,
       lineHeight: 17,
       color: 'rgba(255,255,255,0.86)',
     },
@@ -574,7 +600,6 @@ const createStyles = (theme: AppTheme) =>
     },
     content: {
       padding: spacing.md,
-      paddingBottom: spacing.xl,
     },
     stepPill: {
       alignSelf: 'flex-start',

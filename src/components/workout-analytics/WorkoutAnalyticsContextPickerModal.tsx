@@ -79,7 +79,7 @@ export const WorkoutAnalyticsContextPickerModal: React.FC<WorkoutAnalyticsContex
             <View style={styles.headerCopy}>
               <Text style={styles.title}>{getScopeTitle(scopeKind)}</Text>
               <Text style={styles.subtitle}>
-                Salta a cualquier contexto historico visible del cliente.
+                Salta a cualquier contexto histórico visible del cliente.
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>

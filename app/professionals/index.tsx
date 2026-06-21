@@ -39,7 +39,7 @@ type PriceFilter = 'all' | 'under_500' | '500_1000' | '1000_plus';
 
 const SERVICE_TYPE_OPTIONS = [
   { key: 'all', label: 'Todos' },
-  { key: 'NUTRITION', label: 'Nutricion' },
+  { key: 'NUTRITION', label: 'Nutrición' },
   { key: 'TRAINING', label: 'Entreno' },
   { key: 'BOTH', label: 'Ambas' },
 ] satisfies { key: ServiceTypeFilter; label: string }[];
@@ -64,7 +64,7 @@ const ROLE_LABELS: Record<PublicProfessionalRole, string> = {
 };
 
 const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
-  NUTRITION: 'Nutricion',
+  NUTRITION: 'Nutrición',
   TRAINING: 'Entrenamiento',
   BOTH: 'Ambas',
 };
@@ -523,7 +523,7 @@ function ProfessionalCard({ profile, selectedServiceType, onPress }: Professiona
           <View style={styles.locationRow}>
             <Ionicons name="location-outline" size={13} color={theme.colors.iconMuted} />
             <Text style={styles.location} numberOfLines={1}>
-              {location || 'Ubicacion no disponible'}
+              {location || 'Ubicación no disponible'}
             </Text>
           </View>
         </View>

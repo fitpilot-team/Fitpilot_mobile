@@ -992,7 +992,7 @@ const MovementExerciseBody = ({
             <>
               <InlineStaticMetric
                 styles={styles}
-                label={isTimedMovement ? 'Duracion' : 'Cumplimiento'}
+                label={isTimedMovement ? 'Duración' : 'Cumplimiento'}
                 value={isTimedMovement && draft.durationSeconds != null ? formatDurationSeconds(draft.durationSeconds) : 'Completar'}
               />
               <View style={styles.inlineDivider} />

@@ -164,7 +164,7 @@ const getRunStatusPresentation = (
               observationCount === 1 ? '' : 'es'
             } para revisar.`
           : unavailableCount > 0
-            ? 'Algunos indicadores todavia no se pueden estimar con este registro.'
+            ? 'Algunos indicadores todavía no se pueden estimar con este registro.'
             : 'Tus resultados necesitan una revision breve.',
       backgroundColor: `${theme.colors.warning}18`,
       textColor: theme.colors.warning,
@@ -175,7 +175,7 @@ const getRunStatusPresentation = (
   if (status === 'running') {
     return {
       label: 'Actualizando',
-      description: 'Estamos recalculando esta medicion.',
+      description: 'Estamos recalculando esta medición.',
       backgroundColor: `${theme.colors.primary}18`,
       textColor: theme.colors.primary,
       icon: 'refresh-outline' as const,
@@ -186,8 +186,8 @@ const getRunStatusPresentation = (
     label: 'Listo',
     description:
       unavailableCount > 0
-        ? 'Tus indicadores principales estan listos y algunos extras aun no se pueden estimar.'
-        : 'Tus indicadores estan listos para consulta.',
+        ? 'Tus indicadores principales están listos y algunos extras aún no se pueden estimar.'
+        : 'Tus indicadores están listos para consulta.',
     backgroundColor: `${theme.colors.success}18`,
     textColor: theme.colors.success,
     icon: 'checkmark-circle-outline' as const,
@@ -220,7 +220,7 @@ const getWarningMessage = (
   }
 
   if (warning.code === 'calculation_error') {
-    return 'Este indicador necesita revision antes de mostrarse con confianza.';
+    return 'Este indicador necesita revisión antes de mostrarse con confianza.';
   }
 
   if (missingFieldLabels.length > 0) {
@@ -415,7 +415,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
 
   const measurementDate = detail
     ? formatMeasurementDate(getMeasurementDisplayDate(detail.measurement), 'long')
-    : 'Detalle de medicion';
+    : 'Detalle de medición';
 
   const idealWeightPatientValue =
     idealWeightChart?.patientWeight !== null &&
@@ -475,7 +475,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
         <View style={styles.container}>
           <View style={styles.header}>
             <View style={styles.headerText}>
-              <Text style={styles.title}>Detalle de medicion</Text>
+              <Text style={styles.title}>Detalle de medición</Text>
               <Text style={styles.subtitle}>{measurementDate}</Text>
             </View>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
@@ -493,7 +493,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                 color={theme.colors.iconMuted}
               />
               <Text style={styles.emptyStateText}>
-                No fue posible cargar el detalle de esta medicion.
+                No fue posible cargar el detalle de esta medición.
               </Text>
             </View>
           ) : (
@@ -506,7 +506,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
               <Card style={styles.sectionCard}>
                 <View style={styles.summaryHeader}>
                   <View style={styles.summaryHeaderText}>
-                    <Text style={styles.sectionTitle}>Resumen de tu medicion</Text>
+                    <Text style={styles.sectionTitle}>Resumen de tu medición</Text>
                     <Text style={styles.sectionDescription}>
                       Registro del {measurementDate}.
                     </Text>
@@ -542,7 +542,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
               </Card>
               {primaryCalculations.length > 0 ? (
                 <Card style={styles.sectionCard}>
-                  <Text style={styles.sectionTitle}>Indicadores de tu medicion</Text>
+                  <Text style={styles.sectionTitle}>Indicadores de tu medición</Text>
                   <Text style={styles.sectionDescription}>
                     Estimaciones calculadas con tus datos.
                   </Text>
@@ -691,7 +691,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
                 <Card style={styles.sectionCard}>
                   <Text style={styles.sectionTitle}>No pudimos estimar todavia</Text>
                   <Text style={styles.sectionDescription}>
-                    Agrega estas medidas en futuras mediciones para completar mas indicadores.
+                    Agrega estas medidas en futuras mediciones para completar más indicadores.
                   </Text>
                   <View style={styles.unavailableList}>
                     {unavailableCalculations.map((calculation) => (

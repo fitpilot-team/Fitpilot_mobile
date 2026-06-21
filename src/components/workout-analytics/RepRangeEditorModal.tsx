@@ -88,7 +88,7 @@ export const RepRangeEditorModal: React.FC<RepRangeEditorModalProps> = ({
             <View style={styles.headerCopy}>
               <Text style={styles.title}>Editar rangos</Text>
               <Text style={styles.subtitle}>
-                Ajusta los buckets de repeticiones que alimentan tus graficas de carga.
+                Ajusta los buckets de repeticiones que alimentan tus gráficas de carga.
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>

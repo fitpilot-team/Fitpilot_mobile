@@ -33,7 +33,7 @@ const buildLastSessionCopy = (lastPerformedOn?: string | null) => {
     return 'Sin fecha reciente';
   }
 
-  return `Ultima sesion${META_SEPARATOR}${formatLocalDate(lastPerformedOn, {
+  return `Última sesión${META_SEPARATOR}${formatLocalDate(lastPerformedOn, {
     day: 'numeric',
     month: 'short',
   })}`;

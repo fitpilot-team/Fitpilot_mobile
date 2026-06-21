@@ -144,7 +144,7 @@ const buildEmptyCardState = (
         reason,
         dateKey,
         dateLabel,
-        title: 'Dia de descanso',
+        title: 'Día de descanso',
         subtitle: dateLabel
           ? `No tienes sesiones programadas para ${dateLabel}.`
           : 'No tienes sesiones programadas para esta fecha.',
@@ -168,8 +168,8 @@ const buildEmptyCardState = (
         dateLabel,
         title: 'Sin entrenamiento pendiente',
         subtitle: dateLabel
-          ? `Las sesiones de ${dateLabel} ya estan completadas.`
-          : 'Las sesiones de esta fecha ya estan completadas.',
+          ? `Las sesiones de ${dateLabel} ya están completadas.`
+          : 'Las sesiones de esta fecha ya están completadas.',
       };
     case 'no-executed':
       return {
@@ -189,7 +189,7 @@ const buildEmptyCardState = (
         dateKey,
         dateLabel,
         title: 'No tienes un programa activo',
-        subtitle: 'Cuando exista una programacion vigente, aparecera aqui.',
+        subtitle: 'Cuando exista una programación vigente, aparecerá aquí.',
       };
   }
 };

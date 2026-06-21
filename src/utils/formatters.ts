@@ -293,7 +293,7 @@ export function getMovementMetricLabel(
     return dayExercise?.plyometric_metric_type === 'distance_cm' ? 'Distancia (cm)' : 'Altura (cm)';
   }
 
-  return 'Duracion (min)';
+  return 'Duración (min)';
 }
 
 const ZONE_HR_RANGES: Record<number, string> = {

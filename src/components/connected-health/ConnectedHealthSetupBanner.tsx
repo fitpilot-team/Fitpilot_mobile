@@ -31,7 +31,7 @@ export const ConnectedHealthSetupBanner: React.FC<ConnectedHealthSetupBannerProp
           <View style={styles.copy}>
             <Text style={styles.title}>Activa salud conectada</Text>
             <Text style={styles.message} numberOfLines={2}>
-              Conecta tus metricas de sueno, energia y recuperacion en un paso.
+              Conecta tus métricas de sueño, energía y recuperación en un paso.
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={theme.colors.iconMuted} />

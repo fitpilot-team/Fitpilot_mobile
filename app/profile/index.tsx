@@ -226,12 +226,12 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'Cerrar sesion',
-      'Estas seguro de que deseas cerrar sesion?',
+      'Cerrar sesión',
+      '¿Estás seguro de que deseas cerrar sesión?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Cerrar sesion',
+          text: 'Cerrar sesión',
           style: 'destructive',
           onPress: async () => {
             await logout();
@@ -247,10 +247,10 @@ export default function ProfileScreen() {
       const nextStatus = await requestAccountDeletion();
       setAccountDeletionStatus(nextStatus);
       const scheduledLabel =
-        formatAccountDeletionDate(nextStatus.scheduled_deletion_at) || '30 dias';
+        formatAccountDeletionDate(nextStatus.scheduled_deletion_at) || '30 días';
       Alert.alert(
-        'Eliminacion programada',
-        `Tu cuenta se eliminara automaticamente el ${scheduledLabel}. Puedes cancelar la solicitud desde Perfil antes de esa fecha.`,
+        'Eliminación programada',
+        `Tu cuenta se eliminará automáticamente el ${scheduledLabel}. Puedes cancelar la solicitud desde Perfil antes de esa fecha.`,
       );
     } catch {
       Alert.alert(
@@ -269,7 +269,7 @@ export default function ProfileScreen() {
       setAccountDeletionStatus(nextStatus);
       Alert.alert(
         'Solicitud cancelada',
-        'Tu cuenta seguira activa y no se eliminara automaticamente.',
+        'Tu cuenta seguirá activa y no se eliminará automáticamente.',
       );
     } catch {
       Alert.alert(
@@ -291,14 +291,14 @@ export default function ProfileScreen() {
         accountDeletionStatus.scheduled_deletion_at,
       );
       Alert.alert(
-        'Eliminacion programada',
+        'Eliminación programada',
         scheduledLabel
-          ? `Tu cuenta esta programada para eliminarse automaticamente el ${scheduledLabel}.`
-          : 'Tu cuenta esta programada para eliminarse automaticamente.',
+          ? `Tu cuenta está programada para eliminarse automáticamente el ${scheduledLabel}.`
+          : 'Tu cuenta está programada para eliminarse automáticamente.',
         [
           { text: 'Cerrar', style: 'cancel' },
           {
-            text: 'Cancelar eliminacion',
+            text: 'Cancelar eliminación',
             onPress: () => {
               void handleCancelAccountDeletion();
             },
@@ -310,11 +310,11 @@ export default function ProfileScreen() {
 
     Alert.alert(
       'Eliminar cuenta y datos',
-      'Tu cuenta de cliente y los datos asociados se programaran para eliminarse automaticamente en 30 dias. Podras cancelar la solicitud desde Perfil antes de esa fecha.',
+      'Tu cuenta de cliente y los datos asociados se programarán para eliminarse automáticamente en 30 días. Podrás cancelar la solicitud desde Perfil antes de esa fecha.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Programar eliminacion',
+          text: 'Programar eliminación',
           style: 'destructive',
           onPress: () => {
             void handleRequestAccountDeletion();
@@ -360,9 +360,9 @@ export default function ProfileScreen() {
     ? 'Cargando'
     : accountDeletionStatus?.requested
       ? accountDeletionStatus.days_until_deletion !== null
-        ? `${accountDeletionStatus.days_until_deletion} dias restantes`
+        ? `${accountDeletionStatus.days_until_deletion} días restantes`
         : 'Programada'
-      : 'Automatica en 30 dias';
+      : 'Automática en 30 días';
 
   const professionalsValue =
     !hasLoadedCareTeam && isLoadingCareTeam
@@ -453,7 +453,7 @@ export default function ProfileScreen() {
             />
             <MenuItem
               icon="person-outline"
-              label="Informacion personal"
+              label="Información personal"
               onPress={() => router.push('/profile/personal-info')}
             />
             <MenuItem

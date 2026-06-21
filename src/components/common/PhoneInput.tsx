@@ -1,5 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  useWindowDimensions,
+} from 'react-native';
 import { CountryPicker, type CountryItem } from '../../vendor/countryPicker';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, spacing, fontSize, shadows } from '../../constants/colors';
@@ -10,6 +17,7 @@ import {
   sanitizePhoneDigits,
   splitE164Phone,
 } from '../../utils/phone';
+import { getScaledFontSize } from '../../utils/responsive';
 
 interface PhoneInputProps {
   label?: string;
@@ -32,9 +40,21 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const { width } = useWindowDimensions();
   const [isPickerVisible, setIsPickerVisible] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<CountryItem>(DEFAULT_PHONE_COUNTRY);
   const [nationalNumber, setNationalNumber] = useState('');
+
+  const compactStyles = useMemo(
+    () => ({
+      label: { fontSize: getScaledFontSize(fontSize.xs, width) },
+      flag: { fontSize: getScaledFontSize(fontSize.base, width) },
+      dialCode: { fontSize: getScaledFontSize(fontSize.sm, width) },
+      input: { fontSize: getScaledFontSize(fontSize.sm, width) },
+      countryButton: { maxWidth: width * 0.35 },
+    }),
+    [width],
+  );
 
   useEffect(() => {
     const nextValue = splitE164Phone(value);
@@ -60,7 +80,11 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
 
   return (
     <View style={[styles.container, compact ? styles.containerCompact : null]}>
-      {label ? <Text style={[styles.label, compact ? styles.labelCompact : null]}>{label}</Text> : null}
+      {label ? (
+        <Text style={[styles.label, compact ? [styles.labelCompact, compactStyles.label] : null]}>
+          {label}
+        </Text>
+      ) : null}
 
       <View
         style={[
@@ -72,22 +96,30 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
         <TouchableOpacity
           style={[
             styles.countryButton,
-            compact ? styles.countryButtonCompact : null,
+            compact ? [styles.countryButtonCompact, compactStyles.countryButton] : null,
             disabled ? styles.countryButtonDisabled : null,
           ]}
           activeOpacity={0.7}
           disabled={disabled}
           onPress={() => setIsPickerVisible(true)}
         >
-          <Text style={[styles.flag, compact ? styles.flagCompact : null]}>{selectedCountry.flag}</Text>
-          <Text style={[styles.dialCode, compact ? styles.dialCodeCompact : null]}>
+          <Text style={[styles.flag, compact ? [styles.flagCompact, compactStyles.flag] : null]}>
+            {selectedCountry.flag}
+          </Text>
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.dialCode,
+              compact ? [styles.dialCodeCompact, compactStyles.dialCode] : null,
+            ]}
+          >
             {selectedCountry.dial_code}
           </Text>
           <Ionicons name="chevron-down" size={compact ? 14 : 16} color={theme.colors.icon} />
         </TouchableOpacity>
 
         <TextInput
-          style={[styles.input, compact ? styles.inputCompact : null]}
+          style={[styles.input, compact ? [styles.inputCompact, compactStyles.input] : null]}
           value={nationalNumber}
           onChangeText={handleNumberChange}
           editable={!disabled}
@@ -135,7 +167,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginBottom: spacing.md,
     },
     containerCompact: {
-      marginBottom: 10,
+      marginBottom: spacing.sm,
     },
     label: {
       fontSize: fontSize.sm,
@@ -144,8 +176,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginBottom: spacing.xs,
     },
     labelCompact: {
-      fontSize: fontSize.xs,
-      marginBottom: 3,
+      marginBottom: spacing.xs,
     },
     fieldContainer: {
       flexDirection: 'row',
@@ -157,6 +188,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       overflow: 'hidden',
     },
     fieldContainerCompact: {
+      minHeight: 44,
       borderRadius: borderRadius.sm,
     },
     fieldContainerError: {
@@ -173,9 +205,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       backgroundColor: theme.colors.surface,
     },
     countryButtonCompact: {
-      gap: 3,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      gap: spacing.xs,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.sm,
     },
     countryButtonDisabled: {
       opacity: 0.6,
@@ -183,16 +215,14 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     flag: {
       fontSize: fontSize.lg,
     },
-    flagCompact: {
-      fontSize: fontSize.base,
-    },
+    flagCompact: {},
     dialCode: {
       fontSize: fontSize.base,
       fontWeight: '600',
       color: theme.colors.textSecondary,
     },
     dialCodeCompact: {
-      fontSize: fontSize.sm,
+      flexShrink: 1,
     },
     input: {
       flex: 1,
@@ -202,9 +232,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       color: theme.colors.textPrimary,
     },
     inputCompact: {
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      fontSize: fontSize.sm,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.sm,
     },
     helperText: {
       fontSize: fontSize.xs,
@@ -212,7 +241,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginTop: spacing.xs,
     },
     helperTextCompact: {
-      marginTop: 3,
+      marginTop: spacing.xs,
     },
     errorText: {
       color: theme.colors.error,

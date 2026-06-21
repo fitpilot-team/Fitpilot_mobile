@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import {
   Modal,
@@ -15,8 +15,11 @@ import {
   toLocalDateKey,
 } from '../../utils/date';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
+import { BirthdateWheelPicker } from './BirthdateWheelPicker';
 
 type CalendarDateInput = Date | string | null | undefined;
+
+export type CalendarPickerFlow = 'default' | 'birthdate';
 
 export interface CalendarDatePickerPanelProps {
   selectedDate?: CalendarDateInput;
@@ -25,13 +28,16 @@ export interface CalendarDatePickerPanelProps {
   maxDate?: CalendarDateInput;
   disabledDateKeys?: string[];
   isActive?: boolean;
+  requireConfirmation?: boolean;
+  onPendingDateChange?: (date: Date | null) => void;
   onSelect: (date: Date) => void;
 }
 
-interface CalendarDatePickerModalProps extends Omit<CalendarDatePickerPanelProps, 'isActive'> {
+interface CalendarDatePickerModalProps extends Omit<CalendarDatePickerPanelProps, 'isActive' | 'onPendingDateChange'> {
   visible: boolean;
   title: string;
   subtitle?: string | null;
+  pickerFlow?: CalendarPickerFlow;
   onClose: () => void;
 }
 
@@ -47,8 +53,29 @@ type CalendarSelectorMode = 'month' | 'year' | null;
 
 const WEEKDAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
 const YEAR_GRID_COLUMNS = 4;
-const YEAR_ROW_HEIGHT = 44;
+const YEAR_ROW_HEIGHT = 40;
 const DEFAULT_YEAR_RANGE = 120;
+const DEFAULT_BIRTH_YEAR_OFFSET = 30;
+
+const getDefaultBirthdate = (
+  parsedSelectedDate: Date | null,
+  parsedInitialVisibleDate: Date | null,
+  parsedMaxDate: Date | null,
+) => {
+  if (parsedSelectedDate) {
+    return parsedSelectedDate;
+  }
+
+  if (parsedInitialVisibleDate) {
+    return parsedInitialVisibleDate;
+  }
+
+  const anchorYear = parsedMaxDate?.getFullYear() ?? new Date().getFullYear();
+  return new Date(anchorYear - DEFAULT_BIRTH_YEAR_OFFSET, 0, 1, 12, 0, 0, 0);
+};
+
+const useParsedDate = (dateKey: string | null) =>
+  useMemo(() => (dateKey ? parseLocalDate(dateKey) : null), [dateKey]);
 
 const MONTH_OPTIONS = Array.from({ length: 12 }, (_, monthIndex) => ({
   label: formatLocalDate(new Date(2020, monthIndex, 1, 12, 0, 0, 0), {
@@ -101,25 +128,32 @@ export const CalendarDatePickerPanel: React.FC<CalendarDatePickerPanelProps> = (
   maxDate,
   disabledDateKeys,
   isActive = true,
+  requireConfirmation = false,
+  onPendingDateChange,
   onSelect,
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
-  const parsedSelectedDate = parseLocalDate(selectedDate) ?? null;
+  const selectedDateKey = toLocalDateKey(selectedDate);
   const initialVisibleDateKey = toLocalDateKey(initialVisibleDate);
-  const parsedInitialVisibleDate = parseLocalDate(initialVisibleDateKey) ?? null;
-  const parsedMinDate = parseLocalDate(minDate) ?? null;
-  const parsedMaxDate = parseLocalDate(maxDate) ?? null;
-  const selectedDateKey = toLocalDateKey(parsedSelectedDate);
+  const minDateKey = toLocalDateKey(minDate);
+  const maxDateKey = toLocalDateKey(maxDate);
+  const parsedSelectedDate = useParsedDate(selectedDateKey);
+  const parsedInitialVisibleDate = useParsedDate(initialVisibleDateKey);
+  const parsedMinDate = useParsedDate(minDateKey);
+  const parsedMaxDate = useParsedDate(maxDateKey);
   const disabledDateKeySet = useMemo(
     () => new Set(disabledDateKeys ?? []),
     [disabledDateKeys],
   );
+  const onPendingDateChangeRef = useRef(onPendingDateChange);
+  onPendingDateChangeRef.current = onPendingDateChange;
   const yearScrollRef = React.useRef<ScrollView>(null);
   const [calendarMonth, setCalendarMonth] = useState(() =>
     startOfMonth(parsedSelectedDate ?? parsedInitialVisibleDate ?? new Date()),
   );
   const [selectorMode, setSelectorMode] = useState<CalendarSelectorMode>(null);
+  const [pendingDateKey, setPendingDateKey] = useState<string | null>(selectedDateKey);
 
   const clampMonthToBounds = (value: Date) => {
     const nextMonth = startOfMonth(value);
@@ -152,7 +186,17 @@ export const CalendarDatePickerPanel: React.FC<CalendarDatePickerPanelProps> = (
         ? currentMonth
         : nextMonth
     ));
+    setPendingDateKey(selectedDateKey);
   }, [initialVisibleDateKey, isActive, selectedDateKey]);
+
+  useEffect(() => {
+    if (!isActive || !requireConfirmation) {
+      return;
+    }
+
+    const nextPendingDate = pendingDateKey ? parseLocalDate(pendingDateKey) : null;
+    onPendingDateChangeRef.current?.(nextPendingDate);
+  }, [isActive, pendingDateKey, requireConfirmation]);
 
   const yearOptions = useMemo(() => {
     const currentYear = calendarMonth.getFullYear();
@@ -167,9 +211,9 @@ export const CalendarDatePickerPanel: React.FC<CalendarDatePickerPanelProps> = (
 
     return Array.from(
       { length: Math.max(0, endYear - startYear + 1) },
-      (_, index) => startYear + index,
+      (_, index) => endYear - index,
     );
-  }, [calendarMonth, parsedMaxDate, parsedMinDate]);
+  }, [calendarMonth, maxDateKey, minDateKey, parsedMaxDate, parsedMinDate]);
 
   useEffect(() => {
     if (selectorMode !== 'year') {
@@ -260,6 +304,22 @@ export const CalendarDatePickerPanel: React.FC<CalendarDatePickerPanelProps> = (
     ));
     setSelectorMode('month');
   };
+
+  const handleDayPress = (date: Date) => {
+    const dateKey = toLocalDateKey(date);
+    if (!dateKey) {
+      return;
+    }
+
+    if (requireConfirmation) {
+      setPendingDateKey(dateKey);
+      return;
+    }
+
+    onSelect(date);
+  };
+
+  const activeDateKey = requireConfirmation ? pendingDateKey : selectedDateKey;
 
   return (
     <>
@@ -420,13 +480,13 @@ export const CalendarDatePickerPanel: React.FC<CalendarDatePickerPanelProps> = (
 
           <View style={styles.grid}>
             {calendarDays.map((day) => {
-              const isSelected = selectedDateKey === toLocalDateKey(day.date);
+              const isSelected = activeDateKey === toLocalDateKey(day.date);
 
               return (
                 <Pressable
                   key={day.key}
                   disabled={day.disabled}
-                  onPress={() => onSelect(day.date)}
+                  onPress={() => handleDayPress(day.date)}
                   style={[
                     styles.day,
                     day.disabled ? styles.dayDisabled : null,
@@ -460,15 +520,170 @@ export const CalendarDatePickerPanel: React.FC<CalendarDatePickerPanelProps> = (
   );
 };
 
+interface BirthdateWizardPanelProps {
+  selectedDate?: CalendarDateInput;
+  initialVisibleDate?: CalendarDateInput;
+  minDate?: CalendarDateInput;
+  maxDate?: CalendarDateInput;
+  isActive?: boolean;
+  onPendingDateChange: (date: Date | null) => void;
+}
+
+const BirthdateWizardPanel: React.FC<BirthdateWizardPanelProps> = ({
+  selectedDate,
+  initialVisibleDate,
+  minDate,
+  maxDate,
+  isActive = true,
+  onPendingDateChange,
+}) => {
+  const { theme } = useAppTheme();
+  const selectedDateKey = toLocalDateKey(selectedDate);
+  const initialVisibleDateKey = toLocalDateKey(initialVisibleDate);
+  const minDateKey = toLocalDateKey(minDate);
+  const maxDateKey = toLocalDateKey(maxDate);
+  const parsedSelectedDate = useParsedDate(selectedDateKey);
+  const parsedInitialVisibleDate = useParsedDate(initialVisibleDateKey);
+  const parsedMinDate = useParsedDate(minDateKey);
+  const parsedMaxDate = useParsedDate(maxDateKey);
+  const onPendingDateChangeRef = useRef(onPendingDateChange);
+  onPendingDateChangeRef.current = onPendingDateChange;
+
+  const defaultBirthdate = useMemo(
+    () => getDefaultBirthdate(parsedSelectedDate, parsedInitialVisibleDate, parsedMaxDate),
+    [parsedInitialVisibleDate, parsedMaxDate, parsedSelectedDate],
+  );
+
+  const [draftYear, setDraftYear] = useState(defaultBirthdate.getFullYear());
+  const [draftMonth, setDraftMonth] = useState(defaultBirthdate.getMonth());
+  const [draftDay, setDraftDay] = useState(defaultBirthdate.getDate());
+
+  const resetDraft = useCallback(() => {
+    const nextDate = getDefaultBirthdate(
+      selectedDateKey ? parseLocalDate(selectedDateKey) : null,
+      parsedInitialVisibleDate,
+      parsedMaxDate,
+    );
+
+    setDraftYear(nextDate.getFullYear());
+    setDraftMonth(nextDate.getMonth());
+    setDraftDay(nextDate.getDate());
+  }, [parsedInitialVisibleDate, parsedMaxDate, selectedDateKey]);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    resetDraft();
+  }, [isActive, initialVisibleDateKey, resetDraft, selectedDateKey]);
+
+  const lastPendingDateKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isActive) {
+      if (lastPendingDateKeyRef.current !== null) {
+        lastPendingDateKeyRef.current = null;
+        onPendingDateChangeRef.current(null);
+      }
+      return;
+    }
+
+    const pendingDate = new Date(draftYear, draftMonth, draftDay, 12, 0, 0, 0);
+    const pendingDateKey = toLocalDateKey(pendingDate);
+    const isDisabled = Boolean(
+      !pendingDateKey ||
+      (parsedMinDate && compareDays(pendingDate, parsedMinDate) < 0) ||
+      (parsedMaxDate && compareDays(pendingDate, parsedMaxDate) > 0),
+    );
+    const nextPendingDateKey = isDisabled ? null : pendingDateKey;
+
+    if (lastPendingDateKeyRef.current === nextPendingDateKey) {
+      return;
+    }
+
+    lastPendingDateKeyRef.current = nextPendingDateKey;
+    onPendingDateChangeRef.current(
+      nextPendingDateKey ? parseLocalDate(nextPendingDateKey) : null,
+    );
+  }, [
+    draftDay,
+    draftMonth,
+    draftYear,
+    isActive,
+    maxDateKey,
+    minDateKey,
+    parsedMaxDate,
+    parsedMinDate,
+  ]);
+
+  return (
+    <BirthdateWheelPicker
+      year={draftYear}
+      month={draftMonth}
+      day={draftDay}
+      minDateKey={minDateKey}
+      maxDateKey={maxDateKey}
+      onChange={({ year, month, day }) => {
+        setDraftYear(year);
+        setDraftMonth(month);
+        setDraftDay(day);
+      }}
+      theme={theme}
+    />
+  );
+};
+
 export const CalendarDatePickerModal: React.FC<CalendarDatePickerModalProps> = ({
   visible,
   title,
   subtitle,
+  pickerFlow = 'default',
+  requireConfirmation = false,
   onClose,
+  onSelect,
   ...panelProps
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const [pendingDate, setPendingDate] = useState<Date | null>(null);
+  const usesBirthdateFlow = pickerFlow === 'birthdate';
+  const needsConfirmation = usesBirthdateFlow || requireConfirmation;
+
+  const handlePendingDateChange = useCallback((date: Date | null) => {
+    setPendingDate((current) => {
+      const nextKey = date ? toLocalDateKey(date) : null;
+      const currentKey = current ? toLocalDateKey(current) : null;
+
+      if (nextKey === currentKey) {
+        return current;
+      }
+
+      return date;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!visible) {
+      setPendingDate(null);
+    }
+  }, [visible]);
+
+  const handleConfirm = () => {
+    if (!pendingDate) {
+      return;
+    }
+
+    onSelect(pendingDate);
+  };
+
+  const resolvedSubtitle = subtitle ?? (
+    usesBirthdateFlow
+      ? 'Desliza día, mes y año para elegir tu fecha de nacimiento.'
+      : requireConfirmation
+        ? 'Selecciona un día y confirma para guardar la fecha.'
+        : null
+  );
 
   return (
     <Modal
@@ -484,7 +699,7 @@ export const CalendarDatePickerModal: React.FC<CalendarDatePickerModalProps> = (
           <View style={styles.header}>
             <View style={styles.headerCopy}>
               <Text style={styles.title}>{title}</Text>
-              {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+              {resolvedSubtitle ? <Text style={styles.subtitle}>{resolvedSubtitle}</Text> : null}
             </View>
 
             <Pressable onPress={onClose} style={styles.closeButton}>
@@ -492,12 +707,44 @@ export const CalendarDatePickerModal: React.FC<CalendarDatePickerModalProps> = (
             </Pressable>
           </View>
 
-          <CalendarDatePickerPanel {...panelProps} isActive={visible} />
+          {usesBirthdateFlow ? (
+            <BirthdateWizardPanel
+              {...panelProps}
+              isActive={visible}
+              onPendingDateChange={handlePendingDateChange}
+            />
+          ) : (
+            <CalendarDatePickerPanel
+              {...panelProps}
+              isActive={visible}
+              requireConfirmation={requireConfirmation}
+              onPendingDateChange={handlePendingDateChange}
+              onSelect={onSelect}
+            />
+          )}
 
           <View style={styles.footer}>
-            <Pressable onPress={onClose} style={styles.doneButton}>
-              <Text style={styles.doneButtonText}>Cerrar</Text>
-            </Pressable>
+            {needsConfirmation ? (
+              <>
+                <Pressable onPress={onClose} style={styles.cancelButton}>
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleConfirm}
+                  disabled={!pendingDate}
+                  style={[
+                    styles.doneButton,
+                    !pendingDate ? styles.doneButtonDisabled : null,
+                  ]}
+                >
+                  <Text style={styles.doneButtonText}>Confirmar fecha</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Pressable onPress={onClose} style={styles.doneButton}>
+                <Text style={styles.doneButtonText}>Cerrar</Text>
+              </Pressable>
+            )}
           </View>
         </View>
       </View>
@@ -660,23 +907,58 @@ const createStyles = (theme: AppTheme) =>
       textTransform: 'capitalize',
     },
     yearScroll: {
-      maxHeight: 264,
+      maxHeight: 240,
     },
     yearGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: spacing.sm,
-      paddingVertical: spacing.xs,
+      width: '100%',
     },
     yearOption: {
       width: '22.5%',
-      height: 36,
+      height: YEAR_ROW_HEIGHT,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: borderRadius.full,
       borderWidth: 1,
       borderColor: theme.colors.border,
       backgroundColor: theme.colors.surface,
+    },
+    decadeRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: spacing.xs,
+      marginBottom: spacing.sm,
+    },
+    decadeChip: {
+      borderRadius: borderRadius.full,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    decadeChipActive: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primary,
+    },
+    decadeChipText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+    },
+    decadeChipTextActive: {
+      color: colors.white,
+    },
+    decadeSection: {
+      marginBottom: spacing.sm,
+    },
+    decadeTitle: {
+      marginBottom: spacing.sm,
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+      textAlign: 'center',
     },
     yearOptionText: {
       fontSize: fontSize.sm,
@@ -754,7 +1036,23 @@ const createStyles = (theme: AppTheme) =>
     },
     footer: {
       marginTop: spacing.md,
-      alignItems: 'flex-end',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: spacing.sm,
+    },
+    cancelButton: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: borderRadius.full,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    cancelButtonText: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
     },
     doneButton: {
       paddingHorizontal: spacing.md,
@@ -762,10 +1060,131 @@ const createStyles = (theme: AppTheme) =>
       borderRadius: borderRadius.full,
       backgroundColor: theme.colors.primary,
     },
+    doneButtonDisabled: {
+      opacity: 0.45,
+    },
     doneButtonText: {
       fontSize: fontSize.sm,
       fontWeight: '700',
       color: colors.white,
+    },
+    birthdateWizard: {
+      gap: spacing.md,
+    },
+    wizardStepper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    wizardStepConnector: {
+      width: 18,
+      height: 2,
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.border,
+    },
+    wizardStepConnectorCompleted: {
+      backgroundColor: theme.colors.primary,
+    },
+    wizardStepPill: {
+      minWidth: 72,
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    wizardStepPillActive: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primary,
+    },
+    wizardStepPillCompleted: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.surface,
+    },
+    wizardStepNumber: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      overflow: 'hidden',
+      textAlign: 'center',
+      lineHeight: 22,
+      fontSize: fontSize.xs,
+      fontWeight: '800',
+      color: theme.colors.textMuted,
+      backgroundColor: theme.colors.surface,
+    },
+    wizardStepNumberActive: {
+      color: colors.white,
+      backgroundColor: 'rgba(255, 255, 255, 0.24)',
+    },
+    wizardStepLabel: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+    },
+    wizardStepLabelActive: {
+      color: colors.white,
+    },
+    wizardHint: {
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
+    wizardBackButton: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    wizardBackButtonText: {
+      fontSize: fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.primary,
+    },
+    wizardMonthContext: {
+      marginBottom: spacing.sm,
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+      textAlign: 'center',
+      textTransform: 'capitalize',
+    },
+    birthdateDayGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+    birthdateDay: {
+      width: '14.2857%',
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    wizardPreview: {
+      borderRadius: borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    wizardPreviewLabel: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    wizardPreviewValue: {
+      fontSize: fontSize.base,
+      fontWeight: '700',
+      color: theme.colors.textPrimary,
+      textTransform: 'capitalize',
     },
   });
 

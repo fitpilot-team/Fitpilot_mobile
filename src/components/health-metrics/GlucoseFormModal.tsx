@@ -95,7 +95,7 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
 
   const title = initialRecord ? 'Editar glucosa' : 'Registrar glucosa';
   const subtitle = initialRecord
-    ? 'Actualiza la lectura para mantener el seguimiento al dia.'
+    ? 'Actualiza la lectura para mantener el seguimiento al día.'
     : 'Comparte tu lectura para que tu nutriologo vea la tendencia real.';
 
   const payload = useMemo(() => {

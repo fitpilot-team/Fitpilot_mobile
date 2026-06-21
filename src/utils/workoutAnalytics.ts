@@ -32,7 +32,7 @@ export const EXERCISE_DETAIL_METRIC_OPTIONS: {
   { value: 'volume', label: 'Volumen', unit: 'kg' },
   { value: 'best_reps', label: 'Mejor reps', unit: 'reps' },
   { value: 'effort', label: 'Esfuerzo', unit: 'RIR/RPE' },
-  { value: 'duration', label: 'Duracion', unit: 'min' },
+  { value: 'duration', label: 'Duración', unit: 'min' },
   { value: 'calories', label: 'Calorias', unit: 'cal' },
   { value: 'distance', label: 'Distancia', unit: 'm' },
 ];
@@ -154,7 +154,7 @@ export const validateRepRangeDrafts = (drafts: RepRangeDraft[]): string | null =
     }
 
     if (!isLast && maxReps == null) {
-      return 'Solo el ultimo rango puede quedar abierto.';
+      return 'Solo el último rango puede quedar abierto.';
     }
 
     if (maxReps != null && (Number.isNaN(maxReps) || maxReps < minReps)) {

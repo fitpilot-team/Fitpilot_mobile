@@ -31,12 +31,12 @@ type AssignedProfessionalCardProps = {
 
 const DOMAIN_LABELS: Record<AssignedProfessionalDomain, string> = {
   training: 'Entrenamiento',
-  nutrition: 'Nutricion',
+  nutrition: 'Nutrición',
 };
 
 const EMPTY_MESSAGES: Record<AssignedProfessionalDomain, string> = {
-  training: 'Aun no tienes entrenador asignado para entrenamiento.',
-  nutrition: 'Aun no tienes nutriologo asignado para nutricion.',
+  training: 'Aún no tienes entrenador asignado para entrenamiento.',
+  nutrition: 'Aún no tienes nutriólogo asignado para nutrición.',
 };
 
 const joinDomainLabels = (domains: AssignedProfessionalDomain[]) =>
@@ -72,7 +72,7 @@ export const AssignedProfessionalCard: React.FC<AssignedProfessionalCardProps> =
   const emptyMessage =
     domains.length === 1
       ? EMPTY_MESSAGES[domains[0]]
-      : 'Aun no tienes profesionales asignados para tus planes actuales.';
+      : 'Aún no tienes profesionales asignados para tus planes actuales.';
   const canRenderAvatarImage =
     state === 'assigned' && Boolean(summary?.avatarUrl) && !hasImageError;
 

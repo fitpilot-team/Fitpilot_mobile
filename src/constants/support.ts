@@ -44,47 +44,47 @@ export const accountDeletionUrl = resolveOptionalUrl(
 
 export const supportFaqItems: SupportFaqItem[] = [
   {
-    question: 'No puedo iniciar sesion. Que hago?',
+    question: 'No puedo iniciar sesión. ¿Qué hago?',
     answer:
-      'Verifica tu correo y contrasena, revisa tu conexion y vuelve a intentarlo. Si el problema sigue, contacta a soporte para revisar tu cuenta.',
+      'Verifica tu correo y contraseña, revisa tu conexión y vuelve a intentarlo. Si el problema sigue, contacta a soporte para revisar tu cuenta.',
   },
   {
-    question: 'No veo mi plan de alimentacion o entrenamientos.',
+    question: 'No veo mi plan de alimentación o entrenamientos.',
     answer:
-      'Espera unos minutos despues de una asignacion nueva y vuelve a abrir la app. Si tu plan sigue sin aparecer, escribenos para validarlo.',
+      'Espera unos minutos después de una asignación nueva y vuelve a abrir la app. Si tu plan sigue sin aparecer, escríbenos para validarlo.',
   },
   {
     question: 'No recibo notificaciones.',
     answer:
-      'Confirma que las notificaciones esten activas en tu dispositivo y en la opcion de Perfil > Notificaciones dentro de la app.',
+      'Confirma que las notificaciones estén activas en tu dispositivo y en la opción de Perfil > Notificaciones dentro de la app.',
   },
   {
-    question: 'Como actualizo mis datos o mi foto de perfil?',
+    question: '¿Cómo actualizo mis datos o mi foto de perfil?',
     answer:
-      'Desde Perfil puedes editar tu informacion personal, cambiar tu contrasena y actualizar tu foto tocando el icono de camara.',
+      'Desde Perfil puedes editar tu información personal, cambiar tu contraseña y actualizar tu foto tocando el ícono de cámara.',
   },
   {
     question: 'Necesito ayuda adicional.',
     answer:
-      'Usa los canales de correo o WhatsApp para enviarnos tu duda con el mayor detalle posible y poder ayudarte mas rapido.',
+      'Usa los canales de correo o WhatsApp para enviarnos tu duda con el mayor detalle posible y poder ayudarte más rápido.',
   },
 ];
 
 export const supportLegalDocuments = {
   terms: {
-    title: 'Terminos y condiciones',
+    title: 'Términos y condiciones',
     subtitle: 'Consulta las reglas de uso y las condiciones actuales de FitPilot.',
-    emptyStateTitle: 'Terminos no configurados',
+    emptyStateTitle: 'Términos no configurados',
     emptyStateDescription:
-      'Todavia no tenemos una URL publica para este documento. Vuelve a intentarlo mas adelante o solicita ayuda al equipo de soporte.',
+      'Todavía no tenemos una URL pública para este documento. Vuelve a intentarlo más adelante o solicita ayuda al equipo de soporte.',
     url: resolveOptionalUrl(process.env.EXPO_PUBLIC_TERMS_URL || extra.termsUrl || 'https://pro.fitpilot.fit/es/terms'),
   },
   privacy: {
-    title: 'Politica de privacidad',
-    subtitle: 'Consulta como protegemos y procesamos tus datos dentro de FitPilot.',
-    emptyStateTitle: 'Politica no configurada',
+    title: 'Política de privacidad',
+    subtitle: 'Consulta cómo protegemos y procesamos tus datos dentro de FitPilot.',
+    emptyStateTitle: 'Política no configurada',
     emptyStateDescription:
-      'Todavia no tenemos una URL publica para este documento. Vuelve a intentarlo mas adelante o solicita ayuda al equipo de soporte.',
+      'Todavía no tenemos una URL pública para este documento. Vuelve a intentarlo más adelante o solicita ayuda al equipo de soporte.',
     url: resolveOptionalUrl(process.env.EXPO_PUBLIC_PRIVACY_URL || extra.privacyUrl || 'https://pro.fitpilot.fit/es/privacy'),
   },
 } satisfies Record<string, SupportLegalDocument>;

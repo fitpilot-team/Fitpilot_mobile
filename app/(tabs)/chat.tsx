@@ -1406,7 +1406,7 @@ export default function ChatScreen() {
                   <View style={styles.emptyThread}>
                     <Text style={styles.emptyTitle}>Nuevo chat</Text>
                     <Text style={styles.emptyCopy}>
-                      Envia el primer mensaje cuando estes listo.
+                      Envía el primer mensaje cuando estés listo.
                     </Text>
                   </View>
                 )}

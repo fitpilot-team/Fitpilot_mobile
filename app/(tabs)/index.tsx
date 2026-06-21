@@ -481,7 +481,7 @@ export default function HomeScreen() {
 
   const sessionPickerTitle = useMemo(() => {
     if (!programTimelineView.focusedDay) {
-      return 'Sesiones del dia';
+      return 'Sesiones del día';
     }
 
     return formatLocalDate(programTimelineView.focusedDay.dateKey, {
@@ -700,7 +700,7 @@ export default function HomeScreen() {
           title={sessionPickerTitle}
           subtitle={
             programTimelineView.focusedDay
-              ? `${programTimelineView.focusedDay.sessions.length} sesion${programTimelineView.focusedDay.sessions.length > 1 ? 'es' : ''} disponible${programTimelineView.focusedDay.sessions.length > 1 ? 's' : ''}`
+              ? `${programTimelineView.focusedDay.sessions.length} sesión${programTimelineView.focusedDay.sessions.length > 1 ? 'es' : ''} disponible${programTimelineView.focusedDay.sessions.length > 1 ? 's' : ''}`
               : null
           }
           sessions={programTimelineView.focusedDay?.sessions ?? []}

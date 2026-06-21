@@ -52,7 +52,7 @@ export const DietHero: React.FC<DietHeroProps> = ({
     month: 'long',
   });
   const subtitle = menu.description || `Plan activo - ${dateLabel}`;
-  const badgeLabel = isPreview ? 'Previsualizando' : isToday ? 'Hoy' : 'Plan del dia';
+  const badgeLabel = isPreview ? 'Previsualizando' : isToday ? 'Hoy' : 'Plan del día';
   const badgeIcon = isPreview ? 'eye-outline' : isToday ? 'sparkles' : 'calendar-outline';
   const stats: {
     label: string;
@@ -101,7 +101,7 @@ export const DietHero: React.FC<DietHeroProps> = ({
         <View style={styles.copy}>
           <View style={styles.titleRow}>
             <View style={styles.titleCopy}>
-              <Text style={[styles.eyebrow, { color: accentColor }]}>Resumen del menu</Text>
+              <Text style={[styles.eyebrow, { color: accentColor }]}>Resumen del menú</Text>
               <Text numberOfLines={1} style={[styles.title, { color: textPrimary }]}>{menuLabel}</Text>
             </View>
 

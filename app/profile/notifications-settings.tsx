@@ -76,7 +76,7 @@ export default function NotificationsSettingsScreen() {
           await nutritionClient.post('/users/notification-preferences', nextPreferences);
           Alert.alert(
             'Notificaciones',
-            'No se pudieron activar las notificaciones en este dispositivo. Revisa los permisos de Android para FitPilot, tu conexion e intenta de nuevo.',
+            'No se pudieron activar las notificaciones en este dispositivo. Revisa los permisos de Android para FitPilot, tu conexión e intenta de nuevo.',
           );
           return;
         }
