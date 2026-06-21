@@ -110,8 +110,8 @@ const getSelectedMenuForDate = (
 const getMenuOptionLabel = (menu: ClientDietMenu, options: ClientDietMenu[]) => {
   const selectedMenuIndex = options.findIndex((option) => option.menuId === menu.menuId);
   return selectedMenuIndex >= 0
-    ? `Opcion ${selectedMenuIndex + 1}`
-    : 'Seleccion confirmada';
+    ? `Opción ${selectedMenuIndex + 1}`
+    : 'Selección confirmada';
 };
 
 const mergeOptionsByDate = (
@@ -176,7 +176,7 @@ export default function WeeklyPlanScreen() {
     [numericClientId],
   );
 
-  const selectedWeekLabel = selectedWeek === 'current' ? 'Esta semana' : 'Proxima semana';
+  const selectedWeekLabel = selectedWeek === 'current' ? 'Esta semana' : 'Próxima semana';
 
   const loadWeek = useCallback(async () => {
     const requestId = loadRequestIdRef.current + 1;
@@ -186,7 +186,7 @@ export default function WeeklyPlanScreen() {
     if (!clientIdString || numericClientId === null) {
       setPrimaryByDate({});
       setOptionsByDate({});
-      setLoadError('Inicia sesion para planificar tus menus.');
+      setLoadError('Inicia sesión para planificar tus menús.');
       setIsLoading(false);
       return;
     }
@@ -363,7 +363,7 @@ export default function WeeklyPlanScreen() {
 
   const handleOpenSelector = useCallback((date: string) => {
     if (!optionsByDate[date] || optionsByDate[date].length === 0) {
-      Alert.alert('Sin menus', 'No hay menus disponibles para este dia.');
+      Alert.alert('Sin menús', 'No hay menús disponibles para este día.');
       return;
     }
     setSelectorState({ date });
@@ -715,7 +715,7 @@ export default function WeeklyPlanScreen() {
                       </>
                     ) : (
                       <Text style={styles.menuPlaceholder}>
-                        {options.length === 0 ? 'Sin menus disponibles' : 'Sin seleccion'}
+                        {options.length === 0 ? 'Sin menús disponibles' : 'Sin selección'}
                       </Text>
                     )}
                   </View>
@@ -747,7 +747,7 @@ export default function WeeklyPlanScreen() {
             : ''
         }
         menus={selectorDay?.options ?? []}
-        getMenuLabel={(_menu, index) => `Opcion ${index + 1}`}
+        getMenuLabel={(_menu, index) => `Opción ${index + 1}`}
         visibleMenuId={selectorDay?.persistedMenuId ?? null}
         persistedMenuId={selectorDay?.persistedMenuId ?? null}
         suggestedMenuId={null}

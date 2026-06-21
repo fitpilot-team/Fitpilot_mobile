@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   TextInput,
@@ -6,10 +6,12 @@ import {
   StyleSheet,
   TextInputProps,
   TouchableOpacity,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { borderRadius, spacing, fontSize } from '../../constants/colors';
 import { useAppTheme, useThemedStyles } from '../../theme';
+import { getScaledFontSize } from '../../utils/responsive';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -31,12 +33,25 @@ export const Input: React.FC<InputProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
+  const { width } = useWindowDimensions();
+
+  const compactStyles = useMemo(
+    () => ({
+      label: { fontSize: getScaledFontSize(fontSize.xs, width) },
+      input: { fontSize: getScaledFontSize(fontSize.sm, width) },
+    }),
+    [width],
+  );
 
   const isPassword = secureTextEntry !== undefined;
 
   return (
     <View style={[styles.container, compact ? styles.containerCompact : null]}>
-      {label ? <Text style={[styles.label, compact ? styles.labelCompact : null]}>{label}</Text> : null}
+      {label ? (
+        <Text style={[styles.label, compact ? [styles.labelCompact, compactStyles.label] : null]}>
+          {label}
+        </Text>
+      ) : null}
       <View
         style={[
           styles.inputContainer,
@@ -54,7 +69,7 @@ export const Input: React.FC<InputProps> = ({
           />
         ) : null}
         <TextInput
-          style={[styles.input, compact ? styles.inputCompact : null, style]}
+          style={[styles.input, compact ? [styles.inputCompact, compactStyles.input] : null, style]}
           placeholderTextColor={theme.colors.textMuted}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
@@ -85,7 +100,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginBottom: spacing.md,
     },
     containerCompact: {
-      marginBottom: 10,
+      marginBottom: spacing.sm,
     },
     label: {
       fontSize: fontSize.sm,
@@ -94,8 +109,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginBottom: spacing.xs,
     },
     labelCompact: {
-      fontSize: fontSize.xs,
-      marginBottom: 3,
+      marginBottom: spacing.xs,
     },
     inputContainer: {
       flexDirection: 'row',
@@ -107,7 +121,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       paddingHorizontal: spacing.md,
     },
     inputContainerCompact: {
-      paddingHorizontal: 12,
+      minHeight: 44,
+      paddingHorizontal: spacing.sm,
     },
     inputFocused: {
       borderColor: theme.colors.primary,
@@ -126,8 +141,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       color: theme.colors.textPrimary,
     },
     inputCompact: {
-      paddingVertical: 10,
-      fontSize: fontSize.sm,
+      paddingVertical: spacing.sm,
     },
     eyeButton: {
       padding: spacing.xs,

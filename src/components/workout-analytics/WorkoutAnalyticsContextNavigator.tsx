@@ -62,7 +62,7 @@ export const WorkoutAnalyticsContextNavigator: React.FC<WorkoutAnalyticsContextN
         <View style={styles.headerCopy}>
           <Text style={styles.eyebrow}>{scopeLabel}</Text>
           <Text style={styles.helperText}>
-            {isLoading ? 'Cargando historico...' : 'Navega entre contextos historicos del cliente.'}
+            {isLoading ? 'Cargando histórico...' : 'Navega entre contextos históricos del cliente.'}
           </Text>
         </View>
 

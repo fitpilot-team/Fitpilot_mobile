@@ -266,7 +266,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
     if (!hasAnyMeasurementValue) {
       Alert.alert(
         'Faltan datos',
-        'Captura al menos una medida ademas de la fecha para guardar el registro.',
+        'Captura al menos una medida además de la fecha para guardar el registro.',
       );
       return;
     }
@@ -331,7 +331,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
           <View style={styles.header}>
             <View style={styles.headerText}>
               <Text style={styles.title}>
-                {isEditing ? 'Editar medicion' : 'Registrar medidas'}
+                {isEditing ? 'Editar medición' : 'Registrar medidas'}
               </Text>
               <Text style={styles.subtitle}>
                 {isEditing
@@ -400,7 +400,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
                 <View style={styles.calloutContent}>
                   <Text style={styles.calloutTitle}>Perimetros ISAK laterales</Text>
                   <Text style={styles.calloutDescription}>
-                    El lado derecho es el flujo operativo por defecto. Activa la medicion bilateral para capturar el lado izquierdo.
+                    El lado derecho es el flujo operativo por defecto. Activa la medición bilateral para capturar el lado izquierdo.
                   </Text>
                 </View>
               </View>
@@ -434,7 +434,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
                 >
                   {showBilateralPerimeters
                     ? 'Ocultar lado izq.'
-                    : 'Medicion bilateral'}
+                    : 'Medición bilateral'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -459,7 +459,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Notas</Text>
               <Text style={styles.sectionDescription}>
-                Observaciones opcionales sobre la medicion.
+                Observaciones opcionales sobre la medición.
               </Text>
               <TextInput
                 style={styles.notesInput}
@@ -467,7 +467,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
                 numberOfLines={4}
                 value={formState.notes}
                 onChangeText={(value) => handleChangeField('notes', value)}
-                placeholder="Ej. medicion en ayuno, misma bascula, despues del entrenamiento..."
+                placeholder="Ej. medición en ayuno, misma báscula, después del entrenamiento..."
                 placeholderTextColor={theme.colors.textMuted}
                 textAlignVertical="top"
               />
@@ -477,7 +477,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
           <View style={styles.footer}>
             <Button title="Cancelar" variant="secondary" onPress={onClose} />
             <Button
-              title={isEditing ? 'Guardar cambios' : 'Guardar medicion'}
+              title={isEditing ? 'Guardar cambios' : 'Guardar medición'}
               onPress={() => void handleSubmit()}
               isLoading={isSubmitting}
             />

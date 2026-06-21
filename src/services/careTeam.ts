@@ -248,7 +248,7 @@ export const fetchCareTeamDomainSummaries = async (
         : {
             error: toErrorMessage(
               nutritionResult.reason,
-              'No fue posible cargar tu profesional de nutricion.',
+              'No fue posible cargar tu profesional de nutrición.',
             ),
             summary: null,
           },

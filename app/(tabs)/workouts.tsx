@@ -116,7 +116,7 @@ const TAB_OPTIONS = [
 const EXERCISE_SORT_OPTIONS = [
   { value: 'recent', label: 'Recientes' },
   { value: 'progress', label: 'Mayor progreso' },
-  { value: 'frequency', label: 'Mas frecuentes' },
+  { value: 'frequency', label: 'Más frecuentes' },
 ] as const;
 
 const HISTORY_STATUS_OPTIONS = [
@@ -350,7 +350,7 @@ const buildOverviewEmptyState = (
       title: 'Sin contexto programatico disponible',
       description:
         emptyMessage ??
-        'Aun no hay un programa activo o el cliente no tiene un contexto programatico resoluble.',
+        'Aún no hay un programa activo o el cliente no tiene un contexto programático resoluble.',
     };
   }
 
@@ -359,7 +359,7 @@ const buildOverviewEmptyState = (
     title: 'Sin datos suficientes',
     description:
       emptyMessage ??
-      'Todavia no hay suficientes sesiones en la ventana seleccionada para construir analytics utiles.',
+      'Todavía no hay suficientes sesiones en la ventana seleccionada para construir analytics útiles.',
   };
 };
 
@@ -489,11 +489,11 @@ const ExerciseCard = ({
           <Text style={styles.exerciseMeta}>
             {exercise.last_performed_on
               ? selectedRepBucketLabel
-                ? `Ultima sesion con ${selectedRepBucketLabel} reps · ${formatLocalDate(exercise.last_performed_on, {
+                ? `Última sesión con ${selectedRepBucketLabel} reps · ${formatLocalDate(exercise.last_performed_on, {
                     day: 'numeric',
                     month: 'short',
                   })}`
-                : `Ultima sesion ${formatLocalDate(exercise.last_performed_on, {
+                : `Última sesión ${formatLocalDate(exercise.last_performed_on, {
                     day: 'numeric',
                     month: 'short',
                   })}`
@@ -585,7 +585,7 @@ const HistoryCard = ({
       text:
         workout.duration_minutes != null
           ? formatDuration(Math.max(1, Math.round(workout.duration_minutes)))
-          : 'Sin duracion',
+          : 'Sin duración',
     },
     {
       id: 'exercises',
@@ -865,7 +865,7 @@ export default function WorkoutsScreen() {
         setContextCatalogError(null);
       } catch (loadError) {
         const apiError = loadError as ApiError;
-        setContextCatalogError(apiError.message || 'No fue posible cargar el historico del programa.');
+        setContextCatalogError(apiError.message || 'No fue posible cargar el histórico del programa.');
       } finally {
         setIsContextCatalogLoaded(true);
         setIsContextCatalogLoading(false);
@@ -1132,7 +1132,7 @@ export default function WorkoutsScreen() {
     const latestWorkout = recentSessions[0];
     if (latestWorkout) {
       return {
-        label: 'Ultimo registro',
+        label: 'Último registro',
         hint: `${latestWorkout.training_day_name} - ${formatLocalDate(latestWorkout.performed_on_date, {
           day: 'numeric',
           month: 'short',
@@ -1484,8 +1484,8 @@ export default function WorkoutsScreen() {
               <Text style={styles.tabContextTitle}>Sesiones registradas</Text>
               <Text style={styles.tabContextSubtitle}>
                 {analyticsScopeKind === 'range' && selectedRepBucketLabel
-                  ? `Revisa sesiones con sets en ${selectedRepBucketLabel} y filtralas por estado cuando haga falta.`
-                  : 'Revisa los registros dentro del mismo contexto activo y filtralos por estado cuando haga falta.'}
+                  ? `Revisa sesiones con sets en ${selectedRepBucketLabel} y fíltralas por estado cuando haga falta.`
+                  : 'Revisa los registros dentro del mismo contexto activo y fíltralos por estado cuando haga falta.'}
               </Text>
             </Card>
 
@@ -1675,10 +1675,10 @@ export default function WorkoutsScreen() {
                         description={
                           analyticsScopeKind === 'range'
                             ? selectedRepBucketLabel
-                              ? `Todavia no hay movimientos con sets en ${selectedRepBucketLabel} dentro de esta ventana.`
-                              : 'Completa mas sesiones o cambia la ventana temporal para recuperar progreso.'
+                              ? `Todavía no hay movimientos con sets en ${selectedRepBucketLabel} dentro de esta ventana.`
+                              : 'Completa más sesiones o cambia la ventana temporal para recuperar progreso.'
                             : modules.context.empty_message ??
-                              'Todavia no hay suficiente señal dentro de este contexto programatico.'
+                              'Todavía no hay suficiente señal dentro de este contexto programático.'
                         }
                       />
                     )}
@@ -1724,7 +1724,7 @@ export default function WorkoutsScreen() {
                       description={
                         selectedRepBucketLabel
                           ? `No hay sesiones con sets en ${selectedRepBucketLabel} dentro de esta ventana.`
-                          : 'Tu historial aparecera aqui en cuanto registres entrenamientos.'
+                          : 'Tu historial aparecerá aquí en cuanto registres entrenamientos.'
                       }
                     />
                   )}
@@ -1829,7 +1829,7 @@ export default function WorkoutsScreen() {
                       analyticsScopeKind === 'range'
                         ? selectedRepBucketLabel
                           ? `No hay ejercicios con sets en ${selectedRepBucketLabel}. Limpia el filtro o amplia la ventana.`
-                          : 'Prueba con una ventana mas amplia para recuperar progreso.'
+                          : 'Prueba con una ventana más amplia para recuperar progreso.'
                         : modules.context.empty_message ??
                           'Todavia no hay suficiente actividad para construir esta lista en el contexto actual.'
                     }
@@ -1840,7 +1840,7 @@ export default function WorkoutsScreen() {
                   <EmptyStateCard
                     icon="search-outline"
                     title="Sin coincidencias"
-                    description="Ajusta tu busqueda o cambia el criterio de orden."
+                    description="Ajusta tu búsqueda o cambia el criterio de orden."
                     actionLabel="Limpiar"
                     onActionPress={() => setExerciseSearchQuery('')}
                   />

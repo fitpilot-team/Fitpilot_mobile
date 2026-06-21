@@ -60,7 +60,7 @@ export default function PersonalInfoScreen() {
     }
 
     if (!formState.phoneNumber.trim()) {
-      nextErrors.phoneNumber = 'El telefono es obligatorio.';
+      nextErrors.phoneNumber = 'El teléfono es obligatorio.';
     }
 
     setErrors(nextErrors);
@@ -84,8 +84,8 @@ export default function PersonalInfoScreen() {
       await refreshUser();
 
       Alert.alert(
-        'Exito',
-        'Tu informacion personal se actualizo correctamente.',
+        'Éxito',
+        'Tu información personal se actualizó correctamente.',
         [{ text: 'OK', onPress: () => router.back() }],
       );
     } catch (error: any) {
@@ -98,8 +98,8 @@ export default function PersonalInfoScreen() {
   if (!user) {
     return (
       <ProfileDetailScreen
-        title="Informacion personal"
-        subtitle="Actualiza tus datos basicos de perfil."
+        title="Información personal"
+        subtitle="Actualiza tus datos básicos de perfil."
       >
         <LoadingSpinner text="Cargando perfil..." />
       </ProfileDetailScreen>
@@ -129,8 +129,8 @@ export default function PersonalInfoScreen() {
 
   return (
     <ProfileDetailScreen
-      title="Informacion personal"
-      subtitle="Actualiza tu nombre, apellidos y telefono de contacto."
+      title="Información personal"
+      subtitle="Actualiza tu nombre, apellidos y teléfono de contacto."
       footer={footer}
     >
       <View style={styles.card}>
@@ -164,14 +164,14 @@ export default function PersonalInfoScreen() {
         </View>
 
         <PhoneInput
-          label="Telefono"
+          label="Teléfono"
           value={formState.phoneNumber}
           onChangeValue={(value) => {
             setFormState((current) => ({ ...current, phoneNumber: value }));
             setErrors((current) => ({ ...current, phoneNumber: undefined }));
           }}
           error={errors.phoneNumber}
-          helperText="Si cambias tu numero, quedara pendiente de verificacion."
+          helperText="Si cambias tu número, quedará pendiente de verificación."
         />
 
         <View style={styles.statusRow}>
@@ -181,7 +181,7 @@ export default function PersonalInfoScreen() {
               user.isPhoneVerified ? styles.statusBadgeSuccess : styles.statusBadgeMuted,
             ]}
           >
-            {user.isPhoneVerified ? 'Numero verificado' : 'Numero pendiente de verificacion'}
+            {user.isPhoneVerified ? 'Número verificado' : 'Número pendiente de verificación'}
           </Text>
         </View>
       </View>

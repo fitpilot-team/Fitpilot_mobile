@@ -91,7 +91,7 @@ export const MicrocycleTimeline: React.FC<MicrocycleTimelineProps> = ({
         <View style={styles.emptyCopy}>
           <Text style={styles.emptyTitle}>Sin programa activo</Text>
           <Text style={styles.emptySubtitle}>
-            Cuando exista una programacion vigente, aparecera aqui.
+            Cuando exista una programación vigente, aparecerá aquí.
           </Text>
         </View>
       </View>

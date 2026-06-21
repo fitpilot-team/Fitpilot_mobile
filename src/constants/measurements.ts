@@ -134,7 +134,7 @@ export const BIOIMPEDANCE_SECTIONS: MeasurementFieldSection<MeasurementNumericFo
       },
       {
         key: 'bone_mass_kg',
-        label: 'Masa osea',
+        label: 'Masa ósea',
         placeholder: '3.2',
         unit: 'kg',
       },
@@ -539,11 +539,11 @@ export const CALCULATION_METADATA: Record<
     order: 1,
     group: 'main',
     showInPrimarySummary: true,
-    shortDescription: 'Relacion entre tu peso y estatura.',
+    shortDescription: 'Relación entre tu peso y estatura.',
   },
   waist_hip_ratio: {
     label: 'Indice cintura-cadera',
-    patientLabel: 'Relacion cintura-cadera',
+    patientLabel: 'Relación cintura-cadera',
     order: 2,
     group: 'main',
     showInPrimarySummary: true,
@@ -551,7 +551,7 @@ export const CALCULATION_METADATA: Record<
   },
   waist_height_ratio: {
     label: 'Indice cintura-estatura',
-    patientLabel: 'Relacion cintura-estatura',
+    patientLabel: 'Relación cintura-estatura',
     order: 3,
     group: 'main',
     showInPrimarySummary: true,

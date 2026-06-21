@@ -86,7 +86,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
   const ensureClientUser = async (user: User) => {
     if (user.role !== 'client') {
       await clearAuthenticatedState(
-        'Esta aplicacion es solo para clientes. Los profesionales deben usar la aplicacion web.',
+        'Esta aplicación es solo para clientes. Los profesionales deben usar la aplicación web.',
       );
       return null;
     }
@@ -100,14 +100,14 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     if (status === 401) {
       return (
-        'Correo o contrasena incorrectos. Verifica tus datos e intenta de nuevo.\n\n' +
-        'Si aun no tienes cuenta, puedes crearla desde la app.'
+        'Correo o contraseña incorrectos. Verifica tus datos e intenta de nuevo.\n\n' +
+        'Si aún no tienes cuenta, puedes crearla desde la app.'
       );
     }
 
     if (status === 404) {
       return (
-        'No se encontro una cuenta con ese correo.\n\n' +
+        'No se encontró una cuenta con ese correo.\n\n' +
         'Crea una cuenta nueva para comenzar tu onboarding.'
       );
     }
@@ -116,10 +116,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
       rawMessage.toLowerCase().includes('network') ||
       rawMessage.toLowerCase().includes('timeout')
     ) {
-      return 'No se pudo conectar con el servidor. Verifica tu conexion a internet e intenta de nuevo.';
+      return 'No se pudo conectar con el servidor. Verifica tu conexión a internet e intenta de nuevo.';
     }
 
-    return rawMessage || 'Error al iniciar sesion. Intenta de nuevo mas tarde.';
+    return rawMessage || 'Error al iniciar sesión. Intenta de nuevo más tarde.';
   };
 
   const authStore: AuthState = {
@@ -200,7 +200,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
           isAuthenticated: false,
           isInitialized: true,
           error:
-            'No se pudo conectar con el servidor. Verifica tu conexion e intenta de nuevo.',
+            'No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.',
         });
       }
     },
@@ -310,7 +310,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         }
 
         await clearAuthenticatedState(
-          apiError.message || 'No fue posible iniciar sesion despues del registro.',
+          apiError.message || 'No fue posible iniciar sesión después del registro.',
         );
 
         return { status: 'failure' };

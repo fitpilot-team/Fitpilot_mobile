@@ -203,7 +203,7 @@ const applyUpdatedMenuToWeekDays = (
     };
   });
 
-const buildDietMenuLabel = (index: number) => `Menu ${index + 1}`;
+const buildDietMenuLabel = (index: number) => `Menú ${index + 1}`;
 
 type LoadDietOptions = {
   mode?: 'initial' | 'refresh';
@@ -402,7 +402,7 @@ export default function DietScreen() {
           [dateKey]: null,
         }));
       } catch (loadError: any) {
-        const message = loadError?.message || 'No se pudieron cargar los menus visibles.';
+        const message = loadError?.message || 'No se pudieron cargar los menús visibles.';
         setMenuOptionsErrorByDate((currentState) => ({
           ...currentState,
           [dateKey]: message,
@@ -497,7 +497,7 @@ export default function DietScreen() {
   );
   const visibleMenuLabel = visibleMenu
     ? menuLabelsById.get(visibleMenu.menuId) ?? buildDietMenuLabel(0)
-    : 'Sin menu asignado';
+    : 'Sin menú asignado';
   const visibleMenuExchangeSystem = visibleMenu?.exchangeSystem ?? null;
   const visibleMenuSourceCitations = visibleMenuExchangeSystem?.citations ?? [];
 
@@ -506,18 +506,18 @@ export default function DietScreen() {
     selectorMenus.length > 0 || Boolean(selectedDay?.backendPrimaryMenuId) || !hasHydratedOptionsForSelectedDate
   );
   const selectorSubtitle = !selectedDay
-    ? 'No hay menus disponibles para esta fecha.'
+    ? 'No hay menús disponibles para esta fecha.'
     : isPreviewingMenu
-        ? 'Estas revisando un cambio pendiente para este dia.'
+        ? 'Estás revisando un cambio pendiente para este día.'
     : menuOptionsErrorByDate[selectedDate]
-        ? menuOptionsErrorByDate[selectedDate] || 'No se pudieron cargar los menus.'
+        ? menuOptionsErrorByDate[selectedDate] || 'No se pudieron cargar los menús.'
       : menuOptionsLoadingByDate[selectedDate]
-          ? 'Cargando menus visibles.'
+          ? 'Cargando menús visibles.'
         : hasHydratedOptionsForSelectedDate
             ? selectorMenus.length > 0
-              ? `${selectorMenus.length} opcion${selectorMenus.length === 1 ? '' : 'es'} disponible${selectorMenus.length === 1 ? '' : 's'}`
-              : 'Sin menus visibles para este dia.'
-            : 'Cargando menus visibles.';
+              ? `${selectorMenus.length} opción${selectorMenus.length === 1 ? '' : 'es'} disponible${selectorMenus.length === 1 ? '' : 's'}`
+              : 'Sin menús visibles para este día.'
+            : 'Cargando menús visibles.';
   const previewBannerDateLabel = selectedDay ? formatLongDate(selectedDay.assignedDate) : '';
   useEffect(() => {
     if (selectedPreviewMenuId !== null && !previewMenu) {
@@ -666,7 +666,7 @@ export default function DietScreen() {
       const apiError = saveError as ApiError;
       Alert.alert(
         'Error',
-        apiError.message || 'No fue posible guardar el menu elegido para este dia.',
+        apiError.message || 'No fue posible guardar el menú elegido para este día.',
       );
     } finally {
       setIsPersistingMenuSelection(false);
@@ -933,10 +933,10 @@ export default function DietScreen() {
             style={[styles.header, { paddingHorizontal: horizontalPadding }]}
           >
             <View style={styles.headerCopy}>
-              <Text style={styles.eyebrow}>Nutricion</Text>
+              <Text style={styles.eyebrow}>Nutrición</Text>
               <Text style={styles.title}>Dieta</Text>
               <Text style={styles.subtitle}>
-                Revisa tu menu del dia y las recetas asignadas.
+                Revisa tu menú del día y las recetas asignadas.
               </Text>
             </View>
             <ProfileShortcutButton />
@@ -1019,15 +1019,15 @@ export default function DietScreen() {
                     activeOpacity={0.85}
                   >
                     <View style={styles.selectorCopy}>
-                      <Text style={styles.selectorEyebrow}>Menu visible</Text>
+                      <Text style={styles.selectorEyebrow}>Menú visible</Text>
                       <Text style={styles.selectorTitle}>
                         {visibleMenuLabel}
                       </Text>
                       <Text numberOfLines={2} style={styles.selectorSubtitle}>
                         {isPreviewingMenu
-                          ? 'Estas revisando este menu antes de confirmarlo.'
+                          ? 'Estás revisando este menú antes de confirmarlo.'
                           : hasPersistedOverride
-                            ? 'Elegiste una opcion distinta para este dia.'
+                            ? 'Elegiste una opción distinta para este día.'
                             : selectorSubtitle}
                       </Text>
                     </View>
@@ -1050,11 +1050,11 @@ export default function DietScreen() {
               <Animated.View entering={getEntryAnimation(220)} style={styles.mealsSection}>
                 <View style={[styles.sectionHeader, { paddingHorizontal: horizontalPadding }]}>
                   <View>
-                    <Text style={styles.sectionTitle}>Comidas del dia</Text>
+                    <Text style={styles.sectionTitle}>Comidas del día</Text>
                     <Text style={styles.sectionSubtitle}>
                       {visibleMenu
                         ? isPreviewingMenu
-                          ? `Estas revisando ${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} antes de confirmar el cambio`
+                          ? `Estás revisando ${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} antes de confirmar el cambio`
                           : `${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} organizados para ti`
                         : 'No hay comidas programadas para esta fecha'}
                     </Text>
@@ -1086,15 +1086,15 @@ export default function DietScreen() {
                       <Card style={styles.noMealsCard}>
                         <Text style={styles.noMealsTitle}>Sin comidas cargadas</Text>
                         <Text style={styles.noMealsText}>
-                          Tu menu fue encontrado, pero este dia todavia no contiene bloques de comida visibles.
+                          Tu menú fue encontrado, pero este día todavía no contiene bloques de comida visibles.
                         </Text>
                       </Card>
                     )
                   ) : (
                     <Card style={styles.noMealsCard}>
-                      <Text style={styles.noMealsTitle}>Sin menu asignado</Text>
+                      <Text style={styles.noMealsTitle}>Sin menú asignado</Text>
                       <Text style={styles.noMealsText}>
-                        No tienes un menu cargado para {formatLongDate(selectedDay.assignedDate)}.
+                        No tienes un menú cargado para {formatLongDate(selectedDay.assignedDate)}.
                       </Text>
                     </Card>
                   )}
@@ -1131,7 +1131,7 @@ export default function DietScreen() {
                 <Text style={styles.emptyText}>
                   {error
                     ? error
-                    : 'Cuando tu nutriologo publique un plan, aparecera aqui con sus comidas y recetas.'}
+                    : 'Cuando tu nutriólogo publique un plan, aparecerá aquí con sus comidas y recetas.'}
                 </Text>
                 <Button
                   title="Reintentar"
@@ -1150,7 +1150,7 @@ export default function DietScreen() {
         <CalendarDatePickerModal
           visible={isDatePickerVisible}
           title="Ir a fecha"
-          subtitle="Salta a cualquier dia para revisar semanas anteriores o futuras."
+          subtitle="Salta a cualquier día para revisar semanas anteriores o futuras."
           selectedDate={selectedDate}
           onClose={handleCloseDatePicker}
           onSelect={handleSelectAnchorDate}
@@ -1184,12 +1184,12 @@ export default function DietScreen() {
           >
             <View style={styles.previewActionCard}>
               <View style={styles.previewActionCopy}>
-                <Text style={styles.previewActionEyebrow}>Previsualizacion</Text>
+                <Text style={styles.previewActionEyebrow}>Previsualización</Text>
                 <Text style={styles.previewActionTitle}>
-                  {menuLabelsById.get(previewMenu.menuId) ?? 'Menu seleccionado'}
+                  {menuLabelsById.get(previewMenu.menuId) ?? 'Menú seleccionado'}
                 </Text>
                 <Text style={styles.previewActionText}>
-                  Revisa lo que comerias el {previewBannerDateLabel} y confirma si quieres cambiar a este menu.
+                  Revisa lo que comerías el {previewBannerDateLabel} y confirma si quieres cambiar a este menú.
                 </Text>
               </View>
 

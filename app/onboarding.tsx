@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -12,12 +12,25 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { Button, LoadingSpinner } from '../src/components/common';
 import { CalendarDatePickerModal } from '../src/components/calendar/CalendarDatePickerModal';
+import {
+  OnboardingChoiceChip,
+  OnboardingProgressHeader,
+  OnboardingStepTransition,
+} from '../src/components/onboarding';
 import { borderRadius, brandColors, fontSize, spacing } from '../src/constants/colors';
 import { onboardingService } from '../src/services/onboarding';
 import { useAuthStore } from '../src/store/authStore';
-import { useThemedStyles, type AppTheme } from '../src/theme';
+import { useAppTheme, useThemedStyles, type AppTheme } from '../src/theme';
 import {
   formatLocalDate,
   getTodayDateKey,
@@ -51,7 +64,16 @@ const stepTitles = [
   'Datos personales',
   'Medidas',
   'Preferencias',
-  'Detalles medicos',
+  'Detalles médicos',
+] as const;
+
+const stepHints = [
+  'Esto nos ayuda a personalizar tu plan de entrenamiento y nutrición.',
+  'Opcional: puedes saltar este paso si no tienes alergias.',
+  'Usamos estos datos para calcular tus metas con precisión.',
+  'Tu peso y altura actuales afinan las recomendaciones.',
+  'Opcional: mejora las sugerencias de comidas.',
+  'Opcional: comparte solo lo que consideres relevante.',
 ] as const;
 
 const emptyInjury: NewInjuryState = {
@@ -66,9 +88,9 @@ const emptyInjury: NewInjuryState = {
 
 const statusOptions: { value: InjuryStatus; label: string }[] = [
   { value: 'active', label: 'Activa' },
-  { value: 'recovering', label: 'En recuperacion' },
+  { value: 'recovering', label: 'En recuperación' },
   { value: 'resolved', label: 'Resuelta' },
-  { value: 'chronic', label: 'Cronica' },
+  { value: 'chronic', label: 'Crónica' },
 ];
 
 const genreOptions: { value: OnboardingGenre; label: string }[] = [
@@ -86,9 +108,12 @@ const parsePositiveNumber = (value: string) => {
 
 export default function OnboardingScreen() {
   const styles = useThemedStyles(createStyles);
+  const { theme } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, isInitialized, logout, refreshUser, user } = useAuthStore();
 
   const [activeStep, setActiveStep] = useState(0);
+  const [stepDirection, setStepDirection] = useState<1 | -1>(1);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [allergens, setAllergens] = useState<Allergen[]>([]);
   const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null);
@@ -111,10 +136,30 @@ export default function OnboardingScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const shakeX = useSharedValue(0);
 
   const todayKey = getTodayDateKey();
-  const progress = (activeStep + 1) / stepTitles.length;
   const selectedGoal = goals.find((goal) => goal.id === selectedGoalId) ?? null;
+
+  const shakeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shakeX.value }],
+  }));
+
+  const triggerShake = () => {
+    shakeX.value = withSequence(
+      withTiming(-8, { duration: 50 }),
+      withTiming(8, { duration: 50 }),
+      withTiming(-6, { duration: 50 }),
+      withTiming(6, { duration: 50 }),
+      withTiming(0, { duration: 50 }),
+    );
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  };
+
+  const scrollToTop = () => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  };
   const filteredAllergens = useMemo(() => {
     const normalizedSearch = allergenSearch.trim().toLowerCase();
     if (!normalizedSearch) return allergens;
@@ -159,7 +204,7 @@ export default function OnboardingScreen() {
         }
 
         if (isMounted) {
-          setLoadError('No pudimos cargar las opciones. Revisa tu conexion e intenta de nuevo.');
+          setLoadError('No pudimos cargar las opciones. Revisa tu conexión e intenta de nuevo.');
         }
       } finally {
         if (isMounted) {
@@ -189,29 +234,34 @@ export default function OnboardingScreen() {
   const validateCurrentStep = () => {
     if (activeStep === 0 && !selectedGoal) {
       setStepError('Selecciona un objetivo para continuar.');
+      triggerShake();
       return false;
     }
 
     if (activeStep === 2) {
       if (!dateOfBirth) {
         setStepError('La fecha de nacimiento es obligatoria.');
+        triggerShake();
         return false;
       }
 
       if (dateOfBirth > todayKey) {
         setStepError('La fecha de nacimiento no puede ser futura.');
+        triggerShake();
         return false;
       }
 
       if (!genre) {
         setStepError('El sexo es obligatorio.');
+        triggerShake();
         return false;
       }
     }
 
     if (activeStep === 3) {
       if (!parsePositiveNumber(weightKg) || !parsePositiveNumber(heightCm)) {
-        setStepError('Ingresa peso y altura validos.');
+        setStepError('Ingresa peso y altura válidos.');
+        triggerShake();
         return false;
       }
     }
@@ -223,8 +273,15 @@ export default function OnboardingScreen() {
   const goNext = () => {
     if (!validateCurrentStep()) return;
 
+    if (activeStep === 4) {
+      addPreference('like');
+      addPreference('dislike');
+    }
+
     if (activeStep < stepTitles.length - 1) {
+      setStepDirection(1);
       setActiveStep((currentStep) => currentStep + 1);
+      scrollToTop();
       return;
     }
 
@@ -233,10 +290,31 @@ export default function OnboardingScreen() {
 
   const goBack = () => {
     setStepError(null);
+    setStepDirection(-1);
     setActiveStep((currentStep) => Math.max(0, currentStep - 1));
+    scrollToTop();
+  };
+
+  const handleExit = () => {
+    Alert.alert(
+      'Salir del onboarding',
+      'Puedes volver a iniciar sesión cuando quieras para continuar donde lo dejaste.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Salir',
+          style: 'destructive',
+          onPress: () => {
+            void logout();
+            router.replace('/login');
+          },
+        },
+      ],
+    );
   };
 
   const toggleAllergen = (allergenId: number) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedAllergenIds((currentIds) =>
       currentIds.includes(allergenId)
         ? currentIds.filter((id) => id !== allergenId)
@@ -332,7 +410,7 @@ export default function OnboardingScreen() {
       if (refreshedUser?.onboardingStatus !== 'completed') {
         Alert.alert(
           'Onboarding guardado',
-          'Guardamos tus datos, pero aun no pudimos confirmar el estado actualizado. Intenta abrir la app de nuevo.',
+          'Guardamos tus datos, pero aún no pudimos confirmar el estado actualizado. Intenta abrir la app de nuevo.',
         );
         return;
       }
@@ -374,7 +452,7 @@ export default function OnboardingScreen() {
   const datePickerTitle = (() => {
     if (datePickerTarget === 'birth') return 'Fecha de nacimiento';
     if (datePickerTarget === 'diagnosis') return 'Fecha de diagnostico';
-    return 'Fecha de recuperacion';
+    return 'Fecha de recuperación';
   })();
 
   if (!isInitialized || (isAuthenticated && isLoadingOptions)) {
@@ -398,7 +476,7 @@ export default function OnboardingScreen() {
                 setAllergens(nextAllergens);
               })
               .catch(() => {
-                setLoadError('No pudimos cargar las opciones. Revisa tu conexion e intenta de nuevo.');
+          setLoadError('No pudimos cargar las opciones. Revisa tu conexión e intenta de nuevo.');
               })
               .finally(() => setIsLoadingOptions(false));
           }}
@@ -409,75 +487,72 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <View style={styles.headerTop}>
-          <View>
+          <View style={styles.headerCopy}>
             <Text style={styles.stepLabel}>
               Paso {activeStep + 1} de {stepTitles.length}
             </Text>
-            <Text style={styles.title}>{stepTitles[activeStep]}</Text>
+            <OnboardingProgressHeader
+              stepIndex={activeStep}
+              totalSteps={stepTitles.length}
+              title={stepTitles[activeStep]}
+              theme={theme}
+            />
+            <Text style={styles.stepHint}>{stepHints[activeStep]}</Text>
           </View>
 
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Salir del onboarding"
-            onPress={() => {
-              void logout();
-              router.replace('/login');
-            }}
+            onPress={handleExit}
             style={styles.exitButton}
           >
             <Ionicons name="log-out-outline" size={18} color={styles.exitText.color} />
             <Text style={styles.exitText}>Salir</Text>
           </Pressable>
         </View>
-
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-        </View>
       </View>
 
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoiding}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.card}>
-          {activeStep === 0 ? (
-            <View>
-              <Text style={styles.cardTitle}>Cual es tu objetivo principal?</Text>
-              <Text style={styles.cardSubtitle}>Selecciona el objetivo que mejor te describe.</Text>
-              <View style={styles.chipGrid}>
-                {goals.map((goal) => {
-                  const isSelected = selectedGoalId === goal.id;
-
-                  return (
-                    <Pressable
-                      key={goal.id}
-                      onPress={() => {
-                        setSelectedGoalId(goal.id);
-                        setStepError(null);
-                      }}
-                      style={[styles.choiceChip, isSelected ? styles.choiceChipSelected : null]}
-                    >
-                      <Text
-                        style={[
-                          styles.choiceChipText,
-                          isSelected ? styles.choiceChipTextSelected : null,
-                        ]}
-                      >
-                        {goal.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ) : null}
+        <OnboardingStepTransition stepKey={activeStep} direction={stepDirection}>
+          <Animated.View style={shakeStyle}>
+            <View style={styles.card}>
+              {activeStep === 0 ? (
+                <View>
+                  <Text style={styles.cardTitle}>¿Cuál es tu objetivo principal?</Text>
+                  <Text style={styles.cardSubtitle}>
+                    Selecciona el objetivo que mejor te describe.
+                  </Text>
+                  <View style={styles.chipGrid}>
+                    {goals.map((goal) => (
+                      <OnboardingChoiceChip
+                        key={goal.id}
+                        label={goal.name}
+                        isSelected={selectedGoalId === goal.id}
+                        onPress={() => {
+                          setSelectedGoalId(goal.id);
+                          setStepError(null);
+                        }}
+                        theme={theme}
+                      />
+                    ))}
+                  </View>
+                  {selectedGoal?.description ? (
+                    <Text style={styles.goalDescription}>{selectedGoal.description}</Text>
+                  ) : null}
+                </View>
+              ) : null}
 
           {activeStep === 1 ? (
             <View>
@@ -494,26 +569,15 @@ export default function OnboardingScreen() {
                 />
               </View>
               <View style={styles.chipGrid}>
-                {filteredAllergens.map((allergen) => {
-                  const isSelected = selectedAllergenIds.includes(allergen.id);
-
-                  return (
-                    <Pressable
-                      key={allergen.id}
-                      onPress={() => toggleAllergen(allergen.id)}
-                      style={[styles.choiceChip, isSelected ? styles.choiceChipSelected : null]}
-                    >
-                      <Text
-                        style={[
-                          styles.choiceChipText,
-                          isSelected ? styles.choiceChipTextSelected : null,
-                        ]}
-                      >
-                        {allergen.name}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                {filteredAllergens.map((allergen) => (
+                  <OnboardingChoiceChip
+                    key={allergen.id}
+                    label={allergen.name}
+                    isSelected={selectedAllergenIds.includes(allergen.id)}
+                    onPress={() => toggleAllergen(allergen.id)}
+                    theme={theme}
+                  />
+                ))}
               </View>
               {filteredAllergens.length === 0 ? (
                 <Text style={styles.emptyText}>No encontramos resultados.</Text>
@@ -546,6 +610,7 @@ export default function OnboardingScreen() {
                     <Pressable
                       key={option.value}
                       onPress={() => {
+                        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         setGenre(option.value);
                         setStepError(null);
                       }}
@@ -704,34 +769,21 @@ export default function OnboardingScreen() {
 
                 <Text style={styles.fieldLabel}>Estado</Text>
                 <View style={styles.chipGrid}>
-                  {statusOptions.map((option) => {
-                    const isSelected = newInjury.status === option.value;
-
-                    return (
-                      <Pressable
-                        key={option.value}
-                        onPress={() =>
-                          setNewInjury((currentInjury) => ({
-                            ...currentInjury,
-                            status: option.value,
-                          }))
-                        }
-                        style={[
-                          styles.smallChoiceChip,
-                          isSelected ? styles.choiceChipSelected : null,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.choiceChipText,
-                            isSelected ? styles.choiceChipTextSelected : null,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
+                  {statusOptions.map((option) => (
+                    <OnboardingChoiceChip
+                      key={option.value}
+                      label={option.label}
+                      isSelected={newInjury.status === option.value}
+                      onPress={() =>
+                        setNewInjury((currentInjury) => ({
+                          ...currentInjury,
+                          status: option.value,
+                        }))
+                      }
+                      compact
+                      theme={theme}
+                    />
+                  ))}
                 </View>
 
                 <TextInput
@@ -758,7 +810,7 @@ export default function OnboardingScreen() {
                     style={[styles.dateButton, styles.metricField]}
                   >
                     <Text style={newInjury.recovery_date ? styles.dateButtonText : styles.datePlaceholder}>
-                      {formatDateLabel(newInjury.recovery_date, 'Recuperacion')}
+                      {formatDateLabel(newInjury.recovery_date, 'Recuperación')}
                     </Text>
                   </Pressable>
                 </View>
@@ -804,12 +856,33 @@ export default function OnboardingScreen() {
               />
             </View>
           ) : null}
-        </View>
+            </View>
+          </Animated.View>
+        </OnboardingStepTransition>
 
         {stepError ? (
           <View style={styles.stepErrorBox}>
+            <Ionicons name="alert-circle-outline" size={18} color={styles.stepErrorText.color} />
             <Text style={styles.stepErrorText}>{stepError}</Text>
           </View>
+        ) : null}
+      </ScrollView>
+      </KeyboardAvoidingView>
+
+      <View
+        style={[
+          styles.footer,
+          { paddingBottom: Math.max(insets.bottom + spacing.md, spacing.lg) },
+        ]}
+      >
+        {!canContinue && !isSubmitting && activeStep === 0 ? (
+          <Text style={styles.footerHint}>Selecciona un objetivo para continuar</Text>
+        ) : null}
+        {!canContinue && !isSubmitting && activeStep === 2 ? (
+          <Text style={styles.footerHint}>Completa fecha de nacimiento y sexo</Text>
+        ) : null}
+        {!canContinue && !isSubmitting && activeStep === 3 ? (
+          <Text style={styles.footerHint}>Ingresa peso y altura válidos</Text>
         ) : null}
 
         <View style={styles.actions}>
@@ -818,6 +891,7 @@ export default function OnboardingScreen() {
               title="Atras"
               onPress={goBack}
               variant="ghost"
+              size="lg"
               disabled={isSubmitting}
               style={styles.backAction}
             />
@@ -825,13 +899,14 @@ export default function OnboardingScreen() {
           <Button
             title={activeStep === stepTitles.length - 1 ? 'Completar registro' : 'Siguiente'}
             onPress={goNext}
+            size="lg"
             isLoading={isSubmitting}
-            disabled={!canContinue || isSubmitting}
+            disabled={isSubmitting}
             fullWidth={activeStep === 0}
             style={styles.nextAction}
           />
         </View>
-      </ScrollView>
+      </View>
 
       <CalendarDatePickerModal
         visible={datePickerTarget !== null}
@@ -839,10 +914,12 @@ export default function OnboardingScreen() {
         selectedDate={datePickerSelectedDate}
         initialVisibleDate={datePickerTarget === 'birth' ? '1995-01-01' : undefined}
         maxDate={datePickerTarget === 'birth' || datePickerTarget === 'diagnosis' ? todayKey : undefined}
+        pickerFlow={datePickerTarget === 'birth' ? 'birthdate' : 'default'}
+        requireConfirmation={datePickerTarget !== 'birth'}
         onClose={() => setDatePickerTarget(null)}
         onSelect={handleDateSelect}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -907,7 +984,6 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.background,
     },
     header: {
-      paddingTop: Platform.OS === 'ios' ? 58 : 38,
       paddingHorizontal: spacing.lg,
       paddingBottom: spacing.md,
       backgroundColor: theme.colors.surface,
@@ -916,9 +992,12 @@ const createStyles = (theme: AppTheme) =>
     },
     headerTop: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'space-between',
       gap: spacing.md,
+    },
+    headerCopy: {
+      flex: 1,
     },
     stepLabel: {
       fontSize: fontSize.xs,
@@ -926,11 +1005,10 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textMuted,
       textTransform: 'uppercase',
     },
-    title: {
-      marginTop: 2,
-      fontSize: fontSize['2xl'],
-      fontWeight: '800',
-      color: theme.colors.textPrimary,
+    stepHint: {
+      fontSize: fontSize.xs,
+      lineHeight: 17,
+      color: theme.colors.textMuted,
     },
     exitButton: {
       flexDirection: 'row',
@@ -946,24 +1024,16 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       fontWeight: '700',
     },
-    progressTrack: {
-      height: 5,
-      borderRadius: borderRadius.full,
-      backgroundColor: theme.colors.primarySoft,
-      marginTop: spacing.md,
-      overflow: 'hidden',
-    },
-    progressFill: {
-      height: '100%',
-      borderRadius: borderRadius.full,
-      backgroundColor: brandColors.sky,
-    },
     scroll: {
       flex: 1,
     },
+    keyboardAvoiding: {
+      flex: 1,
+    },
     content: {
+      flexGrow: 1,
       padding: spacing.lg,
-      paddingBottom: spacing.xxl,
+      justifyContent: 'center',
     },
     card: {
       borderRadius: borderRadius.xl,
@@ -983,6 +1053,13 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       lineHeight: 20,
       color: theme.colors.textMuted,
+    },
+    goalDescription: {
+      marginTop: spacing.md,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
+      fontStyle: 'italic',
     },
     chipGrid: {
       flexDirection: 'row',
@@ -1241,6 +1318,9 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.error,
     },
     stepErrorBox: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
       borderRadius: borderRadius.lg,
       backgroundColor: `${theme.colors.error}12`,
       borderWidth: 1,
@@ -1249,21 +1329,37 @@ const createStyles = (theme: AppTheme) =>
       marginTop: spacing.md,
     },
     stepErrorText: {
+      flex: 1,
       color: theme.colors.error,
       fontSize: fontSize.sm,
       fontWeight: '700',
     },
+    footer: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    footerHint: {
+      marginBottom: spacing.sm,
+      textAlign: 'center',
+      color: theme.colors.textMuted,
+      fontSize: fontSize.xs,
+      fontWeight: '600',
+    },
     actions: {
       flexDirection: 'row',
-      alignItems: 'center',
+      alignItems: 'stretch',
       gap: spacing.md,
-      marginTop: spacing.lg,
     },
     backAction: {
-      minWidth: 100,
+      flexShrink: 0,
+      minWidth: 108,
     },
     nextAction: {
       flex: 1,
+      minWidth: 0,
     },
     centeredState: {
       flex: 1,

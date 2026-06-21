@@ -823,7 +823,7 @@ export const updateClientDailyPrimarySelection = async (
   const targetDate = normalizeDateKey(date);
 
   if (!targetDate || !Number.isInteger(menuId)) {
-    throw new Error('No se pudo guardar el menu elegido para este dia.');
+    throw new Error('No se pudo guardar el menú elegido para este día.');
   }
 
   return nutritionClient.patch<NutritionDailyPrimarySelectionResponse>(
@@ -973,7 +973,7 @@ export const getClientDietMenuCalendar = async (
   const targetDate = normalizeDateKey(date);
 
   if (!Number.isInteger(numericClientId) || !targetDate) {
-    throw new Error('No se pudo resolver el cliente autenticado para cargar los menus del calendario.');
+    throw new Error('No se pudo resolver el cliente autenticado para cargar los menús del calendario.');
   }
 
   const calendarMenus = await nutritionClient.get<NutritionMenuCalendarResponseItem[]>(
@@ -1016,7 +1016,7 @@ export const getClientDietMenuPool = async (
   const targetDate = normalizeDateKey(date);
 
   if (!Number.isInteger(numericClientId) || !targetDate) {
-    throw new Error('No se pudo resolver el cliente autenticado para cargar el pool de menus.');
+    throw new Error('No se pudo resolver el cliente autenticado para cargar el pool de menús.');
   }
 
   const poolMenus = await nutritionClient.get<NutritionMenuPoolResponseItem[]>(

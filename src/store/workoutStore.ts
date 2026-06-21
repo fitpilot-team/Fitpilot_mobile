@@ -79,7 +79,7 @@ const CLOSED_WORKOUT_ERROR_MARKERS = [
   'workout must be reopened before editing cardio blocks',
   'workout must be reopened before editing movement blocks',
 ];
-const CLOSED_WORKOUT_CLIENT_MESSAGE = 'El entrenamiento esta cerrado. Reabrelo para editar.';
+const CLOSED_WORKOUT_CLIENT_MESSAGE = 'El entrenamiento está cerrado. Reábrelo para editar.';
 
 let latestWorkoutMutationRevision = 0;
 let cardioBlockRouteSupport: 'unknown' | 'supported' | 'unsupported' = 'unknown';
@@ -642,7 +642,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     } catch (error: any) {
       set({
         isStartingWorkout: false,
-        error: error.message || 'Error al abrir la sesion',
+        error: error.message || 'Error al abrir la sesión',
       });
       return null;
     }
@@ -661,7 +661,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => ({
     } catch (error: any) {
       set({
         isLoading: false,
-        error: error.message || 'Error al cargar la sesion',
+        error: error.message || 'Error al cargar la sesión',
       });
     }
   },

@@ -28,9 +28,9 @@ export default function RecommendationDetailScreen() {
           <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>Recomendacion</Text>
+          <Text style={styles.title}>Recomendación</Text>
           <Text style={styles.subtitle}>
-            {tip ? 'Detalle completo del consejo seleccionado.' : 'No encontramos esta recomendacion.'}
+            {tip ? 'Detalle completo del consejo seleccionado.' : 'No encontramos esta recomendación.'}
           </Text>
         </View>
       </View>
@@ -78,9 +78,9 @@ export default function RecommendationDetailScreen() {
             <View style={styles.emptyIconContainer}>
               <Ionicons name="bulb-outline" size={28} color={theme.colors.iconMuted} />
             </View>
-            <Text style={styles.emptyTitle}>Recomendacion no disponible</Text>
+            <Text style={styles.emptyTitle}>Recomendación no disponible</Text>
             <Text style={styles.emptyText}>
-              Esta recomendacion no existe o ya no esta disponible en la app.
+              Esta recomendación no existe o ya no está disponible en la app.
             </Text>
             <TouchableOpacity
               style={styles.primaryButton}

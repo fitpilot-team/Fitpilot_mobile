@@ -236,7 +236,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   const hours = Math.floor(estimatedMinutes / 60);
   const minutes = estimatedMinutes % 60;
   const durationText = hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
-  const sessionCaption = `Sesion ${trainingDay.session_index}`;
+  const sessionCaption = `Sesión ${trainingDay.session_index}`;
   const isOverdueRecommendation = cardState.recommendation === 'overdue';
   const durationContainerWidth = compact
     ? Math.max(70, chamferHorizontal - spacing.md)
@@ -309,7 +309,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
                   ) : null}
                   {isOverdueRecommendation ? (
                     <Text style={styles.recommendationText} numberOfLines={compact ? 1 : undefined}>
-                      Completa esta sesion primero.
+                      Completa esta sesión primero.
                     </Text>
                   ) : null}
                   <Text style={styles.complianceText}>
@@ -443,7 +443,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
           style={[styles.durationLabel, compact ? styles.durationLabelCompact : null]}
           numberOfLines={1}
         >
-          Duracion
+          Duración
         </Text>
         <Text
           style={[styles.durationValue, compact ? styles.durationValueCompact : null]}

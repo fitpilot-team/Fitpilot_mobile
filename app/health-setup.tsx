@@ -22,18 +22,18 @@ import type { FitpilotHealthAvailability } from '../modules/fitpilot-health';
 const valueProps: { icon: keyof typeof Ionicons.glyphMap; title: string; copy: string }[] = [
   {
     icon: 'pulse-outline',
-    title: 'Recuperacion y descanso',
-    copy: 'Sueno, HRV y FC en reposo para ajustar tu carga.',
+    title: 'Recuperación y descanso',
+    copy: 'Sueño, HRV y FC en reposo para ajustar tu carga.',
   },
   {
     icon: 'flame-outline',
-    title: 'Energia real',
+    title: 'Energía real',
     copy: 'Pasos y kcal activas para afinar tus objetivos.',
   },
   {
     icon: 'bulb-outline',
     title: 'Recomendaciones',
-    copy: 'Tu entrenador recibe senales para mejores ajustes.',
+    copy: 'Tu entrenador recibe señales para mejores ajustes.',
   },
 ];
 
@@ -139,8 +139,8 @@ export default function HealthSetupScreen() {
           </View>
           <Text style={styles.title}>Activa salud conectada</Text>
           <Text style={styles.subtitle}>
-            Conecta {getPlatformLabel(availability?.platform)} para que tus metricas de
-            recuperacion y energia trabajen por ti. Solo lectura, tu mandas.
+            Conecta {getPlatformLabel(availability?.platform)} para que tus métricas de
+            recuperación y energía trabajen por ti. Solo lectura, tú mandas.
           </Text>
         </View>
 
@@ -164,7 +164,8 @@ export default function HealthSetupScreen() {
               <View style={styles.consentText}>
                 <Text style={styles.consentTitle}>Compartir con mi entrenador</Text>
                 <Text style={styles.consentCopy}>
-                  Solo vera agregados diarios con fuente y frescura. Puedes cambiarlo cuando quieras.
+                  Tu entrenador verá un resumen diario de tu actividad, sueño y recuperación. Puedes
+                  desactivarlo cuando quieras.
                 </Text>
               </View>
               <Switch
@@ -185,9 +186,9 @@ export default function HealthSetupScreen() {
           <View style={styles.unavailableBox}>
             <Ionicons name="alert-circle-outline" size={22} color={styles.unavailableIcon.color} />
             <Text style={styles.unavailableText}>
-              {getPlatformLabel(availability?.platform)} no esta disponible en este dispositivo.
+              {getPlatformLabel(availability?.platform)} no está disponible en este dispositivo.
               {Platform.OS === 'android'
-                ? ' Instala Health Connect para activar tus metricas.'
+                ? ' Instala Health Connect para activar tus métricas.'
                 : ' Revisa los ajustes de salud para continuar.'}
             </Text>
           </View>

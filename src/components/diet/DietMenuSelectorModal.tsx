@@ -63,10 +63,10 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
         <View style={[styles.container, { height: sheetHeight }]}>
           <View style={styles.header}>
             <View style={styles.headerCopy}>
-              <Text style={styles.title}>Menus del pool</Text>
+              <Text style={styles.title}>Menús del pool</Text>
               <Text style={styles.subtitle}>{dateLabel}</Text>
               <Text style={styles.supportingText}>
-                Toca un menu para revisarlo en pantalla antes de confirmar el cambio.
+                Toca un menú para revisarlo en pantalla antes de confirmar el cambio.
               </Text>
             </View>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
@@ -76,7 +76,7 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
 
           {isLoading ? (
             <View style={styles.loadingState}>
-              <LoadingSpinner text="Cargando menus..." />
+              <LoadingSpinner text="Cargando menús..." />
             </View>
           ) : error && menus.length === 0 ? (
             <View style={styles.emptyState}>
@@ -95,9 +95,9 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
           ) : menus.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="restaurant-outline" size={36} color={theme.colors.iconMuted} />
-              <Text style={styles.emptyTitle}>Sin menus disponibles</Text>
+              <Text style={styles.emptyTitle}>Sin menús disponibles</Text>
               <Text style={styles.emptyText}>
-                Esta fecha no tiene menus visibles para mostrar.
+                Esta fecha no tiene menús visibles para mostrar.
               </Text>
             </View>
           ) : (
@@ -123,7 +123,7 @@ export const DietMenuSelectorModal: React.FC<DietMenuSelectorModalProps> = ({
                       <View style={styles.optionCopy}>
                         <Text style={styles.optionTitle}>{getMenuLabel(menu, index)}</Text>
                         <Text style={styles.optionSubtitle} numberOfLines={2}>
-                          {menu.description || 'Sin descripcion adicional.'}
+                          {menu.description || 'Sin descripción adicional.'}
                         </Text>
                       </View>
                       <View style={[styles.checkCircle, isVisible && styles.checkCircleSelected]}>

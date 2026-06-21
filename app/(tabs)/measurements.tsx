@@ -101,8 +101,8 @@ const MEASUREMENTS_TABS = [
 const CREATE_ACTIONS = [
   {
     key: 'body',
-    title: 'Medicion corporal',
-    description: 'Peso, composicion, perimetros y observaciones del registro.',
+    title: 'Medición corporal',
+    description: 'Peso, composición, perímetros y observaciones del registro.',
     icon: 'analytics-outline',
   },
   {
@@ -561,14 +561,14 @@ export default function MeasurementsScreen() {
           [savedMeasurement.measurement.id]: savedMeasurement,
         }));
         Alert.alert(
-          editingMeasurementId ? 'Medicion actualizada' : 'Medicion registrada',
+          editingMeasurementId ? 'Medición actualizada' : 'Medición registrada',
           editingMeasurementId
             ? 'Tus cambios se guardaron correctamente.'
             : 'Tus medidas se actualizaron correctamente.',
         );
       } catch (saveError) {
         const apiError = saveError as ApiError;
-        Alert.alert('Error', apiError.message || 'No fue posible guardar la medicion.');
+        Alert.alert('Error', apiError.message || 'No fue posible guardar la medición.');
       } finally {
         setIsSubmitting(false);
       }
@@ -645,7 +645,7 @@ export default function MeasurementsScreen() {
       const wasDeleted = await deleteSelectedGlucoseRecord();
 
       if (wasDeleted) {
-        Alert.alert('Registro eliminado', 'La lectura se elimino correctamente.');
+        Alert.alert('Registro eliminado', 'La lectura se eliminó correctamente.');
       }
     } catch (deleteError) {
       const apiError = deleteError as ApiError;
@@ -664,7 +664,7 @@ export default function MeasurementsScreen() {
     if (hasAdditionalHealthMetrics(selectedGlucoseRecord)) {
       Alert.alert(
         'Eliminacion no disponible',
-        'Este registro tambien incluye otras metricas clinicas y no puede eliminarse desde la app.',
+        'Este registro también incluye otras métricas clínicas y no puede eliminarse desde la app.',
       );
       return;
     }
@@ -719,7 +719,7 @@ export default function MeasurementsScreen() {
           <View style={styles.headerCopy}>
             <Text style={styles.title}>Medidas</Text>
             <Text style={styles.subtitle}>
-              Organiza tu seguimiento corporal y glucemico por tipo de registro.
+              Organiza tu seguimiento corporal y glucémico por tipo de registro.
             </Text>
             <Text style={styles.preferenceText}>
               Unidades: {MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
@@ -774,7 +774,7 @@ export default function MeasurementsScreen() {
                   <View style={styles.overviewHeaderCopy}>
                     <Text style={styles.overviewEyebrow}>Corporal</Text>
                     <Text style={styles.overviewTitle}>
-                      Ultimo registro antropometrico
+                      Último registro antropométrico
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -835,14 +835,14 @@ export default function MeasurementsScreen() {
                         color={theme.colors.primary}
                       />
                       <Text style={styles.inlineActionText}>
-                        Registrar nueva medicion corporal
+                        Registrar nueva medición corporal
                       </Text>
                     </TouchableOpacity>
                   </>
                 ) : (
                   <>
                     <Text style={styles.overviewEmptyText}>
-                      Aun no tienes mediciones corporales registradas.
+                      Aún no tienes mediciones corporales registradas.
                     </Text>
                     <TouchableOpacity
                       style={styles.inlineAction}
@@ -855,7 +855,7 @@ export default function MeasurementsScreen() {
                         color={theme.colors.primary}
                       />
                       <Text style={styles.inlineActionText}>
-                        Registrar mi primera medicion
+                        Registrar mi primera medición
                       </Text>
                     </TouchableOpacity>
                   </>
@@ -934,7 +934,7 @@ export default function MeasurementsScreen() {
                 </View>
 
                 {isLoadingLatestGlucose && !summaryGlucoseRecord ? (
-                  <Text style={styles.loadingLabel}>Cargando ultima lectura...</Text>
+                  <Text style={styles.loadingLabel}>Cargando última lectura...</Text>
                 ) : summaryGlucoseRecord ? (
                   <>
                     <Text style={styles.glucoseSummaryValue}>
@@ -947,8 +947,8 @@ export default function MeasurementsScreen() {
                     </Text>
                     <Text style={styles.overviewHint}>
                       {summaryGlucoseIsMixed
-                        ? 'Este registro incluye otras metricas clinicas y ya esta visible para tu nutriologo.'
-                        : 'Tu lectura mas reciente ya esta lista para seguimiento nutricional.'}
+                        ? 'Este registro incluye otras métricas clínicas y ya está visible para tu nutriólogo.'
+                        : 'Tu lectura más reciente ya está lista para seguimiento nutricional.'}
                     </Text>
                     <TouchableOpacity
                       style={styles.inlineAction}
@@ -969,7 +969,7 @@ export default function MeasurementsScreen() {
                   <>
                     <Text style={styles.overviewEmptyText}>
                       {glucoseLatestError ??
-                        'Aun no tienes glucosas registradas en tu seguimiento.'}
+                        'Aún no tienes glucosas registradas en tu seguimiento.'}
                     </Text>
                     <TouchableOpacity
                       style={styles.inlineAction}
@@ -1012,7 +1012,7 @@ export default function MeasurementsScreen() {
                     composicion y perimetros.
                   </Text>
                   <Button
-                    title="Registrar mi primera medicion"
+                    title="Registrar mi primera medición"
                     onPress={openCreateMeasurementForm}
                     icon={<Ionicons name="add-outline" size={18} color="#ffffff" />}
                   />
@@ -1056,7 +1056,7 @@ export default function MeasurementsScreen() {
                                   size={12}
                                   color={theme.colors.primary}
                                 />
-                                <Text style={styles.metricActionText}>Ver grafica</Text>
+                                <Text style={styles.metricActionText}>Ver gráfica</Text>
                               </View>
                             ) : null}
                           </View>
@@ -1131,7 +1131,7 @@ export default function MeasurementsScreen() {
                   </View>
 
                   <Text style={styles.lastUpdate}>
-                    Ultima actualizacion:{' '}
+                    Última actualización:{' '}
                     {formatMeasurementDate(
                       getMeasurementDisplayDate(latestMeasurement),
                       'long',
@@ -1144,7 +1144,7 @@ export default function MeasurementsScreen() {
                         <View style={styles.sectionHeaderContent}>
                           <Text style={styles.sectionTitle}>Indicadores calculados</Text>
                           <Text style={styles.sectionDescription}>
-                            Resumen derivado del registro mas reciente.
+                            Resumen derivado del registro más reciente.
                           </Text>
                         </View>
                         <TouchableOpacity
@@ -1179,7 +1179,7 @@ export default function MeasurementsScreen() {
                                       color={theme.colors.primary}
                                     />
                                     <Text style={styles.metricActionText}>
-                                      Ver grafica
+                                      Ver gráfica
                                     </Text>
                                   </View>
                                 ) : null}
@@ -1235,7 +1235,7 @@ export default function MeasurementsScreen() {
                   <Card style={styles.sectionCard}>
                     <Text style={styles.sectionTitle}>Perimetros corporales</Text>
                     <Text style={styles.sectionDescription}>
-                      Se muestran unicamente las medidas disponibles del ultimo registro.
+                      Se muestran únicamente las medidas disponibles del último registro.
                     </Text>
                     <View style={styles.perimeterGrid}>
                       {perimeterCards.map((field) => {
@@ -1268,7 +1268,7 @@ export default function MeasurementsScreen() {
                                   size={12}
                                   color={theme.colors.primary}
                                 />
-                                <Text style={styles.metricActionText}>Ver grafica</Text>
+                                <Text style={styles.metricActionText}>Ver gráfica</Text>
                               </View>
                             </View>
                             <Text style={styles.perimeterLabel}>{field.label}</Text>
@@ -1408,7 +1408,7 @@ export default function MeasurementsScreen() {
                       </View>
                     ) : null}
                   </View>
-                  <Text style={styles.glucoseHeroEyebrow}>Ultimo registro</Text>
+                  <Text style={styles.glucoseHeroEyebrow}>Último registro</Text>
                   <Text style={styles.glucoseHeroValue}>
                     {formatMeasurementNumber(summaryGlucoseRecord.glucose_mg_dl, 0)}
                     <Text style={styles.glucoseHeroUnit}> mg/dL</Text>
@@ -1506,7 +1506,7 @@ export default function MeasurementsScreen() {
                             {mixedRecord ? (
                               <View style={styles.historyBadge}>
                                 <Text style={styles.historyBadgeText}>
-                                  Incluye otras metricas clinicas
+                                  Incluye otras métricas clínicas
                                 </Text>
                               </View>
                             ) : null}
@@ -1516,7 +1516,7 @@ export default function MeasurementsScreen() {
                     </View>
                   ) : (
                     <Text style={styles.historyEmpty}>
-                      Cuando registres lecturas, aqui aparecera el historial completo.
+                      Cuando registres lecturas, aquí aparecerá el historial completo.
                     </Text>
                   )}
 

@@ -229,7 +229,7 @@ export default function ExerciseTrendDetailScreen() {
         { label: 'Sesiones', value: `${detail.summary.total_sessions}`, context: null },
         detail.summary.total_duration_minutes != null && detail.summary.total_duration_minutes > 0
           ? {
-              label: 'Duracion total',
+              label: 'Duración total',
               value: formatMetricValue(detail.summary.total_duration_minutes, 'min'),
               context: null,
             }
@@ -249,7 +249,7 @@ export default function ExerciseTrendDetailScreen() {
             }
           : null,
         {
-          label: 'Ultima',
+          label: 'Última',
           value: detail.summary.last_logged_at
             ? formatLocalDate(detail.summary.last_logged_at, { day: 'numeric', month: 'short' })
             : '--',
@@ -277,7 +277,7 @@ export default function ExerciseTrendDetailScreen() {
         context: null,
       },
       {
-        label: 'Ultima',
+        label: 'Última',
         value: detail.summary.last_logged_at
           ? formatLocalDate(detail.summary.last_logged_at, { day: 'numeric', month: 'short' })
           : '--',
@@ -296,12 +296,12 @@ export default function ExerciseTrendDetailScreen() {
     ? techniqueMedia.videoUrl
       ? 'Abrir en YouTube'
       : 'Buscar en YouTube'
-    : 'Reproducir tecnica';
+    : 'Reproducir técnica';
   const techniqueCaption = techniqueMedia.useYouTubeModal
     ? techniqueMedia.videoUrl
-      ? 'Abre la demostracion publicada para este ejercicio.'
-      : 'Usa la busqueda automatica en YouTube cuando no exista un video vinculado.'
-    : 'Reproduce el video tecnico vinculado desde el catalogo.';
+      ? 'Abre la demostración publicada para este ejercicio.'
+      : 'Usa la búsqueda automática en YouTube cuando no exista un video vinculado.'
+    : 'Reproduce el video técnico vinculado desde el catálogo.';
   const scopeLabel =
     scopeKind === 'microcycle'
       ? 'Microciclo'
@@ -326,9 +326,9 @@ export default function ExerciseTrendDetailScreen() {
           <Text style={styles.subtitle}>
             {scopeKind === 'range'
               ? effectiveRepBucketId && activeRepBucketLabel
-                ? `Evolucion de ${metricLabel.toLowerCase()} en ${activeRepBucketLabel} a lo largo del tiempo`
-                : `Evolucion de ${metricLabel.toLowerCase()} a lo largo del tiempo`
-              : `Evolucion de ${metricLabel.toLowerCase()} dentro del ${scopeLabel.toLowerCase()} seleccionado`}
+                ? `Evolución de ${metricLabel.toLowerCase()} en ${activeRepBucketLabel} a lo largo del tiempo`
+                : `Evolución de ${metricLabel.toLowerCase()} a lo largo del tiempo`
+              : `Evolución de ${metricLabel.toLowerCase()} dentro del ${scopeLabel.toLowerCase()} seleccionado`}
           </Text>
         </View>
       </View>
@@ -373,12 +373,12 @@ export default function ExerciseTrendDetailScreen() {
           <Card style={styles.techniqueCard}>
             <View style={styles.techniqueHeader}>
               <View style={styles.techniqueHeaderCopy}>
-                <Text style={styles.techniqueEyebrow}>Tecnica</Text>
+                <Text style={styles.techniqueEyebrow}>Técnica</Text>
                 <Text style={styles.techniqueTitle}>Video y referencia</Text>
               </View>
               <TouchableOpacity
                 accessibilityRole="button"
-                accessibilityLabel={`Abrir tecnica de ${detail.exercise_name}`}
+                accessibilityLabel={`Abrir técnica de ${detail.exercise_name}`}
                 activeOpacity={0.88}
                 style={[
                   styles.techniqueActionButton,
@@ -422,7 +422,7 @@ export default function ExerciseTrendDetailScreen() {
                     size={34}
                     color={techniqueMedia.useYouTubeModal ? YOUTUBE_RED : theme.colors.primary}
                   />
-                  <Text style={styles.techniquePreviewPlaceholderText}>Abrir referencia tecnica</Text>
+                  <Text style={styles.techniquePreviewPlaceholderText}>Abrir referencia técnica</Text>
                 </View>
               )}
               <View style={styles.techniquePreviewOverlay}>
@@ -440,7 +440,7 @@ export default function ExerciseTrendDetailScreen() {
         ) : null}
 
         <View style={styles.metricSelectorWrap}>
-          <Text style={styles.metricSelectorLabel}>Metrica</Text>
+          <Text style={styles.metricSelectorLabel}>Métrica</Text>
           <WorkoutAnalyticsPillSelector
             items={metricOptions.map((option) => ({
               value: option.value,
@@ -496,7 +496,7 @@ export default function ExerciseTrendDetailScreen() {
           <Text style={styles.sectionSubtitleSmall}>
             {effectiveRepBucketId && activeRepBucketLabel
               ? `Historial filtrado por ${activeRepBucketLabel} dentro del periodo seleccionado.`
-              : 'Historial detallado de cada sesion en el periodo seleccionado.'}
+              : 'Historial detallado de cada sesión en el periodo seleccionado.'}
           </Text>
           {detail?.series.length ? (
             detail.series
@@ -527,7 +527,7 @@ export default function ExerciseTrendDetailScreen() {
                       profileConfig.primaryMetric !== 'calories'
                         ? {
                             key: 'calories',
-                            label: 'Calorias',
+              label: 'Calorías',
                             value: formatCalories(point.calories_burned),
                             context: null,
                           }
@@ -700,7 +700,7 @@ export default function ExerciseTrendDetailScreen() {
               <Text style={styles.emptyText}>
                 {activeRepBucketLabel
                   ? `No hay registros de este ejercicio en ${activeRepBucketLabel}. Limpia el filtro o cambia la ventana temporal.`
-                  : 'Cambia la ventana temporal para revisar mas sesiones de este ejercicio.'}
+                  : 'Cambia la ventana temporal para revisar más sesiones de este ejercicio.'}
               </Text>
             </Card>
           )}
