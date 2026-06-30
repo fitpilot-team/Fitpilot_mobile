@@ -26,6 +26,7 @@ import {
   MicrocycleStats,
   ScienceTips,
   SessionPickerModal,
+  SplitOverviewCta,
   TodayWorkoutCard,
   UserHeader,
 } from '../../src/components/dashboard';
@@ -546,6 +547,9 @@ export default function HomeScreen() {
   const handleOpenProfessionals = useCallback(() => {
     router.push('/professionals');
   }, []);
+  const handleOpenSplit = useCallback(() => {
+    router.push('/workouts/split');
+  }, []);
 
   if (!user) {
     return null;
@@ -604,6 +608,12 @@ export default function HomeScreen() {
                 />
               </View>
             </Animated.View>
+
+            {microcycleProgress?.microcycle_id ? (
+              <Animated.View entering={getEntryAnimation(120)}>
+                <SplitOverviewCta onPress={handleOpenSplit} horizontalPadding={horizontalPadding} />
+              </Animated.View>
+            ) : null}
 
             <Animated.View entering={getEntryAnimation(160)}>
               <TodayWorkoutCard

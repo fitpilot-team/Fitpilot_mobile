@@ -11,6 +11,7 @@ export default function ProtectedWorkoutsLayout() {
           animation: 'slide_from_right',
         }}
       >
+        <Stack.Screen name="split" />
         <Stack.Screen name="exercises/[exerciseId]" />
       </Stack>
     </ProtectedRoute>
