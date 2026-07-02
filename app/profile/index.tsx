@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
+import { toast } from '../../src/store/toastStore';
 import { useCareTeam } from '../../src/hooks/useCareTeam';
 import {
   getThemePreferenceLabel,
@@ -37,6 +38,7 @@ import {
   ProfileImagePreviewModal,
 } from '../../src/components/common';
 import { getPrimaryScreenHorizontalPadding } from '../../src/utils/layout';
+import { hapticError, hapticSuccess } from '../../src/utils/haptics';
 import { pickProfileImageFromLibrary } from '../../src/utils/profileImagePicker';
 import {
   cancelAccountDeletion,
@@ -204,9 +206,10 @@ export default function ProfileScreen() {
       const result = await pickProfileImageFromLibrary();
 
       if (result.status === 'permission_denied') {
-        Alert.alert(
+        hapticError();
+        toast.error(
           'Permiso requerido',
-          'Necesitamos acceso a tu galeria para actualizar tu foto de perfil.',
+          'Necesitamos acceso a tu galería para actualizar tu foto de perfil.',
         );
         return;
       }
@@ -217,7 +220,8 @@ export default function ProfileScreen() {
 
       await handleAvatarChange(result.uri);
     } catch {
-      Alert.alert(
+      hapticError();
+      toast.error(
         'No se pudo cambiar la foto',
         'Intenta de nuevo en un momento.',
       );
@@ -248,12 +252,14 @@ export default function ProfileScreen() {
       setAccountDeletionStatus(nextStatus);
       const scheduledLabel =
         formatAccountDeletionDate(nextStatus.scheduled_deletion_at) || '30 días';
-      Alert.alert(
+      hapticSuccess();
+      toast.success(
         'Eliminación programada',
         `Tu cuenta se eliminará automáticamente el ${scheduledLabel}. Puedes cancelar la solicitud desde Perfil antes de esa fecha.`,
       );
     } catch {
-      Alert.alert(
+      hapticError();
+      toast.error(
         'No se pudo programar',
         'Intenta de nuevo en unos minutos o contacta a soporte.',
       );
@@ -267,12 +273,14 @@ export default function ProfileScreen() {
     try {
       const nextStatus = await cancelAccountDeletion();
       setAccountDeletionStatus(nextStatus);
-      Alert.alert(
+      hapticSuccess();
+      toast.success(
         'Solicitud cancelada',
         'Tu cuenta seguirá activa y no se eliminará automáticamente.',
       );
     } catch {
-      Alert.alert(
+      hapticError();
+      toast.error(
         'No se pudo cancelar',
         'Intenta de nuevo en unos minutos o contacta a soporte.',
       );
@@ -330,7 +338,8 @@ export default function ProfileScreen() {
     try {
       await setMeasurementPreference(nextPreference);
     } catch {
-      Alert.alert('Error', 'No se pudo guardar tu preferencia de unidades.');
+      hapticError();
+      toast.error('No se pudo guardar tu preferencia de unidades.');
     }
   };
 
@@ -347,7 +356,7 @@ export default function ProfileScreen() {
           },
         },
         {
-          text: 'Mexico',
+          text: 'México',
           onPress: () => {
             void handleMeasurementPreferenceSelect('mx');
           },
@@ -369,7 +378,7 @@ export default function ProfileScreen() {
       ? 'Cargando'
       : assignedCount > 0
         ? `${assignedCount} asignado${assignedCount > 1 ? 's' : ''}`
-        : 'Sin asignacion';
+        : 'Sin asignación';
 
   const profileImageUrl = user?.profilePictureUrl ?? undefined;
   const hasProfileImage = Boolean(profileImageUrl && !hasProfileImageError);
@@ -510,7 +519,7 @@ export default function ProfileScreen() {
             />
             <MenuItem
               icon="document-text-outline"
-              label="Terminos y condiciones"
+              label="Términos y condiciones"
               onPress={() => {
                 const url =
                   process.env.EXPO_PUBLIC_TERMS_URL ||
@@ -518,13 +527,14 @@ export default function ProfileScreen() {
                 if (url) {
                   Linking.openURL(url);
                 } else {
-                  Alert.alert('No configurado', 'Enlace no disponible.');
+                  hapticError();
+                  toast.error('Enlace no disponible.');
                 }
               }}
             />
             <MenuItem
               icon="shield-checkmark-outline"
-              label="Politica de privacidad"
+              label="Política de privacidad"
               onPress={() => {
                 const url =
                   process.env.EXPO_PUBLIC_PRIVACY_URL ||
@@ -532,7 +542,8 @@ export default function ProfileScreen() {
                 if (url) {
                   Linking.openURL(url);
                 } else {
-                  Alert.alert('No configurado', 'Enlace no disponible.');
+                  hapticError();
+                  toast.error('Enlace no disponible.');
                 }
               }}
             />
@@ -541,7 +552,7 @@ export default function ProfileScreen() {
           <View style={styles.menuSection}>
             <MenuItem
               icon="log-out-outline"
-              label="Cerrar sesion"
+              label="Cerrar sesión"
               onPress={handleLogout}
               showChevron={false}
               danger

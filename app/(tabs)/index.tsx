@@ -71,7 +71,7 @@ import {
 const stripExistingClientContextPrefix = (value: string) =>
   value
     .trim()
-    .replace(/^tu\s+(plan|promedio semanal|nutricion):\s*/i, '')
+    .replace(/^tu\s+(plan|promedio semanal|nutrición|nutricion):\s*/i, '')
     .replace(/^promedio semanal:\s*/i, '')
     .trim();
 
@@ -85,7 +85,7 @@ const getClientContextPrefix = (
 
   return /kcal|promedio/i.test(contextLabel)
     ? 'Tu promedio semanal'
-    : 'Tu nutricion';
+    : 'Tu nutrición';
 };
 
 const formatClientContextLabel = (
@@ -98,7 +98,7 @@ const formatClientContextLabel = (
     return null;
   }
 
-  if (/^tu\s+(plan|promedio semanal|nutricion):/i.test(trimmedContext)) {
+  if (/^tu\s+(plan|promedio semanal|nutrición|nutricion):/i.test(trimmedContext)) {
     return trimmedContext;
   }
 

@@ -153,7 +153,7 @@ export const buildShoppingListHtml = (list: ShoppingList): string => {
   <body>
     <h1>Lista del super</h1>
     <div class="range">${start} &mdash; ${end}</div>
-    ${sections || '<p>Tu lista no tiene items todavia.</p>'}
+    ${sections || '<p>Tu lista no tiene ítems todavía.</p>'}
   </body>
   </html>`;
 };
@@ -173,7 +173,7 @@ export const buildShoppingListPlainText = (list: ShoppingList): string => {
     'Lista del super',
     `${start} - ${end}`,
     '',
-    sections || 'Tu lista no tiene items todavia.',
+    sections || 'Tu lista no tiene ítems todavía.',
   ].join('\n');
 };
 

@@ -118,7 +118,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    router.replace(user?.onboardingStatus === 'completed' ? '/(tabs)' : '/onboarding');
+    router.replace(user?.onboardingStatus === 'completed' ? '/' : '/onboarding');
   }, [isAuthenticated, user?.onboardingStatus]);
 
   useEffect(() => {

@@ -80,6 +80,9 @@ export const Input: React.FC<InputProps> = ({
           <TouchableOpacity
             onPress={() => setShowPassword(!showPassword)}
             style={styles.eyeButton}
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons
               name={showPassword ? 'eye-off-outline' : 'eye-outline'}

@@ -19,9 +19,10 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   Button,
   Card,
-  LoadingSpinner,
   ProfileShortcutButton,
+  Skeleton,
   TabScreenWrapper,
+  WorkoutCardSkeleton,
 } from '../../src/components/common';
 import {
   CalendarDatePickerModal,
@@ -900,7 +901,43 @@ export default function DietScreen() {
   }
 
   if (showInitialLoadingState) {
-    return <LoadingSpinner fullScreen text="Cargando tu dieta..." />;
+    return (
+      <TabScreenWrapper>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: contentInsetBottom },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[styles.skeletonHeader, { maxWidth: contentWidth }]}>
+              <View style={styles.headerCopy}>
+                <Skeleton width={92} height={18} />
+                <Skeleton width={180} height={28} style={{ marginTop: spacing.sm }} />
+              </View>
+              <ProfileShortcutButton />
+            </View>
+            <View style={[styles.skeletonDateRow, { maxWidth: contentWidth }]}>
+              {[1, 2, 3, 4, 5].map((item) => (
+                <Skeleton
+                  key={item}
+                  width="18%"
+                  height={58}
+                  borderRadius={borderRadius.lg}
+                />
+              ))}
+            </View>
+            {[1, 2, 3].map((item) => (
+              <View key={item} style={{ maxWidth: contentWidth, width: '100%' }}>
+                <WorkoutCardSkeleton />
+              </View>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </TabScreenWrapper>
+    );
   }
 
   return (
@@ -1126,7 +1163,7 @@ export default function DietScreen() {
                   <Ionicons name={error ? 'alert-circle-outline' : 'restaurant-outline'} size={30} color={nutritionTheme.accentStrong} />
                 </View>
                 <Text style={styles.emptyTitle}>
-                  {error ? 'No pudimos cargar tu dieta' : 'Todavia no tienes una dieta asignada'}
+                  {error ? 'No pudimos cargar tu dieta' : 'Todavía no tienes una dieta asignada'}
                 </Text>
                 <Text style={styles.emptyText}>
                   {error
@@ -1241,6 +1278,24 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     scrollContent: {
       paddingBottom: spacing.xxl,
+    },
+    skeletonHeader: {
+      width: '100%',
+      alignSelf: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+    },
+    skeletonDateRow: {
+      width: '100%',
+      alignSelf: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
     },
     header: {
       flexDirection: 'row',

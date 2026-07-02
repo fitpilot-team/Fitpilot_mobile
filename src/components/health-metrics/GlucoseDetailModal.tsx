@@ -174,7 +174,7 @@ export const GlucoseDetailModal: React.FC<GlucoseDetailModalProps> = ({
                       size={18}
                       color={theme.colors.warning}
                     />
-                    <Text style={styles.warningTitle}>Eliminacion bloqueada</Text>
+                    <Text style={styles.warningTitle}>Eliminación bloqueada</Text>
                   </View>
                   <Text style={styles.warningText}>
                     No puedes eliminar este registro desde la app porque también

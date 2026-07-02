@@ -99,8 +99,8 @@ export const BASE_MEASUREMENT_FIELDS: MeasurementFieldConfig<MeasurementNumericF
 
 export const BIOIMPEDANCE_SECTIONS: MeasurementFieldSection<MeasurementNumericFormKey>[] = [
   {
-    title: 'Composicion corporal',
-    description: 'Datos que suele entregar una bascula de bioimpedancia.',
+    title: 'Composición corporal',
+    description: 'Datos que suele entregar una báscula de bioimpedancia.',
     fields: [
       {
         key: 'body_fat_pct',
@@ -196,11 +196,11 @@ export const PERIMETER_SECTIONS: MeasurementFieldSection<MeasurementNumericFormK
   },
   {
     title: 'Cabeza y miembro superior',
-    description: 'Perimetros del tren superior y perimetro cefalico.',
+    description: 'Perímetros del tren superior y perímetro cefálico.',
     fields: [
       {
         key: 'cephalic_cm',
-        label: 'Cefalico',
+        label: 'Cefálico',
         placeholder: '56.2',
         unit: 'cm',
         icon: 'radio-button-on-outline',
@@ -276,7 +276,7 @@ export const PERIMETER_SECTIONS: MeasurementFieldSection<MeasurementNumericFormK
   },
   {
     title: 'Miembro inferior',
-    description: 'Perimetros del tren inferior.',
+    description: 'Perímetros del tren inferior.',
     fields: [
       {
         key: 'hip_cm',
@@ -480,7 +480,7 @@ export const DETAIL_MEASUREMENT_SECTIONS: MeasurementFieldSection<MeasurementHis
   },
   {
     title: 'Bioimpedancia',
-    description: 'Composicion corporal disponible para este registro.',
+    description: 'Composición corporal disponible para este registro.',
     fields: BIOIMPEDANCE_SECTIONS.flatMap((section) => section.fields),
   },
   ...PERIMETER_SECTIONS,

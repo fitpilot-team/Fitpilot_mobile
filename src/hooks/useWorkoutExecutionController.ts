@@ -46,6 +46,7 @@ import {
   type WorkoutExecutionDraftOptions,
 } from '../utils/workoutSession';
 import type { WorkoutMutationResult } from '../store/workoutStore';
+import { hapticError, hapticSuccess } from '../utils/haptics';
 
 type StrengthMetricField = 'reps' | 'weight' | 'effort';
 type CardioMetricField = 'duration' | 'calories' | 'distance' | 'effort';
@@ -730,6 +731,7 @@ export const useWorkoutExecutionController = ({
         const nextSegments = draft.currentSegments.filter((_, index) => index !== segmentIndex);
         const validationMessage = validateWorkoutSetDraft(context.exercise, nextSegments);
         if (validationMessage) {
+          hapticError();
           Alert.alert('Segmentos insuficientes', validationMessage);
           return draft;
         }
@@ -952,6 +954,7 @@ export const useWorkoutExecutionController = ({
       const isExerciseCompleted = refreshedProgress?.is_completed ?? false;
 
       if (isExerciseCompleted) {
+        hapticSuccess();
         showToast({
           message: 'Ejercicio completado',
           subtitle: 'Excelente trabajo',
@@ -967,6 +970,7 @@ export const useWorkoutExecutionController = ({
         icon: 'checkmark-circle',
         iconColor: '#10B981',
       });
+      hapticSuccess();
       setRestTimerSeconds(resolvedExecution.draft.restSeconds);
       setRestTimerVisible(true);
     },
@@ -990,6 +994,7 @@ export const useWorkoutExecutionController = ({
           resolvedExecution.draft.currentSegments,
         );
         if (validationMessage) {
+          hapticError();
           Alert.alert('No se pudo guardar la serie', validationMessage);
           return;
         }
@@ -1012,6 +1017,7 @@ export const useWorkoutExecutionController = ({
 
       if (!hasExistingSet && setNumber !== nextPendingSetNumber) {
         const unitLabel = getExecutionUnitLabel(resolvedExecution.draft).toLowerCase();
+        hapticError();
         Alert.alert(
           `${getExecutionUnitLabel(resolvedExecution.draft)} no disponible`,
           `Solo puedes editar ${unitLabel === 'bloque' ? 'un bloque' : 'una serie'} existente o registrar ${unitLabel === 'bloque' ? 'el siguiente bloque' : 'la siguiente serie'} pendiente.`,
@@ -1051,6 +1057,7 @@ export const useWorkoutExecutionController = ({
           resolvedExecution.draft.currentSegments,
         );
         if (validationMessage) {
+          hapticError();
           Alert.alert('No se pudo guardar la serie', validationMessage);
           return;
         }

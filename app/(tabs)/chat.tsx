@@ -40,7 +40,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { io, type Socket } from 'socket.io-client';
-import { LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
+import { ListItemSkeleton, TabScreenWrapper } from '../../src/components/common';
 import {
   borderRadius,
   fontSize,
@@ -62,6 +62,7 @@ import {
   type ChatUploadFile,
 } from '../../src/services/chat';
 import { useAuthStore } from '../../src/store/authStore';
+import { toast } from '../../src/store/toastStore';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type { AssignedProfessionalSummary } from '../../src/types';
 import type {
@@ -70,6 +71,7 @@ import type {
   ChatDeliveryStatus,
   ChatMessage,
 } from '../../src/types/chat';
+import { hapticError, hapticImpactLight, hapticSuccess } from '../../src/utils/haptics';
 
 const MAX_FILES_PER_MESSAGE = 4;
 const MAX_AUDIO_SECONDS = 300;
@@ -693,7 +695,8 @@ export default function ChatScreen() {
         }
       });
     } catch {
-      Alert.alert('Chat', 'No se pudo actualizar el chat.');
+      hapticError();
+      toast.error('No se pudo actualizar el chat.');
     } finally {
       setIsRefreshing(false);
     }
@@ -708,14 +711,16 @@ export default function ChatScreen() {
       const availableSlots = MAX_FILES_PER_MESSAGE - currentFiles.length;
 
       if (availableSlots <= 0) {
-        Alert.alert('Limite de adjuntos', 'Puedes enviar hasta 4 archivos por mensaje.');
+        hapticError();
+        toast.error('Límite de adjuntos', 'Puedes enviar hasta 4 archivos por mensaje.');
         return currentFiles;
       }
 
       const acceptedFiles = files
         .filter((file) => {
           if (file.size && file.size > MAX_FILE_SIZE_BYTES) {
-            Alert.alert('Archivo muy grande', `${file.name} supera el limite de 10 MB.`);
+            hapticError();
+            toast.error('Archivo muy grande', `${file.name} supera el límite de 10 MB.`);
             return false;
           }
 
@@ -724,7 +729,8 @@ export default function ChatScreen() {
         .slice(0, availableSlots);
 
       if (acceptedFiles.length < files.length) {
-        Alert.alert('Limite de adjuntos', 'Algunos archivos no se agregaron.');
+        hapticError();
+        toast.info('Límite de adjuntos', 'Algunos archivos no se agregaron.');
       }
 
       return [...currentFiles, ...acceptedFiles];
@@ -734,7 +740,8 @@ export default function ChatScreen() {
   const handlePickImage = useCallback(async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos.');
+      hapticError();
+      toast.error('Permiso requerido', 'Necesitamos acceso a tus fotos.');
       return;
     }
 
@@ -812,7 +819,8 @@ export default function ChatScreen() {
         ]);
       }
     } catch {
-      Alert.alert('Audio', 'No se pudo guardar la nota de voz.');
+      hapticError();
+      toast.error('No se pudo guardar la nota de voz.');
     } finally {
       recordingStartedAtRef.current = null;
     }
@@ -820,13 +828,15 @@ export default function ChatScreen() {
 
   const startRecording = useCallback(async () => {
     if (pendingFiles.length >= MAX_FILES_PER_MESSAGE) {
-      Alert.alert('Limite de adjuntos', 'Elimina un archivo antes de grabar audio.');
+      hapticError();
+      toast.error('Límite de adjuntos', 'Elimina un archivo antes de grabar audio.');
       return;
     }
 
     const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso al microfono.');
+      hapticError();
+      toast.error('Permiso requerido', 'Necesitamos acceso al micrófono.');
       return;
     }
 
@@ -839,7 +849,8 @@ export default function ChatScreen() {
         void stopRecording();
       }, MAX_AUDIO_SECONDS * 1000);
     } catch {
-      Alert.alert('Audio', 'No se pudo iniciar la grabacion.');
+      hapticError();
+      toast.error('No se pudo iniciar la grabación.');
       recordingStartedAtRef.current = null;
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
     }
@@ -864,9 +875,10 @@ export default function ChatScreen() {
         setActiveConversationId(conversation.id);
         setHasAutoSelectedConversation(true);
       } catch {
-        Alert.alert(
+        hapticError();
+        toast.error(
           'Chat no disponible',
-          'No se pudo abrir una conversacion con tu profesional.',
+          'No se pudo abrir una conversación con tu profesional.',
         );
       } finally {
         setIsStartingConversation(false);
@@ -889,7 +901,8 @@ export default function ChatScreen() {
     (messageId: number) => {
       const index = messages.findIndex((message) => message.id === messageId);
       if (index < 0) {
-        Alert.alert('Chat', 'Ese mensaje no esta cargado en este historial.');
+        hapticError();
+        toast.error('Mensaje no disponible', 'Ese mensaje no está cargado en este historial.');
         return;
       }
 
@@ -926,7 +939,8 @@ export default function ChatScreen() {
               );
               await loadConversations();
             } catch {
-              Alert.alert('Chat', 'No se pudo eliminar el mensaje.');
+              hapticError();
+              toast.error('No se pudo eliminar el mensaje.');
             }
           },
         },
@@ -959,12 +973,14 @@ export default function ChatScreen() {
       setDraft('');
       setReplyToMessage(null);
       setPendingFiles([]);
+      hapticImpactLight();
       await Promise.allSettled([
         markChatConversationRead(activeConversationId),
         loadConversations(),
       ]);
     } catch {
-      Alert.alert('Mensaje no enviado', 'Intenta de nuevo en un momento.');
+      hapticError();
+      toast.error('Mensaje no enviado', 'Intenta de nuevo en un momento.');
     } finally {
       setIsSending(false);
     }
@@ -1005,9 +1021,11 @@ export default function ChatScreen() {
                 loadConversations(),
               ]);
               setMessages(latestMessages);
-              Alert.alert('Cita agendada', 'Tu cita quedo confirmada.');
+              hapticSuccess();
+              toast.success('Cita agendada', 'Tu cita quedó confirmada.');
             } catch {
-              Alert.alert(
+              hapticError();
+              toast.error(
                 'No se pudo confirmar',
                 'Intenta de nuevo o responde en el chat para acordar otro horario.',
               );
@@ -1058,7 +1076,8 @@ export default function ChatScreen() {
     setIsLoadingConversations(true);
     loadConversations()
       .catch(() => {
-        Alert.alert('Chat', 'No se pudieron cargar tus conversaciones.');
+        hapticError();
+        toast.error('No se pudieron cargar tus conversaciones.');
       })
       .finally(() => {
         setIsLoadingConversations(false);
@@ -1098,7 +1117,8 @@ export default function ChatScreen() {
       })
       .then(() => loadConversations())
       .catch(() => {
-        Alert.alert('Chat', 'No se pudieron cargar los mensajes.');
+        hapticError();
+        toast.error('No se pudieron cargar los mensajes.');
       })
       .finally(() => {
         setIsLoadingMessages(false);
@@ -1129,7 +1149,7 @@ export default function ChatScreen() {
 
         // En una RECONEXION (tunel, cambio de red), el stream no tiene replay:
         // los mensajes llegados durante la desconexion se perdieron del socket.
-        // Recargamos la conversacion activa y la lista para cerrar el hueco.
+        // Recargamos la conversación activa y la lista para cerrar el hueco.
         if (hasConnectedBefore) {
           if (activeConversationId) {
             getChatMessages(activeConversationId)
@@ -1516,7 +1536,7 @@ export default function ChatScreen() {
                 <View style={styles.lockedNotice}>
                   <Ionicons name="lock-closed" size={15} color={theme.colors.warning} />
                   <Text style={styles.lockedNoticeText}>
-                    El historial esta disponible, pero el envio esta cerrado.
+                    El historial está disponible, pero el envío está cerrado.
                   </Text>
                 </View>
               ) : null}
@@ -1551,6 +1571,8 @@ export default function ChatScreen() {
                   activeOpacity={0.75}
                   disabled={isInputDisabled}
                   onPress={handlePickImage}
+                  accessibilityRole="button"
+                  accessibilityLabel="Adjuntar imagen"
                 >
                   <Ionicons
                     name="image-outline"
@@ -1563,6 +1585,8 @@ export default function ChatScreen() {
                   activeOpacity={0.75}
                   disabled={isInputDisabled}
                   onPress={handlePickDocument}
+                  accessibilityRole="button"
+                  accessibilityLabel="Adjuntar archivo"
                 >
                   <Ionicons
                     name="attach"
@@ -1578,6 +1602,10 @@ export default function ChatScreen() {
                   activeOpacity={0.75}
                   disabled={isInputDisabled && !recorderState.isRecording}
                   onPress={handleRecordPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    recorderState.isRecording ? 'Detener grabación' : 'Grabar nota de voz'
+                  }
                 >
                   <Ionicons
                     name={recorderState.isRecording ? 'stop' : 'mic-outline'}
@@ -1602,6 +1630,8 @@ export default function ChatScreen() {
                   activeOpacity={0.75}
                   disabled={!canSend}
                   onPress={handleSend}
+                  accessibilityRole="button"
+                  accessibilityLabel="Enviar mensaje"
                 >
                   {isSending ? (
                     <ActivityIndicator size="small" color="#08111f" />
@@ -1649,8 +1679,10 @@ export default function ChatScreen() {
             </View>
 
             {isLoadingConversations ? (
-              <View style={styles.loadingState}>
-                <LoadingSpinner text="Cargando chat..." />
+              <View style={styles.conversationList}>
+                {[1, 2, 3, 4, 5].map((item) => (
+                  <ListItemSkeleton key={item} />
+                ))}
               </View>
             ) : (
               <View style={styles.conversationList}>
@@ -1702,8 +1734,8 @@ export default function ChatScreen() {
                         </Text>
                         <Text style={styles.conversationPreview} numberOfLines={1}>
                           {professional.roleLabel
-                            ? `${professional.roleLabel} · Iniciar conversacion`
-                            : 'Iniciar conversacion'}
+                            ? `${professional.roleLabel} · Iniciar conversación`
+                            : 'Iniciar conversación'}
                         </Text>
                       </View>
                       <Ionicons

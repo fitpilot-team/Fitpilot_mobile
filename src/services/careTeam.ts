@@ -155,7 +155,7 @@ const mapClientDirectoryProfessionalSummary = (
   return {
     id,
     fullName,
-    roleLabel: domain === 'training' ? 'Entrenador' : 'Nutriologo',
+    roleLabel: domain === 'training' ? 'Entrenador' : 'Nutriólogo',
     avatarUrl: getNutritionAssetUrl(profile.profile_picture),
     domain,
     contextLabel: 'Seguimiento activo',

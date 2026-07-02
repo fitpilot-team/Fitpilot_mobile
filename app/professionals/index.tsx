@@ -59,7 +59,7 @@ const PRICE_OPTIONS = [
 ] satisfies { key: PriceFilter; label: string }[];
 
 const ROLE_LABELS: Record<PublicProfessionalRole, string> = {
-  nutritionist: 'Nutriologo',
+  nutritionist: 'Nutriólogo',
   trainer: 'Entrenador',
 };
 

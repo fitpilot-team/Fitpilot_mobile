@@ -96,7 +96,7 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
   const title = initialRecord ? 'Editar glucosa' : 'Registrar glucosa';
   const subtitle = initialRecord
     ? 'Actualiza la lectura para mantener el seguimiento al día.'
-    : 'Comparte tu lectura para que tu nutriologo vea la tendencia real.';
+    : 'Comparte tu lectura para que tu nutriólogo vea la tendencia real.';
 
   const payload = useMemo(() => {
     const recordedAt = buildRecordedAtFromInputs(formState.date, formState.time);
@@ -128,12 +128,12 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
 
   const handleSubmit = async () => {
     if (!isValidMeasurementDateInput(formState.date.trim())) {
-      Alert.alert('Fecha invalida', 'Captura la fecha en formato YYYY-MM-DD.');
+      Alert.alert('Fecha inválida', 'Captura la fecha en formato YYYY-MM-DD.');
       return;
     }
 
     if (!isValidTimeInput(formState.time.trim())) {
-      Alert.alert('Hora invalida', 'Captura la hora en formato HH:mm.');
+      Alert.alert('Hora inválida', 'Captura la hora en formato HH:mm.');
       return;
     }
 
@@ -145,7 +145,7 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
       parsedGlucose <= 0
     ) {
       Alert.alert(
-        'Dato invalido',
+        'Dato inválido',
         'La glucosa debe ser un entero positivo en mg/dL.',
       );
       return;
@@ -153,7 +153,7 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
 
     if (!payload) {
       Alert.alert(
-        'Dato invalido',
+        'Dato inválido',
         'No fue posible construir la fecha y hora del registro.',
       );
       return;
@@ -224,7 +224,7 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Contexto</Text>
               <Text style={styles.sectionDescription}>
-                Elige el momento clinico de la lectura.
+                Elige el momento clínico de la lectura.
               </Text>
               <View style={styles.contextGrid}>
                 {GLUCOSE_CONTEXT_OPTIONS.map((option) => {
@@ -257,7 +257,7 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Notas</Text>
               <Text style={styles.sectionDescription}>
-                Sintomas, comida reciente o cualquier detalle util.
+                Síntomas, comida reciente o cualquier detalle útil.
               </Text>
               <TextInput
                 style={styles.notesInput}
@@ -265,7 +265,7 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
                 numberOfLines={4}
                 value={formState.notes}
                 onChangeText={(value) => handleChangeField('notes', value)}
-                placeholder={`Ej. ${GLUCOSE_CONTEXT_LABELS[formState.context].toLowerCase()}, sin sintomas, despues de caminar.`}
+                placeholder={`Ej. ${GLUCOSE_CONTEXT_LABELS[formState.context].toLowerCase()}, sin síntomas, después de caminar.`}
                 placeholderTextColor={theme.colors.textMuted}
                 textAlignVertical="top"
               />

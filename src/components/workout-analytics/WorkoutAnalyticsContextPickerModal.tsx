@@ -108,7 +108,7 @@ export const WorkoutAnalyticsContextPickerModal: React.FC<WorkoutAnalyticsContex
             ListEmptyComponent={
               <View style={styles.emptyWrap}>
                 <Text style={styles.emptyText}>
-                  {isLoading ? 'Cargando historial...' : 'No hay contextos historicos disponibles.'}
+                  {isLoading ? 'Cargando historial...' : 'No hay contextos históricos disponibles.'}
                 </Text>
               </View>
             }

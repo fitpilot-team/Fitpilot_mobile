@@ -1,5 +1,7 @@
+export { AppToast } from './AppToast';
 export { Button } from './Button';
 export { Card } from './Card';
+export { ErrorBoundary } from './ErrorBoundary';
 export { FloatingButton } from './FloatingButton';
 export { Input } from './Input';
 export { PhoneInput } from './PhoneInput';

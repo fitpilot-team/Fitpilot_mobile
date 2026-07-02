@@ -298,7 +298,7 @@ export default function OnboardingScreen() {
   const handleExit = () => {
     Alert.alert(
       'Salir del onboarding',
-      'Puedes volver a iniciar sesión cuando quieras para continuar donde lo dejaste.',
+      'Si sales ahora, se perderá el progreso capturado en este formulario. Podrás iniciar sesión después para empezar de nuevo.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {

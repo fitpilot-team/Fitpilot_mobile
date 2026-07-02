@@ -110,7 +110,7 @@ const createApiError = (
     errorMessage = detail
       .map((item) => {
         const field = item.loc?.slice(1).join('.') || 'campo';
-        return `${field}: ${item.msg || 'valor invalido'}`;
+        return `${field}: ${item.msg || 'valor inválido'}`;
       })
       .join(', ');
   } else if (Array.isArray(message)) {
