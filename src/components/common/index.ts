@@ -8,6 +8,7 @@ export { PhoneInput } from './PhoneInput';
 export { LoadingSpinner } from './LoadingSpinner';
 export { Logo } from './Logo';
 export { LogoMark } from './LogoMark';
+export { OfflineBanner } from './OfflineBanner';
 export { ProfileImagePreviewModal } from './ProfileImagePreviewModal';
 export { ProfileShortcutButton } from './ProfileShortcutButton';
 export { StartupBrandIntro } from './StartupBrandIntro';

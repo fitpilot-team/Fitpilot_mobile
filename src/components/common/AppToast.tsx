@@ -12,7 +12,9 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { spacing, fontSize, borderRadius } from '../../constants/colors';
 import { useAppTheme, useThemedStyles } from '../../theme';
+import { useConnectivityStore } from '../../store/connectivityStore';
 import { useToastStore, AppToastVariant } from '../../store/toastStore';
+import { OFFLINE_BANNER_HEIGHT } from './OfflineBanner';
 
 const SUCCESS_INFO_DURATION = 2200;
 const ERROR_DURATION = 3200;
@@ -30,6 +32,7 @@ export const AppToast: React.FC = () => {
   const visible = useToastStore((state) => state.visible);
   const config = useToastStore((state) => state.config);
   const hide = useToastStore((state) => state.hide);
+  const isOffline = useConnectivityStore((state) => state.isOffline);
 
   const translateY = useSharedValue(-120);
   const opacity = useSharedValue(0);
@@ -86,7 +89,16 @@ export const AppToast: React.FC = () => {
 
   return (
     <Animated.View
-      style={[styles.container, { top: insets.top + spacing.md }, animatedStyle]}
+      style={[
+        styles.container,
+        {
+          top:
+            insets.top +
+            spacing.md +
+            (isOffline ? OFFLINE_BANNER_HEIGHT + spacing.sm : 0),
+        },
+        animatedStyle,
+      ]}
       pointerEvents="none"
     >
       <View

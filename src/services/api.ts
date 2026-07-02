@@ -7,6 +7,7 @@ import axios, {
 } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
+import { useConnectivityStore } from '../store/connectivityStore';
 import type { ApiError, LoginResponse, MuscleVolumeResponse } from '../types';
 
 type ValidationDetail = {
@@ -49,6 +50,14 @@ interface InternalRequestConfig<D = unknown> extends InternalAxiosRequestConfig<
 const ACCESS_TOKEN_KEY = 'fitpilot_access_token';
 const REFRESH_TOKEN_KEY = 'fitpilot_refresh_token';
 const REQUEST_TIMEOUT_MS = 30_000;
+const TRANSPORT_NETWORK_ERROR_CODES = new Set([
+  'ERR_NETWORK',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'ECONNRESET',
+]);
+const API_NETWORK_ERROR_CODES = new Set(['OFFLINE', 'NETWORK_ERROR', 'REQUEST_TIMEOUT']);
 
 const extra = (Constants.expoConfig?.extra ?? {}) as PublicExtra;
 
@@ -100,6 +109,11 @@ const createApiError = (
     return apiError;
   }
 
+  const networkApiError = createNetworkApiError(error);
+  if (networkApiError) {
+    return networkApiError;
+  }
+
   const detail = error.response?.data?.detail;
   const message = error.response?.data?.message;
   let errorMessage = fallbackMessage;
@@ -128,6 +142,45 @@ const createApiError = (
   apiError.code = error.response?.data?.code;
   return apiError;
 };
+
+const createNetworkApiError = (error: AxiosError<ApiErrorPayload>): ApiError | null => {
+  if (error.response) {
+    return null;
+  }
+
+  const rawMessage = error.message || '';
+  const lowerMessage = rawMessage.toLowerCase();
+  const hasNetworkCode = Boolean(error.code && TRANSPORT_NETWORK_ERROR_CODES.has(error.code));
+  const isTimeout =
+    error.code === 'ECONNABORTED' ||
+    error.code === 'ETIMEDOUT' ||
+    lowerMessage.includes('timeout');
+  const isNetworkLike =
+    hasNetworkCode ||
+    lowerMessage.includes('network') ||
+    lowerMessage.includes('internet') ||
+    lowerMessage.includes('connection') ||
+    Boolean(error.request);
+
+  if (!isNetworkLike) {
+    return null;
+  }
+
+  const isOffline = useConnectivityStore.getState().isOffline;
+  const apiError = new Error(
+    isOffline
+      ? 'Sin conexión. Revisa tu internet e intenta de nuevo.'
+      : isTimeout
+        ? 'La conexión tardó demasiado. Intenta de nuevo.'
+        : 'No pudimos conectar con FitPilot. Revisa tu internet e intenta de nuevo.',
+  ) as ApiError;
+
+  apiError.code = isOffline ? 'OFFLINE' : isTimeout ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR';
+  return apiError;
+};
+
+const isApiNetworkError = (error: ApiError | null | undefined) =>
+  Boolean(error?.code && API_NETWORK_ERROR_CODES.has(error.code));
 
 const extractApiErrorMessage = (error: AxiosError<ApiErrorPayload>) => {
   const detail = error.response?.data?.detail;
@@ -275,8 +328,12 @@ const refreshSession = async (): Promise<SessionTokens | null> => {
       await setSessionTokens(nextTokens);
       return nextTokens;
     } catch (error) {
+      const apiError = createApiError(error as AxiosError<ApiErrorPayload> | Error);
       if (__DEV__) {
-        console.warn('[API] refresh failed', error);
+        console.warn('[API] refresh failed', apiError);
+      }
+      if (isApiNetworkError(apiError)) {
+        return null;
       }
       await notifyUnauthorized();
       return null;
