@@ -43,6 +43,7 @@ import { WorkoutAnalyticsPillSelector } from '../../src/components/workout-analy
 import { WorkoutAnalyticsSnapshotCard } from '../../src/components/workout-analytics/WorkoutAnalyticsSnapshotCard';
 import { DEFAULT_WORKOUT_ANALYTICS_RANGE } from '../../src/constants/workoutAnalytics';
 import { borderRadius, fontSize, spacing } from '../../src/constants/colors';
+import { useAuthStore } from '../../src/store/authStore';
 import {
   getWorkoutMacrocycleDetail,
   getWorkoutAnalyticsHistory,
@@ -701,6 +702,7 @@ export default function WorkoutsScreen() {
   const contentInsetBottom = useBottomTabBarContentInset();
   const isFocused = useIsFocused();
   const isTablet = isTabletLayout(width, height);
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
   const [analyticsScopeKind, setAnalyticsScopeKind] = useState<WorkoutAnalyticsScopeKind>('range');
   const [modules, setModules] = useState<WorkoutAnalyticsModules | null>(null);
@@ -810,6 +812,7 @@ export default function WorkoutsScreen() {
           macrocycleId: requestScopeParams.macrocycleId,
           mesocycleId: requestScopeParams.mesocycleId,
           microcycleId: requestScopeParams.microcycleId,
+          cacheUserId: userId,
         });
         setModules(nextModules);
         setError(null);
@@ -835,7 +838,7 @@ export default function WorkoutsScreen() {
         setIsRefreshing(false);
       }
     },
-    [analyticsScopeKind, isContextBootstrapped, range, selectedContext, selectedRepBucketId],
+    [analyticsScopeKind, isContextBootstrapped, range, selectedContext, selectedRepBucketId, userId],
   );
 
   const loadHistoricalCatalog = useCallback(

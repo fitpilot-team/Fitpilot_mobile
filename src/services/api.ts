@@ -179,7 +179,7 @@ const createNetworkApiError = (error: AxiosError<ApiErrorPayload>): ApiError | n
   return apiError;
 };
 
-const isApiNetworkError = (error: ApiError | null | undefined) =>
+export const isApiNetworkError = (error: ApiError | null | undefined) =>
   Boolean(error?.code && API_NETWORK_ERROR_CODES.has(error.code));
 
 const extractApiErrorMessage = (error: AxiosError<ApiErrorPayload>) => {

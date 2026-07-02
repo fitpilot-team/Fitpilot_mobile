@@ -1,5 +1,7 @@
-import { nutritionClient } from './api';
+import { isApiNetworkError, nutritionClient } from './api';
+import { readPersistentCache, writePersistentCache } from './persistentCache';
 import type {
+  ApiError,
   Citation,
   ClientDietExchangeSystem,
   ClientDietFoodRow,
@@ -198,6 +200,15 @@ type RecipeGroupAccumulator = {
 };
 
 const DIET_LOOKAHEAD_DAYS = 7;
+const DIET_CALENDAR_CACHE_VERSION = 1;
+const DIET_CALENDAR_CACHE_PREFIX = 'fitpilot:cache:diet-calendar';
+
+const buildDietCalendarCacheKey = (clientId: number, weekStartDate: string) =>
+  [
+    DIET_CALENDAR_CACHE_PREFIX,
+    encodeURIComponent(String(clientId)),
+    encodeURIComponent(weekStartDate),
+  ].join(':');
 
 const toNumber = (value: number | string | null | undefined): number | null => {
   if (value === null || value === undefined || value === '') {
@@ -835,25 +846,11 @@ export const updateClientDailyPrimarySelection = async (
   );
 };
 
-export const getClientDietCalendar = async (
-  clientId: string,
-  date: string = getTodayDateKey(),
+const mapDailyMenusToClientDietCalendar = async (
+  dailyMenus: NutritionDailyBatchResponseItem[],
+  weekDateKeys: string[],
+  todayDate: string,
 ): Promise<ClientDietWeekDay[]> => {
-  const numericClientId = Number(clientId);
-
-  if (!Number.isInteger(numericClientId)) {
-    throw new Error('No se pudo resolver el cliente autenticado para cargar la dieta.');
-  }
-
-  const todayDate = getTodayDateKey();
-  const anchorDate = normalizeDateKey(date) || todayDate;
-  const weekStartDate = getStartOfLocalWeekDateKey(anchorDate) || todayDate;
-  const weekDateKeys = getLocalWeekDateKeys(anchorDate);
-  const dailyMenus = await nutritionClient.get<NutritionDailyBatchResponseItem[]>(
-    `/menus/daily/batch?client_id=${numericClientId}&date=${weekStartDate}&days=${DIET_LOOKAHEAD_DAYS}`,
-    { skipErrorLogging: true },
-  );
-
   const recipeSummaryMap = await buildRecipeSummaryMap(dailyMenus);
   const menusByDate = new Map<string, ClientDietMenu>();
 
@@ -885,6 +882,74 @@ export const getClientDietCalendar = async (
       menuOptions: assignedMenu ? [assignedMenu] : [],
     };
   });
+};
+
+const normalizeCachedDietCalendar = (days: unknown): ClientDietWeekDay[] | null => {
+  if (!Array.isArray(days)) {
+    return null;
+  }
+
+  const todayDate = getTodayDateKey();
+  const normalizedDays = days
+    .filter((day): day is ClientDietWeekDay =>
+      Boolean(
+        day &&
+        typeof day === 'object' &&
+        'assignedDate' in day &&
+        typeof day.assignedDate === 'string',
+      ),
+    )
+    .map((day) => ({
+      ...day,
+      isToday: day.assignedDate === todayDate,
+      rotationMenuOptions: Array.isArray(day.rotationMenuOptions)
+        ? day.rotationMenuOptions
+        : [],
+      menuOptions: Array.isArray(day.menuOptions) ? day.menuOptions : [],
+    }));
+
+  return normalizedDays.length > 0 ? normalizedDays : null;
+};
+
+export const getClientDietCalendar = async (
+  clientId: string,
+  date: string = getTodayDateKey(),
+): Promise<ClientDietWeekDay[]> => {
+  const numericClientId = Number(clientId);
+
+  if (!Number.isInteger(numericClientId)) {
+    throw new Error('No se pudo resolver el cliente autenticado para cargar la dieta.');
+  }
+
+  const todayDate = getTodayDateKey();
+  const anchorDate = normalizeDateKey(date) || todayDate;
+  const weekStartDate = getStartOfLocalWeekDateKey(anchorDate) || todayDate;
+  const weekDateKeys = getLocalWeekDateKeys(anchorDate);
+  const cacheKey = buildDietCalendarCacheKey(numericClientId, weekStartDate);
+
+  try {
+    const dailyMenus = await nutritionClient.get<NutritionDailyBatchResponseItem[]>(
+      `/menus/daily/batch?client_id=${numericClientId}&date=${weekStartDate}&days=${DIET_LOOKAHEAD_DAYS}`,
+      { skipErrorLogging: true },
+    );
+
+    const days = await mapDailyMenusToClientDietCalendar(dailyMenus, weekDateKeys, todayDate);
+    await writePersistentCache(cacheKey, DIET_CALENDAR_CACHE_VERSION, days);
+
+    return days;
+  } catch (error) {
+    if (isApiNetworkError(error as ApiError)) {
+      const cachedDays = normalizeCachedDietCalendar(
+        await readPersistentCache<unknown>(cacheKey, DIET_CALENDAR_CACHE_VERSION),
+      );
+
+      if (cachedDays) {
+        return cachedDays;
+      }
+    }
+
+    throw error;
+  }
 };
 
 const getRotationMenuPoolCandidates = (
