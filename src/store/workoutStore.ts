@@ -94,11 +94,11 @@ const isClosedWorkoutEditError = (error: { status?: number; message?: string } |
   typeof error.message === 'string' &&
   CLOSED_WORKOUT_ERROR_MARKERS.some((marker) => error.message!.toLowerCase().includes(marker));
 
-// Distingue "la ruta no existe en este backend" (404 generico de FastAPI,
+// Distingue "la ruta no existe en este backend" (404 genérico de FastAPI,
 // detail "Not Found") de "el recurso no existe" (404 con mensaje propio,
 // p. ej. workout log borrado). Solo el primero justifica degradar al endpoint
-// legacy: el fallback descarta duracion/calorias/distancia, y un 404 de
-// recurso lo fijaba como 'unsupported' para toda la sesion de la app.
+// legacy: el fallback descarta duración/calorías/distancia, y un 404 de
+// recurso lo fijaba como 'unsupported' para toda la sesión de la app.
 const isRouteMissingError = (error: { status?: number; message?: string } | null | undefined) =>
   error?.status === 404 &&
   typeof error.message === 'string' &&

@@ -48,6 +48,8 @@ interface GlucoseFormModalProps {
   visible: boolean;
   isSubmitting: boolean;
   initialRecord?: GlucoseRecord | null;
+  submissionError?: string | null;
+  onClearSubmissionError?: () => void;
   onClose: () => void;
   onSubmit: (payload: CreateOwnGlucosePayload) => Promise<void>;
 }
@@ -75,6 +77,8 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
   visible,
   isSubmitting,
   initialRecord = null,
+  submissionError = null,
+  onClearSubmissionError,
   onClose,
   onSubmit,
 }) => {
@@ -120,6 +124,7 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
   }, [formState]);
 
   const handleChangeField = (field: keyof GlucoseFormState, value: string) => {
+    onClearSubmissionError?.();
     setFormState((currentState) => ({
       ...currentState,
       [field]: value,
@@ -127,6 +132,8 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
   };
 
   const handleSubmit = async () => {
+    onClearSubmissionError?.();
+
     if (!isValidMeasurementDateInput(formState.date.trim())) {
       Alert.alert('Fecha inválida', 'Captura la fecha en formato YYYY-MM-DD.');
       return;
@@ -273,6 +280,9 @@ export const GlucoseFormModal: React.FC<GlucoseFormModalProps> = ({
           </ScrollView>
 
           <View style={styles.footer}>
+            {submissionError ? (
+              <Text style={styles.submissionError}>{submissionError}</Text>
+            ) : null}
             <Button title="Cancelar" variant="secondary" onPress={onClose} />
             <Button
               title={initialRecord ? 'Guardar cambios' : 'Guardar glucosa'}
@@ -406,6 +416,7 @@ const createStyles = (theme: AppTheme) =>
     },
     footer: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: spacing.md,
       justifyContent: 'space-between',
       paddingHorizontal: spacing.lg,
@@ -413,5 +424,11 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.surface,
       borderTopWidth: 1,
       borderTopColor: theme.colors.border,
+    },
+    submissionError: {
+      width: '100%',
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.error,
     },
   });

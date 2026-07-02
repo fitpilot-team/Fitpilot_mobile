@@ -198,6 +198,12 @@ export default function MeasurementsScreen() {
     null,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [measurementSubmissionError, setMeasurementSubmissionError] = useState<
+    string | null
+  >(null);
+  const [glucoseSubmissionError, setGlucoseSubmissionError] = useState<
+    string | null
+  >(null);
   const [isCreateMenuVisible, setIsCreateMenuVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const {
@@ -315,6 +321,8 @@ export default function MeasurementsScreen() {
       setIsDetailLoading(false);
       setIsFormVisible(false);
       setEditingMeasurementId(null);
+      setMeasurementSubmissionError(null);
+      setGlucoseSubmissionError(null);
       setIsCreateMenuVisible(false);
       resetGlucoseUi();
       return;
@@ -454,6 +462,15 @@ export default function MeasurementsScreen() {
   const closeMeasurementForm = useCallback(() => {
     setIsFormVisible(false);
     setEditingMeasurementId(null);
+    setMeasurementSubmissionError(null);
+  }, []);
+
+  const clearMeasurementSubmissionError = useCallback(() => {
+    setMeasurementSubmissionError(null);
+  }, []);
+
+  const clearGlucoseSubmissionError = useCallback(() => {
+    setGlucoseSubmissionError(null);
   }, []);
 
   const isMeasurementEditable = useCallback(
@@ -539,7 +556,7 @@ export default function MeasurementsScreen() {
 
     if (!isMeasurementEditable(selectedMeasurement)) {
       hapticError();
-      toast.error(
+      Alert.alert(
         'Edición no disponible',
         'Solo puedes editar mediciones registradas por ti desde la app.',
       );
@@ -554,6 +571,7 @@ export default function MeasurementsScreen() {
   const handleSubmitMeasurement = useCallback(
     async (payload: CreateOwnMeasurementPayload) => {
       setIsSubmitting(true);
+      setMeasurementSubmissionError(null);
 
       try {
         const savedMeasurement = editingMeasurementId
@@ -577,7 +595,9 @@ export default function MeasurementsScreen() {
       } catch (saveError) {
         const apiError = saveError as ApiError;
         hapticError();
-        toast.error(apiError.message || 'No fue posible guardar la medición.');
+        setMeasurementSubmissionError(
+          apiError.message || 'No fue posible guardar la medición.',
+        );
       } finally {
         setIsSubmitting(false);
       }
@@ -630,6 +650,8 @@ export default function MeasurementsScreen() {
 
   const handleSubmitGlucose = useCallback(
     async (payload: Parameters<typeof submitGlucoseRecord>[0]) => {
+      setGlucoseSubmissionError(null);
+
       try {
         const result = await submitGlucoseRecord(payload);
 
@@ -643,11 +665,18 @@ export default function MeasurementsScreen() {
       } catch (saveError) {
         const apiError = saveError as ApiError;
         hapticError();
-        toast.error(apiError.message || 'No fue posible guardar la glucosa.');
+        setGlucoseSubmissionError(
+          apiError.message || 'No fue posible guardar la glucosa.',
+        );
       }
     },
     [submitGlucoseRecord],
   );
+
+  const handleCloseGlucoseForm = useCallback(() => {
+    setGlucoseSubmissionError(null);
+    closeGlucoseForm();
+  }, [closeGlucoseForm]);
 
   const confirmDeleteGlucose = useCallback(async () => {
     try {
@@ -660,7 +689,10 @@ export default function MeasurementsScreen() {
     } catch (deleteError) {
       const apiError = deleteError as ApiError;
       hapticError();
-      toast.error(apiError.message || 'No fue posible eliminar la lectura.');
+      Alert.alert(
+        'No se pudo eliminar',
+        apiError.message || 'No fue posible eliminar la lectura.',
+      );
     }
   }, [deleteSelectedGlucoseRecord]);
 
@@ -671,7 +703,7 @@ export default function MeasurementsScreen() {
 
     if (hasAdditionalHealthMetrics(selectedGlucoseRecord)) {
       hapticError();
-      toast.error(
+      Alert.alert(
         'Eliminación no disponible',
         'Este registro también incluye otras métricas clínicas y no puede eliminarse desde la app.',
       );
@@ -1602,6 +1634,8 @@ export default function MeasurementsScreen() {
           isSubmitting={isSubmitting}
           initialMeasurement={editingMeasurement}
           defaultHeightCm={defaultHeightCm}
+          submissionError={measurementSubmissionError}
+          onClearSubmissionError={clearMeasurementSubmissionError}
           onClose={closeMeasurementForm}
           onSubmit={handleSubmitMeasurement}
         />
@@ -1620,7 +1654,9 @@ export default function MeasurementsScreen() {
           visible={isFocused && isGlucoseFormVisible}
           isSubmitting={isSubmittingGlucose}
           initialRecord={editingGlucoseRecord}
-          onClose={closeGlucoseForm}
+          submissionError={glucoseSubmissionError}
+          onClearSubmissionError={clearGlucoseSubmissionError}
+          onClose={handleCloseGlucoseForm}
           onSubmit={handleSubmitGlucose}
         />
       </SafeAreaView>

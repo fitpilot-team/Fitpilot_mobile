@@ -176,6 +176,7 @@ const createNetworkApiError = (error: AxiosError<ApiErrorPayload>): ApiError | n
   ) as ApiError;
 
   apiError.code = isOffline ? 'OFFLINE' : isTimeout ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR';
+  useConnectivityStore.getState().noteBackendUnreachable();
   return apiError;
 };
 
@@ -374,7 +375,10 @@ const attachAuthInterceptors = (instance: AxiosInstance, label: 'nutrition' | 't
   );
 
   instance.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      useConnectivityStore.getState().noteBackendReachable();
+      return response;
+    },
     async (error: AxiosError<ApiErrorPayload>) => {
       const config = error.config as InternalRequestConfig | undefined;
 

@@ -33,6 +33,10 @@ export const AppToast: React.FC = () => {
   const config = useToastStore((state) => state.config);
   const hide = useToastStore((state) => state.hide);
   const isOffline = useConnectivityStore((state) => state.isOffline);
+  const isBackendUnreachable = useConnectivityStore(
+    (state) => state.isBackendUnreachable,
+  );
+  const bannerHeight = useConnectivityStore((state) => state.bannerHeight);
 
   const translateY = useSharedValue(-120);
   const opacity = useSharedValue(0);
@@ -80,6 +84,11 @@ export const AppToast: React.FC = () => {
 
   if (!config) return null;
 
+  const bannerVisible = isOffline || isBackendUnreachable;
+  const bannerOffset = bannerVisible
+    ? (bannerHeight > 0 ? bannerHeight : OFFLINE_BANNER_HEIGHT) + spacing.sm
+    : 0;
+
   const iconColor =
     config.variant === 'success'
       ? theme.colors.success
@@ -92,10 +101,7 @@ export const AppToast: React.FC = () => {
       style={[
         styles.container,
         {
-          top:
-            insets.top +
-            spacing.md +
-            (isOffline ? OFFLINE_BANNER_HEIGHT + spacing.sm : 0),
+          top: insets.top + spacing.md + bannerOffset,
         },
         animatedStyle,
       ]}

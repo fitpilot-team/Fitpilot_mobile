@@ -17,7 +17,7 @@ export const WORKOUT_SET_TYPE_DEFINITIONS: Record<WorkoutSetType, WorkoutSetType
     value: 'straight',
     label: 'Serie normal',
     shortLabel: 'NORMAL',
-    description: 'Series estandar con descanso completo entre cada una.',
+    description: 'Series estándar con descanso completo entre cada una.',
     captureHint: 'Registra una sola fase por serie.',
     captureMode: 'single',
     minimumSegments: 1,

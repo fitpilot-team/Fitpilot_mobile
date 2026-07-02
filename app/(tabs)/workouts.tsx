@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Platform,
   RefreshControl,
   ScrollView,
   SectionList,
@@ -470,17 +471,21 @@ const EmptyStateCard = ({
 const ExerciseCard = ({
   exercise,
   selectedRepBucketLabel,
-  onPress,
+  onOpenDetail,
 }: {
   exercise: ExerciseTrendSummary;
   selectedRepBucketLabel?: string | null;
-  onPress: () => void;
+  onOpenDetail: (exerciseId: string) => void;
 }) => {
+  const handlePress = useCallback(() => {
+    onOpenDetail(exercise.exercise_id);
+  }, [exercise.exercise_id, onOpenDetail]);
+
   return (
     <ExerciseHighlightCard
       exercise={exercise}
       selectedRepBucketLabel={selectedRepBucketLabel}
-      onPress={onPress}
+      onPress={handlePress}
     />
   );
 
@@ -1632,6 +1637,9 @@ export default function WorkoutsScreen() {
           <FlatList
             data={overviewSections}
             keyExtractor={(item, index) => `${item.kind}-${index}`}
+            windowSize={7}
+            initialNumToRender={10}
+            removeClippedSubviews={Platform.OS === 'android'}
             style={styles.list}
             contentContainerStyle={[
               styles.listContent,
@@ -1738,7 +1746,7 @@ export default function WorkoutsScreen() {
                             key={exercise.exercise_id}
                             exercise={exercise}
                             selectedRepBucketLabel={selectedRepBucketLabel}
-                            onPress={() => openExerciseDetail(exercise.exercise_id)}
+                            onOpenDetail={openExerciseDetail}
                           />
                         ))}
                       </View>
@@ -1839,6 +1847,9 @@ export default function WorkoutsScreen() {
           <FlatList
             data={filteredExercises}
             keyExtractor={(item) => item.exercise_id}
+            windowSize={7}
+            initialNumToRender={10}
+            removeClippedSubviews={Platform.OS === 'android'}
             style={styles.list}
             contentContainerStyle={[
               styles.listContent,
@@ -1883,7 +1894,7 @@ export default function WorkoutsScreen() {
                 <ExerciseCard
                   exercise={item}
                   selectedRepBucketLabel={selectedRepBucketLabel}
-                  onPress={() => openExerciseDetail(item.exercise_id)}
+                  onOpenDetail={openExerciseDetail}
                 />
               </View>
             )}
@@ -1928,6 +1939,9 @@ export default function WorkoutsScreen() {
           <SectionList
             sections={historySections}
             keyExtractor={(item) => item.workout_log_id}
+            windowSize={7}
+            initialNumToRender={10}
+            removeClippedSubviews={Platform.OS === 'android'}
             style={styles.list}
             contentContainerStyle={[
               styles.listContent,

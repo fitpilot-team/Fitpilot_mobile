@@ -798,6 +798,17 @@ export default function DietScreen() {
     [],
   );
 
+  const handleVisibleMenuStandaloneFoodPress = useCallback(
+    (food: ClientDietFoodRow) => {
+      if (!visibleMenu) {
+        return;
+      }
+
+      handleOpenStandaloneFoodSwap(visibleMenu, food);
+    },
+    [handleOpenStandaloneFoodSwap, visibleMenu],
+  );
+
   const handleCloseSwapModal = useCallback(() => {
     if (isSavingSwap) {
       return;
@@ -1009,15 +1020,15 @@ export default function DietScreen() {
                   onPress={() => router.push('/diet/weekly-plan')}
                   activeOpacity={0.85}
                   accessibilityRole="button"
-                  accessibilityLabel="Plan semanal y lista del super"
+                  accessibilityLabel="Plan semanal y lista del súper"
                 >
                   <View style={styles.weeklyPlanCtaIcon}>
                     <Ionicons name="list-outline" size={20} color={nutritionTheme.accentStrong} />
                   </View>
                   <View style={styles.weeklyPlanCtaCopy}>
-                    <Text style={styles.weeklyPlanCtaTitle}>Plan semanal y lista del super</Text>
+                    <Text style={styles.weeklyPlanCtaTitle}>Plan semanal y lista del súper</Text>
                     <Text style={styles.weeklyPlanCtaSubtitle} numberOfLines={2}>
-                      Elige los menus de la semana y genera tu lista de compras.
+                      Elige los menús de la semana y genera tu lista de compras.
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={theme.colors.iconMuted} />
@@ -1113,7 +1124,7 @@ export default function DietScreen() {
                             }
                             onStandaloneFoodPress={
                               !isPreviewingMenu && visibleMenu
-                                ? (food) => handleOpenStandaloneFoodSwap(visibleMenu, food)
+                                ? handleVisibleMenuStandaloneFoodPress
                                 : undefined
                             }
                           />

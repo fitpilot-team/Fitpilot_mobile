@@ -1,11 +1,12 @@
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect } from 'react';
+import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, fontSize, spacing } from '../../constants/colors';
 import { useConnectivityStore } from '../../store/connectivityStore';
 import { useAppTheme, useThemedStyles } from '../../theme';
 
+// Fallback height used only until the banner reports its measured height.
 export const OFFLINE_BANNER_HEIGHT = 64;
 
 export const OfflineBanner: React.FC = () => {
@@ -14,10 +15,41 @@ export const OfflineBanner: React.FC = () => {
   const insets = useSafeAreaInsets();
   const isInitialized = useConnectivityStore((state) => state.isInitialized);
   const isOffline = useConnectivityStore((state) => state.isOffline);
+  const isBackendUnreachable = useConnectivityStore(
+    (state) => state.isBackendUnreachable,
+  );
+  const setBannerHeight = useConnectivityStore((state) => state.setBannerHeight);
 
-  if (!isInitialized || !isOffline) {
+  const showOffline = isInitialized && isOffline;
+  const isVisible = showOffline || isBackendUnreachable;
+
+  useEffect(() => {
+    if (!isVisible) {
+      setBannerHeight(0);
+    }
+    return () => {
+      setBannerHeight(0);
+    };
+  }, [isVisible, setBannerHeight]);
+
+  const handleBannerLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const height = event.nativeEvent.layout.height;
+      if (Math.abs(height - useConnectivityStore.getState().bannerHeight) > 1) {
+        setBannerHeight(height);
+      }
+    },
+    [setBannerHeight],
+  );
+
+  if (!isVisible) {
     return null;
   }
+
+  const title = showOffline ? 'Sin conexión' : 'Sin conexión con el servidor';
+  const subtitle = showOffline
+    ? 'Puedes revisar datos guardados; algunas acciones podrían fallar.'
+    : 'Mostrando datos guardados; algunas acciones podrían fallar.';
 
   return (
     <View
@@ -26,15 +58,13 @@ export const OfflineBanner: React.FC = () => {
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
     >
-      <View style={styles.banner}>
+      <View style={styles.banner} onLayout={handleBannerLayout}>
         <View style={styles.iconWrap}>
           <Ionicons name="cloud-offline-outline" size={20} color={theme.colors.warning} />
         </View>
         <View style={styles.copy}>
-          <Text style={styles.title}>Sin conexión</Text>
-          <Text style={styles.subtitle}>
-            Puedes revisar datos guardados; algunas acciones podrían fallar.
-          </Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
         </View>
       </View>
     </View>

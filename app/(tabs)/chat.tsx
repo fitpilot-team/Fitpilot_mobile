@@ -70,6 +70,7 @@ import type {
   ChatConversation,
   ChatDeliveryStatus,
   ChatMessage,
+  ChatMessageReply,
 } from '../../src/types/chat';
 import { hapticError, hapticImpactLight, hapticSuccess } from '../../src/utils/haptics';
 
@@ -94,6 +95,73 @@ type ProfessionalChatOption = {
 };
 
 const makeLocalId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+// Mensajes optimistas: estado local mientras el servidor confirma el envío.
+type LocalMessageStatus = 'sending' | 'failed';
+
+type LocalChatMessage = ChatMessage & {
+  localStatus?: LocalMessageStatus;
+};
+
+// Ids numéricos locales fuera del rango de ids reales del servidor para que
+// no choquen con mensajes existentes y queden al final al ordenar por id.
+const LOCAL_MESSAGE_ID_BASE = 9_000_000_000_000;
+let localMessageIdCounter = 0;
+const makeLocalMessageId = () => LOCAL_MESSAGE_ID_BASE + ++localMessageIdCounter;
+
+const toReplyPreviewMessage = (message: ChatMessage): ChatMessageReply => ({
+  id: message.id,
+  sender_id: message.sender_id,
+  external_sender_contact_id: message.external_sender_contact_id,
+  sender_type: message.sender_type,
+  body: message.body,
+  created_at: message.created_at,
+  is_deleted: message.is_deleted,
+  deleted_at: message.deleted_at,
+  attachment_count: message.attachments.length,
+  first_attachment_type: message.attachments[0]?.type ?? null,
+});
+
+const matchesPendingMessage = (
+  item: LocalChatMessage,
+  serverMessage: ChatMessage,
+  localMessageId?: number,
+) =>
+  Boolean(item.localStatus) &&
+  ((localMessageId != null && item.id === localMessageId) ||
+    Boolean(
+      serverMessage.client_message_id &&
+        item.client_message_id === serverMessage.client_message_id,
+    ));
+
+// El backend incluye client_message_id tanto en la respuesta HTTP como en el
+// evento 'message:new' del socket; el eco del socket puede llegar antes que
+// la respuesta HTTP, así que ambos caminos reemplazan al pendiente sin duplicar.
+const mergeServerMessage = (
+  currentMessages: LocalChatMessage[],
+  serverMessage: ChatMessage,
+  localMessageId?: number,
+): LocalChatMessage[] => {
+  if (currentMessages.some((item) => item.id === serverMessage.id)) {
+    const withoutPending = currentMessages.filter(
+      (item) => !matchesPendingMessage(item, serverMessage, localMessageId),
+    );
+    return withoutPending.length === currentMessages.length
+      ? currentMessages
+      : withoutPending;
+  }
+
+  const pendingIndex = currentMessages.findIndex((item) =>
+    matchesPendingMessage(item, serverMessage, localMessageId),
+  );
+  if (pendingIndex >= 0) {
+    const nextMessages = [...currentMessages];
+    nextMessages[pendingIndex] = serverMessage;
+    return nextMessages;
+  }
+
+  return [...currentMessages, serverMessage];
+};
 
 const buildDisplayName = (user: ChatConversation['participant']) => {
   const name = [user.name, user.lastname].filter(Boolean).join(' ').trim();
@@ -400,26 +468,30 @@ const getReplyPreview = (
   return 'Adjunto';
 };
 
-const MessageBubble = ({
+const MessageBubble = React.memo(function MessageBubble({
   message,
   isMine,
   senderLabel,
   onReply,
   onDelete,
+  onRetry,
   onReferencePress,
   onPreviewAttachment,
   onDownloadAttachment,
 }: {
-  message: ChatMessage;
+  message: LocalChatMessage;
   isMine: boolean;
   senderLabel: (senderId: number | null) => string;
   onReply: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
+  onRetry: (message: LocalChatMessage) => void;
   onReferencePress: (messageId: number) => void;
   onPreviewAttachment: (attachment: ChatAttachment) => void;
   onDownloadAttachment: (attachment: ChatAttachment) => void;
-}) => {
+}) {
   const styles = useThemedStyles(createStyles);
+  const isPendingSend = message.localStatus === 'sending';
+  const isFailedSend = message.localStatus === 'failed';
   const showActions = () => {
     const buttons = [
       {
@@ -444,10 +516,18 @@ const MessageBubble = ({
   return (
     <TouchableOpacity
       activeOpacity={0.88}
-      onLongPress={showActions}
+      onLongPress={message.localStatus ? undefined : showActions}
+      onPress={isFailedSend ? () => onRetry(message) : undefined}
       style={[styles.messageRow, isMine ? styles.messageRowMine : null]}
     >
-      <View style={[styles.messageBubble, isMine ? styles.messageBubbleMine : null]}>
+      <View
+        style={[
+          styles.messageBubble,
+          isMine ? styles.messageBubbleMine : null,
+          isPendingSend ? styles.messageBubbleSending : null,
+          isFailedSend ? styles.messageBubbleFailed : null,
+        ]}
+      >
         {message.reply_to ? (
           <TouchableOpacity
             activeOpacity={0.78}
@@ -483,7 +563,13 @@ const MessageBubble = ({
             Mensaje eliminado
           </Text>
         ) : message.body ? (
-          <Text style={[styles.messageBody, isMine ? styles.messageBodyMine : null]}>
+          <Text
+            style={[
+              styles.messageBody,
+              isMine ? styles.messageBodyMine : null,
+              isFailedSend ? styles.messageBodyFailed : null,
+            ]}
+          >
             {message.body}
           </Text>
         ) : null}
@@ -500,32 +586,66 @@ const MessageBubble = ({
           </View>
         ) : null}
         <View style={[styles.messageMeta, isMine ? styles.messageMetaMine : null]}>
-          <Text style={[styles.messageTime, isMine ? styles.messageTimeMine : null]}>
+          <Text
+            style={[
+              styles.messageTime,
+              isMine ? styles.messageTimeMine : null,
+              isFailedSend ? styles.messageTimeFailed : null,
+            ]}
+          >
             {formatMessageTime(message.created_at)}
           </Text>
           {isMine ? (
             <View
-              accessibilityLabel={getDeliveryReceiptLabel(message.delivery_status)}
+              accessibilityLabel={
+                isFailedSend
+                  ? 'No se envió'
+                  : isPendingSend
+                    ? 'Enviando'
+                    : getDeliveryReceiptLabel(message.delivery_status)
+              }
               accessibilityRole="image"
               accessible
               style={styles.messageReceipt}
             >
               <Ionicons
-                name={message.delivery_status === 'SENT' ? 'checkmark' : 'checkmark-done'}
+                name={
+                  isFailedSend
+                    ? 'alert-circle'
+                    : isPendingSend
+                      ? 'time-outline'
+                      : message.delivery_status === 'SENT'
+                        ? 'checkmark'
+                        : 'checkmark-done'
+                }
                 size={15}
                 color={
-                  message.delivery_status === 'READ'
-                    ? '#087f7a'
-                    : 'rgba(8,17,31,0.52)'
+                  isFailedSend
+                    ? '#fca5a5'
+                    : message.delivery_status === 'READ'
+                      ? '#087f7a'
+                      : 'rgba(8,17,31,0.52)'
                 }
               />
             </View>
           ) : null}
         </View>
+        {isFailedSend ? (
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => onRetry(message)}
+            style={styles.messageRetryButton}
+            accessibilityRole="button"
+            accessibilityLabel="Reintentar envío"
+          >
+            <Ionicons name="refresh" size={13} color="#fca5a5" />
+            <Text style={styles.messageRetryText}>No se envió · Reintentar</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
-};
+});
 
 const ConversationAvatar = ({
   conversation,
@@ -579,7 +699,7 @@ export default function ChatScreen() {
       return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     },
   );
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
   const [pendingFiles, setPendingFiles] = useState<PendingChatFile[]>([]);
@@ -949,9 +1069,106 @@ export default function ChatScreen() {
     [activeConversationId, currentUserId, loadConversations],
   );
 
+  const deliverPendingTextMessage = useCallback(
+    async (
+      conversationId: number,
+      localMessageId: number,
+      payload: { body: string; clientMessageId: string; replyToMessageId?: number },
+    ) => {
+      try {
+        const message = await sendChatMessage(conversationId, {
+          body: payload.body,
+          clientMessageId: payload.clientMessageId,
+          replyToMessageId: payload.replyToMessageId,
+        });
+        setMessages((currentMessages) =>
+          mergeServerMessage(currentMessages, message, localMessageId),
+        );
+        await Promise.allSettled([
+          markChatConversationRead(conversationId),
+          loadConversations(),
+        ]);
+      } catch {
+        hapticError();
+        toast.error('Mensaje no enviado', 'Intenta de nuevo en un momento.');
+        setMessages((currentMessages) =>
+          currentMessages.map((item) =>
+            item.id === localMessageId
+              ? { ...item, localStatus: 'failed' as const }
+              : item,
+          ),
+        );
+      }
+    },
+    [loadConversations],
+  );
+
+  const handleRetryMessage = useCallback(
+    (message: LocalChatMessage) => {
+      if (message.localStatus !== 'failed' || !message.client_message_id || !message.body) {
+        return;
+      }
+
+      setMessages((currentMessages) =>
+        currentMessages.map((item) =>
+          item.id === message.id
+            ? { ...item, localStatus: 'sending' as const }
+            : item,
+        ),
+      );
+      // Reutiliza el mismo client_message_id: el backend deduplica el reintento.
+      void deliverPendingTextMessage(message.conversation_id, message.id, {
+        body: message.body,
+        clientMessageId: message.client_message_id,
+        replyToMessageId: message.reply_to_message_id ?? undefined,
+      });
+    },
+    [deliverPendingTextMessage],
+  );
+
   const handleSend = useCallback(async () => {
     const body = draft.trim();
     if (!activeConversationId || (!body && pendingFiles.length === 0) || isSending) {
+      return;
+    }
+
+    if (pendingFiles.length === 0) {
+      // Envío optimista solo texto: la burbuja aparece de inmediato y el
+      // servidor confirma (o falla) en segundo plano sin bloquear el composer.
+      const clientMessageId = makeLocalId();
+      const replyTo = replyToMessage;
+      const pendingMessage: LocalChatMessage = {
+        id: makeLocalMessageId(),
+        conversation_id: activeConversationId,
+        sender_id: currentUserId,
+        external_sender_contact_id: null,
+        sender_type: 'USER',
+        channel: 'IN_APP',
+        reply_to_message_id: replyTo?.id ?? null,
+        reply_to: replyTo ? toReplyPreviewMessage(replyTo) : null,
+        body,
+        client_message_id: clientMessageId,
+        external_message_id: null,
+        external_status: null,
+        external_error: null,
+        created_at: new Date().toISOString(),
+        is_deleted: false,
+        deleted_at: null,
+        deleted_by_user_id: null,
+        delivery_status: null,
+        attachments: [],
+        localStatus: 'sending',
+      };
+
+      setMessages((currentMessages) => [...currentMessages, pendingMessage]);
+      setDraft('');
+      setReplyToMessage(null);
+      hapticImpactLight();
+      void deliverPendingTextMessage(activeConversationId, pendingMessage.id, {
+        body,
+        clientMessageId,
+        replyToMessageId: replyTo?.id,
+      });
       return;
     }
 
@@ -986,11 +1203,13 @@ export default function ChatScreen() {
     }
   }, [
     activeConversationId,
+    currentUserId,
+    deliverPendingTextMessage,
     draft,
     isSending,
     loadConversations,
     pendingFiles,
-    replyToMessage?.id,
+    replyToMessage,
   ]);
 
   const confirmScheduleProposal = useCallback(() => {
@@ -1167,13 +1386,10 @@ export default function ChatScreen() {
 
       socket.on('message:new', (message: ChatMessage) => {
         if (message.conversation_id === activeConversationId) {
-          setMessages((currentMessages) => {
-            if (currentMessages.some((item) => item.id === message.id)) {
-              return currentMessages;
-            }
-
-            return [...currentMessages, message];
-          });
+          // Puede ser el eco de un envío optimista propio (llega incluso antes
+          // que la respuesta HTTP): reemplaza al pendiente con el mismo
+          // client_message_id en lugar de duplicarlo.
+          setMessages((currentMessages) => mergeServerMessage(currentMessages, message));
           if (message.sender_id !== currentUserId) {
             void markChatConversationDelivered(message.conversation_id, message.id).catch(
               () => undefined,
@@ -1417,6 +1633,7 @@ export default function ChatScreen() {
                       senderLabel={getSenderLabel}
                       onReply={setReplyToMessage}
                       onDelete={handleDeleteMessage}
+                      onRetry={handleRetryMessage}
                       onReferencePress={scrollToMessage}
                       onPreviewAttachment={setPreviewAttachment}
                       onDownloadAttachment={handleDownloadAttachment}
@@ -1996,6 +2213,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       borderBottomRightRadius: borderRadius.sm,
       backgroundColor: theme.colors.primary,
     },
+    messageBubbleSending: {
+      opacity: 0.72,
+    },
+    messageBubbleFailed: {
+      borderColor: 'rgba(248,113,113,0.55)',
+      backgroundColor: 'rgba(127,29,29,0.3)',
+    },
     messageBody: {
       color: '#f8fafc',
       fontSize: 15,
@@ -2003,6 +2227,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     messageBodyMine: {
       color: '#08111f',
+    },
+    messageBodyFailed: {
+      color: '#fecaca',
     },
     messageDeleted: {
       color: '#94a3b8',
@@ -2059,11 +2286,26 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     messageTimeMine: {
       color: 'rgba(8,17,31,0.6)',
     },
+    messageTimeFailed: {
+      color: 'rgba(254,202,202,0.78)',
+    },
     messageReceipt: {
       width: 17,
       height: 17,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    messageRetryButton: {
+      alignSelf: 'flex-end',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 2,
+    },
+    messageRetryText: {
+      color: '#fca5a5',
+      fontSize: 11,
+      fontWeight: '800',
     },
     attachmentList: {
       gap: spacing.xs,

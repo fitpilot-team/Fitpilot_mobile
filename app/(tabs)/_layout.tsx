@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { InteractionManager, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { type BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { router, Tabs } from 'expo-router';
+import { Tabs } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -21,6 +21,10 @@ import { isTabletLayout } from '../../src/utils/layout';
 import { ProtectedRoute } from '../../src/components/common';
 import { useAuthStore } from '../../src/store/authStore';
 import { registerDevicePushTokenForUser } from '../../src/services/notifications';
+import {
+  consumeInitialNotificationResponse,
+  handleNotificationResponse,
+} from '../../src/utils/notificationNavigation';
 
 const TABLET_EXPANDED_WIDTH = 152;
 const TABLET_COLLAPSED_WIDTH = 84;
@@ -428,17 +432,11 @@ export default function TabLayout() {
   }, [user?.id]);
 
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data ?? {};
-      const conversationId = data.conversation_id;
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      handleNotificationResponse,
+    );
 
-      if (data.type === 'chat' && conversationId) {
-        router.push({
-          pathname: '/(tabs)/chat',
-          params: { conversationId: String(conversationId) },
-        });
-      }
-    });
+    void consumeInitialNotificationResponse();
 
     return () => {
       subscription.remove();

@@ -27,6 +27,38 @@ const knownMisspellings = [
   { pattern: /\bhistorico\b/i, suggestion: 'histórico' },
   { pattern: /\binvalida\b/i, suggestion: 'inválida' },
   { pattern: /\binvalido\b/i, suggestion: 'inválido' },
+  { pattern: /\bmedicion\b/i, suggestion: 'medición' },
+  { pattern: /\bgrabacion\b/i, suggestion: 'grabación' },
+  { pattern: /\bconversacion\b/i, suggestion: 'conversación' },
+  { pattern: /\bmicrofono\b/i, suggestion: 'micrófono' },
+  { pattern: /\bsesion\b/i, suggestion: 'sesión' },
+  { pattern: /\bconfiguracion\b/i, suggestion: 'configuración' },
+  { pattern: /\binformacion\b/i, suggestion: 'información' },
+  // Lookahead: se omiten líneas que ya incluyen la forma acentuada (p. ej.
+  // regex defensivas que aceptan ambas variantes de la API).
+  { pattern: /^(?!.*nutrición).*\bnutricion\b/i, suggestion: 'nutrición' },
+  { pattern: /\bcalorias\b/i, suggestion: 'calorías' },
+  { pattern: /\bduracion\b/i, suggestion: 'duración' },
+  { pattern: /\bdias\b/i, suggestion: 'días' },
+  { pattern: /\bproxima\b/i, suggestion: 'próxima' },
+  { pattern: /\bproximo\b/i, suggestion: 'próximo' },
+  { pattern: /\bminimo\b/i, suggestion: 'mínimo' },
+  { pattern: /\bminima\b/i, suggestion: 'mínima' },
+  { pattern: /\bcodigo\b/i, suggestion: 'código' },
+  { pattern: /\bestandar\b/i, suggestion: 'estándar' },
+  { pattern: /\btelefono\b/i, suggestion: 'teléfono' },
+  { pattern: /\bnumero\b/i, suggestion: 'número' },
+  { pattern: /\brapido\b/i, suggestion: 'rápido' },
+  { pattern: /\bfacil\b/i, suggestion: 'fácil' },
+  { pattern: /\bultimo\b/i, suggestion: 'último' },
+  { pattern: /\bultima\b/i, suggestion: 'última' },
+  { pattern: /\bmiercoles\b/i, suggestion: 'miércoles' },
+  { pattern: /\bsabado\b/i, suggestion: 'sábado' },
+  { pattern: /\bcontrasena\b/i, suggestion: 'contraseña' },
+  { pattern: /\bcontrasenas\b/i, suggestion: 'contraseñas' },
+  // Solo "del super" (sustantivo, supermercado); \bsuper\b chocaría con la
+  // palabra reservada `super` de JS y con textos en inglés.
+  { pattern: /\bdel super\b/i, suggestion: 'del súper' },
 ];
 
 const likelyUserFacingLinePattern = /['"`>]/;

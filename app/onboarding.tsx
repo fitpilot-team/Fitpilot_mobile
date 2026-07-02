@@ -29,6 +29,11 @@ import {
 } from '../src/components/onboarding';
 import { borderRadius, brandColors, fontSize, spacing } from '../src/constants/colors';
 import { onboardingService } from '../src/services/onboarding';
+import {
+  readPersistentCache,
+  removePersistentCache,
+  writePersistentCache,
+} from '../src/services/persistentCache';
 import { useAuthStore } from '../src/store/authStore';
 import { useAppTheme, useThemedStyles, type AppTheme } from '../src/theme';
 import {
@@ -98,6 +103,28 @@ const genreOptions: { value: OnboardingGenre; label: string }[] = [
   { value: 'female', label: 'Femenino' },
 ];
 
+type OnboardingDraft = {
+  activeStep: number;
+  selectedGoalId: number | null;
+  selectedAllergenIds: number[];
+  dateOfBirth: string;
+  genre: OnboardingGenre | null;
+  weightKg: string;
+  heightCm: string;
+  likes: string[];
+  dislikes: string[];
+  medicalConditions: string;
+  notes: string;
+  injuries: Injury[];
+};
+
+const ONBOARDING_DRAFT_VERSION = 1;
+
+// Prefijo distinto a 'fitpilot:cache:' a propósito: el draft debe sobrevivir
+// al logout para que el usuario continúe donde lo dejó al volver a entrar.
+const getOnboardingDraftKey = (userId: string | number) =>
+  `fitpilot:onboarding-draft:${userId}`;
+
 const formatDateLabel = (value: string, fallback: string) =>
   value ? formatLocalDate(value, { day: '2-digit', month: 'long', year: 'numeric' }) : fallback;
 
@@ -133,6 +160,7 @@ export default function OnboardingScreen() {
   const [newInjury, setNewInjury] = useState<NewInjuryState>(emptyInjury);
   const [datePickerTarget, setDatePickerTarget] = useState<DatePickerTarget>(null);
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
@@ -222,6 +250,103 @@ export default function OnboardingScreen() {
     };
   }, [isAuthenticated]);
 
+  const draftSnapshot = useMemo<OnboardingDraft>(
+    () => ({
+      activeStep,
+      selectedGoalId,
+      selectedAllergenIds,
+      dateOfBirth,
+      genre,
+      weightKg,
+      heightCm,
+      likes,
+      dislikes,
+      medicalConditions,
+      notes,
+      injuries,
+    }),
+    [
+      activeStep,
+      selectedGoalId,
+      selectedAllergenIds,
+      dateOfBirth,
+      genre,
+      weightKg,
+      heightCm,
+      likes,
+      dislikes,
+      medicalConditions,
+      notes,
+      injuries,
+    ],
+  );
+
+  useEffect(() => {
+    if (!user?.id || isLoadingOptions || isDraftHydrated) return;
+
+    // Sin opciones cargadas no podemos validar ids del draft; esperar al retry.
+    if (goals.length === 0 && allergens.length === 0) return;
+
+    let cancelled = false;
+
+    const hydrateDraft = async () => {
+      const draft = await readPersistentCache<OnboardingDraft>(
+        getOnboardingDraftKey(user.id),
+        ONBOARDING_DRAFT_VERSION,
+      );
+
+      if (cancelled) return;
+
+      if (draft) {
+        const goalIds = new Set(goals.map((goal) => goal.id));
+        const allergenIds = new Set(allergens.map((allergen) => allergen.id));
+
+        setSelectedGoalId(
+          draft.selectedGoalId !== null && goalIds.has(draft.selectedGoalId)
+            ? draft.selectedGoalId
+            : null,
+        );
+        setSelectedAllergenIds(
+          (draft.selectedAllergenIds ?? []).filter((id) => allergenIds.has(id)),
+        );
+        setDateOfBirth(draft.dateOfBirth ?? '');
+        setGenre(draft.genre ?? null);
+        setWeightKg(draft.weightKg ?? '');
+        setHeightCm(draft.heightCm ?? '');
+        setLikes(draft.likes ?? []);
+        setDislikes(draft.dislikes ?? []);
+        setMedicalConditions(draft.medicalConditions ?? '');
+        setNotes(draft.notes ?? '');
+        setInjuries(draft.injuries ?? []);
+        setActiveStep(
+          Math.min(Math.max(draft.activeStep ?? 0, 0), stepTitles.length - 1),
+        );
+      }
+
+      setIsDraftHydrated(true);
+    };
+
+    void hydrateDraft();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [allergens, goals, isDraftHydrated, isLoadingOptions, user?.id]);
+
+  useEffect(() => {
+    if (!isDraftHydrated || isSubmitting || !user?.id) return;
+
+    const timer = setTimeout(() => {
+      void writePersistentCache(
+        getOnboardingDraftKey(user.id),
+        ONBOARDING_DRAFT_VERSION,
+        draftSnapshot,
+      );
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [draftSnapshot, isDraftHydrated, isSubmitting, user?.id]);
+
   const canContinue = (() => {
     if (activeStep === 0) return Boolean(selectedGoal);
     if (activeStep === 2) return Boolean(dateOfBirth && genre);
@@ -298,13 +423,21 @@ export default function OnboardingScreen() {
   const handleExit = () => {
     Alert.alert(
       'Salir del onboarding',
-      'Si sales ahora, se perderá el progreso capturado en este formulario. Podrás iniciar sesión después para empezar de nuevo.',
+      'Tu progreso queda guardado en este dispositivo. Cuando vuelvas a iniciar sesión continuarás donde lo dejaste.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Salir',
           style: 'destructive',
           onPress: () => {
+            // Guardado inmediato: el debounce de 800ms podría no haber corrido.
+            if (user?.id) {
+              void writePersistentCache(
+                getOnboardingDraftKey(user.id),
+                ONBOARDING_DRAFT_VERSION,
+                draftSnapshot,
+              );
+            }
             void logout();
             router.replace('/login');
           },
@@ -405,6 +538,7 @@ export default function OnboardingScreen() {
       setIsSubmitting(true);
       setStepError(null);
       await onboardingService.submitOnboarding(payload);
+      void removePersistentCache(getOnboardingDraftKey(userId));
       const refreshedUser = await refreshUser();
 
       if (refreshedUser?.onboardingStatus !== 'completed') {

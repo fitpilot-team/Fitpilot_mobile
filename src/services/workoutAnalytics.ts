@@ -1,5 +1,6 @@
 import { isApiNetworkError, trainingClient } from './api';
 import { readPersistentCache, writePersistentCache } from './persistentCache';
+import { useAuthStore } from '../store/authStore';
 import type {
   ApiError,
   DayTypeScopeKind,
@@ -106,7 +107,7 @@ export const getWorkoutAnalyticsModules = async ({
       },
     });
 
-    if (cacheKey) {
+    if (cacheKey && useAuthStore.getState().isAuthenticated) {
       await writePersistentCache(cacheKey, WORKOUT_MODULES_CACHE_VERSION, modules);
     }
 

@@ -57,6 +57,8 @@ interface MeasurementFormModalProps {
   isSubmitting: boolean;
   initialMeasurement?: MeasurementHistoryItem | null;
   defaultHeightCm?: string | null;
+  submissionError?: string | null;
+  onClearSubmissionError?: () => void;
   onClose: () => void;
   onSubmit: (payload: CreateOwnMeasurementPayload) => Promise<void>;
 }
@@ -171,6 +173,8 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   isSubmitting,
   initialMeasurement,
   defaultHeightCm,
+  submissionError = null,
+  onClearSubmissionError,
   onClose,
   onSubmit,
 }) => {
@@ -216,6 +220,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   ]);
 
   const handleChangeField = (fieldKey: keyof MeasurementFormState, value: string) => {
+    onClearSubmissionError?.();
     setFormState((currentState) => ({
       ...currentState,
       [fieldKey]: value,
@@ -262,6 +267,8 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   }, [formState, measurementPreference]);
 
   const handleSubmit = async () => {
+    onClearSubmissionError?.();
+
     const nextErrors: MeasurementFormErrors = {};
 
     if (!isValidMeasurementDateInput(formState.date.trim())) {
@@ -530,6 +537,9 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
           </ScrollView>
 
           <View style={styles.footer}>
+            {submissionError ? (
+              <Text style={styles.submissionError}>{submissionError}</Text>
+            ) : null}
             {errors.form ? <Text style={styles.formWarning}>{errors.form}</Text> : null}
             <Button title="Cancelar" variant="secondary" onPress={onClose} />
             <Button
@@ -766,5 +776,11 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       lineHeight: 20,
       color: theme.colors.warning,
+    },
+    submissionError: {
+      width: '100%',
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.error,
     },
   });

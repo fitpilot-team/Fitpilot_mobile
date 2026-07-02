@@ -1,5 +1,7 @@
 import { isApiNetworkError, nutritionClient } from './api';
 import { readPersistentCache, writePersistentCache } from './persistentCache';
+import { useAuthStore } from '../store/authStore';
+import { useConnectivityStore } from '../store/connectivityStore';
 import type {
   ApiError,
   Citation,
@@ -934,7 +936,9 @@ export const getClientDietCalendar = async (
     );
 
     const days = await mapDailyMenusToClientDietCalendar(dailyMenus, weekDateKeys, todayDate);
-    await writePersistentCache(cacheKey, DIET_CALENDAR_CACHE_VERSION, days);
+    if (useAuthStore.getState().isAuthenticated) {
+      await writePersistentCache(cacheKey, DIET_CALENDAR_CACHE_VERSION, days);
+    }
 
     return days;
   } catch (error) {
@@ -987,7 +991,12 @@ const loadClientDietRotationMenuPool = async (
       if (poolMenus.length > 0) {
         return poolMenus;
       }
-    } catch {
+    } catch (error) {
+      if (isApiNetworkError(error as ApiError)) {
+        // The backend is unreachable, so the remaining candidates would only
+        // burn full request timeouts before failing the same way.
+        break;
+      }
       // Fall back to the next candidate date and keep the week usable without rotation.
     }
   }
@@ -1005,12 +1014,14 @@ export const getClientEffectiveDietWeek = async (
   const preferredSelectedDate =
     normalizeDateKey(options?.selectedDate) || resolvedAnchorDate;
   const baseDays = await getClientDietCalendar(clientId, resolvedAnchorDate);
-  const rotationMenus = await loadClientDietRotationMenuPool(
-    clientId,
-    resolvedAnchorDate,
-    preferredSelectedDate,
-    baseDays,
-  );
+  const rotationMenus = useConnectivityStore.getState().isOffline
+    ? ([] as ClientDietMenu[])
+    : await loadClientDietRotationMenuPool(
+        clientId,
+        resolvedAnchorDate,
+        preferredSelectedDate,
+        baseDays,
+      );
 
   return applyDietRotationMenuOptions(baseDays, rotationMenus);
 };

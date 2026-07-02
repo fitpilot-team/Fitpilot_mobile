@@ -33,7 +33,7 @@ export const EXERCISE_DETAIL_METRIC_OPTIONS: {
   { value: 'best_reps', label: 'Mejor reps', unit: 'reps' },
   { value: 'effort', label: 'Esfuerzo', unit: 'RIR/RPE' },
   { value: 'duration', label: 'Duración', unit: 'min' },
-  { value: 'calories', label: 'Calorias', unit: 'cal' },
+  { value: 'calories', label: 'Calorías', unit: 'cal' },
   { value: 'distance', label: 'Distancia', unit: 'm' },
 ];
 
