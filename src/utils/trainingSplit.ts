@@ -43,6 +43,7 @@ export interface SplitDay {
   status: SplitDayStatus;
   workoutLogId: string | null;
   actionLabel: string;
+  locked: boolean;
   exercises: SplitExerciseRow[];
   exerciseCount: number;
   totalSets: number;
@@ -221,6 +222,7 @@ export const buildTrainingSplitView = (
   bootstrap: DashboardBootstrap | null | undefined,
   macrocycle: Macrocycle | null | undefined,
   todayDateKey: string,
+  actionableTrainingDayId: string | null = null,
 ): TrainingSplitView | null => {
   const microcycleId = bootstrap?.microcycle_progress?.microcycle_id ?? null;
   const microcycle = findMicrocycleById(macrocycle, microcycleId);
@@ -234,6 +236,14 @@ export const buildTrainingSplitView = (
   const days: SplitDay[] = sortTrainingDays(microcycle.training_days ?? []).map((trainingDay) => {
     const session = sessionByTrainingDayId.get(trainingDay.id);
     const status = getDayStatus(trainingDay, session);
+    const actionLabel = getDayActionLabel(status, session);
+    // Cola estricta: solo el frente de cola (actionableTrainingDayId) puede
+    // iniciarse en frío. Si el frente vive en un microciclo previo (no está en
+    // este split), todos los "Empezar" quedan bloqueados.
+    const locked =
+      actionLabel === 'Empezar' &&
+      actionableTrainingDayId != null &&
+      trainingDay.id !== actionableTrainingDayId;
     const exercises = trainingDay.rest_day
       ? []
       : sortExercises(trainingDay.exercises ?? []).map(buildExerciseRow);
@@ -254,7 +264,8 @@ export const buildTrainingSplitView = (
       isToday: trainingDay.date === todayDateKey,
       status,
       workoutLogId: session?.workout_log_id ?? null,
-      actionLabel: getDayActionLabel(status, session),
+      actionLabel,
+      locked,
       exercises,
       exerciseCount: exercises.length,
       totalSets,

@@ -155,9 +155,18 @@ export const SplitDayCard: React.FC<SplitDayCardProps> = ({
             title={day.actionLabel}
             onPress={onAction}
             isLoading={isBusy}
+            disabled={day.locked}
             variant={day.status === 'completed' ? 'secondary' : 'primary'}
             fullWidth
           />
+          {day.locked ? (
+            <View style={styles.lockedHint}>
+              <Ionicons name="lock-closed" size={13} color={theme.colors.textMuted} />
+              <Text style={styles.lockedHintText}>
+                Completa antes tus entrenamientos pendientes.
+              </Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -310,5 +319,16 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
       fontStyle: 'italic',
+    },
+    lockedHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    lockedHintText: {
+      flex: 1,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      fontWeight: '600',
     },
   });
