@@ -57,6 +57,7 @@ export default function HealthSetupScreen() {
   const [isSkipping, setIsSkipping] = useState(false);
   const [shareWithTrainer, setShareWithTrainer] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [permissionBlocked, setPermissionBlocked] = useState(false);
 
   const isAvailable = availability?.available ?? false;
   const isBusy = isConnecting || isSkipping;
@@ -84,8 +85,15 @@ export default function HealthSetupScreen() {
   const handleConnect = async () => {
     setIsConnecting(true);
     setError(null);
+    setPermissionBlocked(false);
     try {
-      await connectedHealthService.requestPermissions();
+      const status = await connectedHealthService.requestPermissions();
+      if (!status.granted.length) {
+        // Sin permisos otorgados no tiene sentido sincronizar ni marcar como
+        // completado: guiamos al usuario a concederlos en Health Connect.
+        setPermissionBlocked(true);
+        return;
+      }
       await connectedHealthService.sync(30);
       await connectedHealthService.setSharing(shareWithTrainer).catch(() => undefined);
       await connectedHealthService.setSetupStatus('completed');
@@ -194,6 +202,16 @@ export default function HealthSetupScreen() {
           </View>
         )}
 
+        {permissionBlocked ? (
+          <View style={styles.unavailableBox}>
+            <Ionicons name="alert-circle-outline" size={22} color={styles.unavailableIcon.color} />
+            <Text style={styles.unavailableText}>
+              No se activó ningún permiso. Abre {getPlatformLabel(availability?.platform)}, concede
+              los permisos de FitPilot y vuelve a intentar la conexión.
+            </Text>
+          </View>
+        ) : null}
+
         {error ? (
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>{error}</Text>
@@ -208,14 +226,34 @@ export default function HealthSetupScreen() {
         ]}
       >
         {isAvailable ? (
-          <Button
-            title="Conectar y activar"
-            onPress={handleConnect}
-            isLoading={isConnecting}
-            disabled={isBusy}
-            fullWidth
-            icon={<Ionicons name="link-outline" size={18} color="#ffffff" />}
-          />
+          <>
+            <Button
+              title="Conectar y activar"
+              onPress={handleConnect}
+              isLoading={isConnecting}
+              disabled={isBusy}
+              fullWidth
+              icon={<Ionicons name="link-outline" size={18} color="#ffffff" />}
+            />
+            {permissionBlocked ? (
+              <Button
+                title={Platform.OS === 'android' ? 'Abrir Health Connect' : 'Abrir ajustes'}
+                onPress={() => {
+                  void connectedHealthService.openSettings();
+                }}
+                variant="secondary"
+                disabled={isConnecting}
+                fullWidth
+                icon={
+                  <Ionicons
+                    name="settings-outline"
+                    size={18}
+                    color={styles.propIconGlyph.color}
+                  />
+                }
+              />
+            ) : null}
+          </>
         ) : (
           <Button
             title={Platform.OS === 'android' ? 'Abrir Health Connect' : 'Abrir ajustes'}
