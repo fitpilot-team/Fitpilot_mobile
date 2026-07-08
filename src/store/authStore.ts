@@ -10,6 +10,7 @@ import {
   setSessionTokens,
   setUnauthorizedHandler,
 } from '../services/api';
+import { clearFitpilotPersistentCaches } from '../services/persistentCache';
 import { useCareTeamStore } from './careTeamStore';
 import { useWorkoutStore } from './workoutStore';
 import type { ApiError, LoginCredentials, LoginResponse, LoginResult, User } from '../types';
@@ -72,6 +73,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
   const clearAuthenticatedState = async (error: string | null = null) => {
     await clearSessionTokens();
     await clearCachedUser();
+    await clearFitpilotPersistentCaches();
     useCareTeamStore.getState().reset();
     useWorkoutStore.getState().reset();
     set({

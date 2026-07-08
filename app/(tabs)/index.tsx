@@ -75,7 +75,7 @@ import { toast } from '../../src/store/toastStore';
 const stripExistingClientContextPrefix = (value: string) =>
   value
     .trim()
-    .replace(/^tu\s+(plan|promedio semanal|nutricion):\s*/i, '')
+    .replace(/^tu\s+(plan|promedio semanal|nutrición|nutricion):\s*/i, '')
     .replace(/^promedio semanal:\s*/i, '')
     .trim();
 
@@ -89,7 +89,7 @@ const getClientContextPrefix = (
 
   return /kcal|promedio/i.test(contextLabel)
     ? 'Tu promedio semanal'
-    : 'Tu nutricion';
+    : 'Tu nutrición';
 };
 
 const formatClientContextLabel = (
@@ -102,7 +102,7 @@ const formatClientContextLabel = (
     return null;
   }
 
-  if (/^tu\s+(plan|promedio semanal|nutricion):/i.test(trimmedContext)) {
+  if (/^tu\s+(plan|promedio semanal|nutrición|nutricion):/i.test(trimmedContext)) {
     return trimmedContext;
   }
 
@@ -145,24 +145,22 @@ export default function HomeScreen() {
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset();
   const isFocused = useIsFocused();
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
   const {
     summaries: careTeamSummaries,
     errors: careTeamErrors,
     isLoading: isLoadingCareTeam,
     refreshCareTeam,
   } = useCareTeam(user?.id ?? null);
-  const {
-    dashboardBootstrap,
-    dashboardDataVersion,
-    workoutLogsVersion,
-    isLoading,
-    isStartingWorkout,
-    error,
-    loadDashboardData,
-    startWorkout,
-    clearError,
-  } = useWorkoutStore();
+  const dashboardBootstrap = useWorkoutStore((state) => state.dashboardBootstrap);
+  const dashboardDataVersion = useWorkoutStore((state) => state.dashboardDataVersion);
+  const workoutLogsVersion = useWorkoutStore((state) => state.workoutLogsVersion);
+  const isLoading = useWorkoutStore((state) => state.isLoading);
+  const isStartingWorkout = useWorkoutStore((state) => state.isStartingWorkout);
+  const error = useWorkoutStore((state) => state.error);
+  const loadDashboardData = useWorkoutStore((state) => state.loadDashboardData);
+  const startWorkout = useWorkoutStore((state) => state.startWorkout);
+  const clearError = useWorkoutStore((state) => state.clearError);
 
   const [refreshing, setRefreshing] = useState(false);
   const [currentWeekDietCaloriesAverage, setCurrentWeekDietCaloriesAverage] = useState<number | null>(null);

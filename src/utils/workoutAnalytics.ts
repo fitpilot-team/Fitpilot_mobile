@@ -33,7 +33,7 @@ export const EXERCISE_DETAIL_METRIC_OPTIONS: {
   { value: 'best_reps', label: 'Mejor reps', unit: 'reps' },
   { value: 'effort', label: 'Esfuerzo', unit: 'RIR/RPE' },
   { value: 'duration', label: 'Duración', unit: 'min' },
-  { value: 'calories', label: 'Calorias', unit: 'cal' },
+  { value: 'calories', label: 'Calorías', unit: 'cal' },
   { value: 'distance', label: 'Distancia', unit: 'm' },
 ];
 
@@ -122,11 +122,11 @@ export const buildRepRangeDraftLabel = (draft: RepRangeDraft) => {
   const maxReps = draft.maxReps.trim() ? Number.parseInt(draft.maxReps, 10) : null;
 
   if (Number.isNaN(minReps) || minReps < 1) {
-    return 'Rango invalido';
+    return 'Rango inválido';
   }
 
   if (maxReps != null && (Number.isNaN(maxReps) || maxReps < minReps)) {
-    return 'Rango invalido';
+    return 'Rango inválido';
   }
 
   return buildRepRangeLabel(minReps, maxReps);

@@ -61,7 +61,7 @@ export default function LoginScreen() {
         return;
       }
 
-      router.replace('/(tabs)');
+      router.replace('/');
     }
   }, [isAuthenticated, user?.onboardingStatus]);
 
@@ -92,7 +92,7 @@ export default function LoginScreen() {
     if (result.status === 'success') {
       setPendingCredentials(null);
       setIsCaptchaVisible(false);
-      router.replace('/(tabs)');
+      router.replace('/');
       return;
     }
 

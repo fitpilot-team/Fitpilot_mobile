@@ -9,7 +9,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import { borderRadius, brandColors, fontSize, spacing } from '../../constants/colors';
+import { brandColors, fontSize, spacing } from '../../constants/colors';
 import type { AppTheme } from '../../theme';
 
 export const WHEEL_ITEM_HEIGHT = 44;

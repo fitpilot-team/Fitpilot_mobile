@@ -113,7 +113,7 @@ export const connectedHealthService = {
   sync: async (days = 30): Promise<ConnectedHealthSyncResponse> => {
     const availability = await FitpilotHealth.isAvailable();
     if (!availability.available) {
-      throw new Error(availability.message || 'Salud conectada no esta disponible en este dispositivo.');
+      throw new Error(availability.message || 'Salud conectada no está disponible en este dispositivo.');
     }
 
     const payload = await FitpilotHealth.syncRange(buildSyncRange(days));

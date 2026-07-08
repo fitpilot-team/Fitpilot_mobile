@@ -70,7 +70,7 @@ export const buildShoppingListHtml = (list: ShoppingList): string => {
   <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <title>Lista del super</title>
+    <title>Lista del súper</title>
     <style>
       * { box-sizing: border-box; }
       body {
@@ -151,9 +151,9 @@ export const buildShoppingListHtml = (list: ShoppingList): string => {
     </style>
   </head>
   <body>
-    <h1>Lista del super</h1>
+    <h1>Lista del súper</h1>
     <div class="range">${start} &mdash; ${end}</div>
-    ${sections || '<p>Tu lista no tiene items todavia.</p>'}
+    ${sections || '<p>Tu lista no tiene ítems todavía.</p>'}
   </body>
   </html>`;
 };
@@ -170,10 +170,10 @@ export const buildShoppingListPlainText = (list: ShoppingList): string => {
     .join('\n\n');
 
   return [
-    'Lista del super',
+    'Lista del súper',
     `${start} - ${end}`,
     '',
-    sections || 'Tu lista no tiene items todavia.',
+    sections || 'Tu lista no tiene ítems todavía.',
   ].join('\n');
 };
 
@@ -187,7 +187,7 @@ export const printShoppingList = async (list: ShoppingList): Promise<void> => {
   }
 
   await Share.share({
-    title: 'Lista del super',
+    title: 'Lista del súper',
     message: buildShoppingListPlainText(list),
   });
 };

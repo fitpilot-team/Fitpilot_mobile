@@ -48,6 +48,25 @@ const formatBaseServing = (food: ClientFoodSwapCandidate) => {
   return `${value} ${food.baseUnit || 'g'}`;
 };
 
+const formatPreviewNumber = (value: number | null) => {
+  if (value === null) {
+    return null;
+  }
+
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+};
+
+const formatPreviewKcal = (value: number | null) => {
+  if (value === null) {
+    return null;
+  }
+
+  return `${Math.round(value)} kcal`;
+};
+
+const isDuplicatePreviewMeasure = (label: string | null, measure: string | null) =>
+  Boolean(label && measure && label.trim().toLowerCase() === measure.trim().toLowerCase());
+
 export const RecipeIngredientSwapModal: React.FC<RecipeIngredientSwapModalProps> = ({
   visible,
   ingredient,
@@ -192,6 +211,17 @@ export const RecipeIngredientSwapModal: React.FC<RecipeIngredientSwapModalProps>
 
               {filteredFoods.map((food) => {
                 const isCurrent = food.id === ingredient?.foodId;
+                const swapPreview = food.swapPreview;
+                const hasApplicablePreview = Boolean(
+                  swapPreview?.basis !== 'unavailable' && swapPreview?.householdLabel,
+                );
+                const gramsValue = formatPreviewNumber(swapPreview?.grams ?? null);
+                const gramsMeasure = gramsValue ? `${gramsValue} g` : null;
+                const equivalentsValue = formatPreviewNumber(swapPreview?.equivalents ?? null);
+                const kcalMeasure = formatPreviewKcal(swapPreview?.caloriesKcal ?? null);
+                const showGramsChip =
+                  hasApplicablePreview &&
+                  !isDuplicatePreviewMeasure(swapPreview?.householdLabel ?? null, gramsMeasure);
 
                 return (
                   <TouchableOpacity
@@ -216,19 +246,40 @@ export const RecipeIngredientSwapModal: React.FC<RecipeIngredientSwapModalProps>
                     </View>
 
                     <View style={styles.metaRow}>
-                      <View style={styles.metaChip}>
-                        <Text style={styles.metaChipText}>{formatBaseServing(food)}</Text>
-                      </View>
-                      <View style={styles.metaChip}>
-                        <Text style={styles.metaChipText}>
-                          {food.caloriesKcal !== null
-                            ? `${Math.round(food.caloriesKcal)} kcal`
-                            : 'kcal ND'}
+                      <View style={[styles.metaChip, hasApplicablePreview ? styles.previewChip : null]}>
+                        <Text
+                          style={[
+                            styles.metaChipText,
+                            hasApplicablePreview ? styles.previewChipText : null,
+                          ]}
+                        >
+                          {hasApplicablePreview
+                            ? `Te tocaría: ${swapPreview?.householdLabel}`
+                            : 'Porción aplicable no disponible'}
                         </Text>
                       </View>
+                      {!hasApplicablePreview ? (
+                        <View style={styles.metaChip}>
+                          <Text style={styles.metaChipText}>{formatBaseServing(food)}</Text>
+                        </View>
+                      ) : null}
+                      {showGramsChip ? (
+                        <View style={styles.metaChip}>
+                          <Text style={styles.metaChipText}>{gramsMeasure}</Text>
+                        </View>
+                      ) : null}
+                      {hasApplicablePreview && equivalentsValue ? (
+                        <View style={styles.metaChip}>
+                          <Text style={styles.metaChipText}>{equivalentsValue} eq</Text>
+                        </View>
+                      ) : null}
                       <View style={styles.metaChip}>
                         <Text style={styles.metaChipText}>
-                          {food.servingUnitsCount} unidad{food.servingUnitsCount === 1 ? '' : 'es'}
+                          {hasApplicablePreview && kcalMeasure
+                            ? kcalMeasure
+                            : food.caloriesKcal !== null
+                              ? `${Math.round(food.caloriesKcal)} kcal base`
+                            : 'kcal ND'}
                         </Text>
                       </View>
                     </View>
@@ -460,6 +511,13 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.textSecondary,
       fontSize: fontSize.xs,
       fontWeight: '700',
+    },
+    previewChip: {
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.primarySoft,
+    },
+    previewChipText: {
+      color: theme.colors.primary,
     },
     footer: {
       marginTop: spacing.lg,

@@ -22,6 +22,9 @@ type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
 type ButtonAppearance = "default" | "profile";
 
+// El tamaño sm mide 36px; el hitSlop lleva el área táctil efectiva a 44px.
+const SM_HIT_SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
+
 interface ButtonProps {
   title: string;
   onPress: () => void;
@@ -125,6 +128,10 @@ export const Button: React.FC<ButtonProps> = ({
         onPress={onPress}
         disabled={isDisabled}
         activeOpacity={isProfileAppearance ? 0.9 : 0.8}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ disabled: isDisabled, busy: isLoading }}
+        hitSlop={size === "sm" ? SM_HIT_SLOP : undefined}
         style={[
           fullWidth ? styles.fullWidth : null,
           isDisabled ? styles.disabled : null,
@@ -167,6 +174,10 @@ export const Button: React.FC<ButtonProps> = ({
       onPress={onPress}
       disabled={isDisabled}
       activeOpacity={isProfileAppearance ? 0.9 : 0.7}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: isDisabled, busy: isLoading }}
+      hitSlop={size === "sm" ? SM_HIT_SLOP : undefined}
     >
       {content}
     </TouchableOpacity>

@@ -7,8 +7,9 @@ import { ThemeProvider } from '@react-navigation/native';
 import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
 import * as SplashScreen from 'expo-splash-screen';
 import { useAuthStore } from '../src/store/authStore';
-import { StartupBrandIntro } from '../src/components/common';
+import { AppToast, ErrorBoundary, OfflineBanner, StartupBrandIntro } from '../src/components/common';
 import { buildNavigationTheme, useAppTheme, useThemedStyles } from '../src/theme';
+import { useConnectivityMonitor } from '../src/hooks/useConnectivityMonitor';
 import { useSystemNavigationBarTheme } from '../src/hooks/useSystemNavigationBarTheme';
 
 // Configurar Reanimated logger para suprimir mensajes de strict mode
@@ -26,6 +27,7 @@ export default function RootLayout() {
   const [isNativeSplashHidden, setIsNativeSplashHidden] = useState(false);
   const isReady = isInitialized && isHydrated;
 
+  useConnectivityMonitor();
   useSystemNavigationBarTheme(theme, isReady && !showStartupIntro);
 
   useEffect(() => {
@@ -80,7 +82,8 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={navigationTheme}>
       <SafeAreaProvider>
-        <View style={styles.root}>
+        <ErrorBoundary>
+          <View style={styles.root}>
           <Stack
             screenOptions={{
               headerShown: false,
@@ -159,11 +162,14 @@ export default function RootLayout() {
               }}
             />
           </Stack>
-          {showStartupIntro ? (
-            <StartupBrandIntro onComplete={() => setShowStartupIntro(false)} />
-          ) : null}
-          <StatusBar style={showStartupIntro ? 'light' : theme.statusBarStyle} />
-        </View>
+            <OfflineBanner />
+            <AppToast />
+            {showStartupIntro ? (
+              <StartupBrandIntro onComplete={() => setShowStartupIntro(false)} />
+            ) : null}
+            <StatusBar style={showStartupIntro ? 'light' : theme.statusBarStyle} />
+          </View>
+        </ErrorBoundary>
       </SafeAreaProvider>
     </ThemeProvider>
   );

@@ -689,7 +689,7 @@ export const MeasurementDetailModal: React.FC<MeasurementDetailModalProps> = ({
 
               {unavailableCalculations.length > 0 ? (
                 <Card style={styles.sectionCard}>
-                  <Text style={styles.sectionTitle}>No pudimos estimar todavia</Text>
+                  <Text style={styles.sectionTitle}>No pudimos estimar todavía</Text>
                   <Text style={styles.sectionDescription}>
                     Agrega estas medidas en futuras mediciones para completar más indicadores.
                   </Text>

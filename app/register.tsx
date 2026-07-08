@@ -118,7 +118,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    router.replace(user?.onboardingStatus === 'completed' ? '/(tabs)' : '/onboarding');
+    router.replace(user?.onboardingStatus === 'completed' ? '/' : '/onboarding');
   }, [isAuthenticated, user?.onboardingStatus]);
 
   useEffect(() => {
@@ -452,7 +452,7 @@ export default function RegisterScreen() {
               secureTextEntry
               autoComplete="new-password"
               icon="lock-closed-outline"
-              error={password && !isPasswordValid ? 'Minimo 8 caracteres.' : undefined}
+              error={password && !isPasswordValid ? 'Mínimo 8 caracteres.' : undefined}
               compact
             />
 
@@ -469,7 +469,7 @@ export default function RegisterScreen() {
               icon="lock-closed-outline"
               error={
                 confirmPassword && !doPasswordsMatch
-                  ? 'Las contrasenas no coinciden.'
+                  ? 'Las contraseñas no coinciden.'
                   : undefined
               }
               compact
@@ -538,8 +538,8 @@ export default function RegisterScreen() {
             >
               <Text style={styles.secondaryActionText}>
                 {resendCountdown > 0
-                  ? `Reenviar codigo en ${resendCountdown}s`
-                  : 'Reenviar codigo'}
+                  ? `Reenviar código en ${resendCountdown}s`
+                  : 'Reenviar código'}
               </Text>
             </Pressable>
 

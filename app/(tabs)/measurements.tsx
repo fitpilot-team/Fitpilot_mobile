@@ -17,10 +17,13 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   Button,
   Card,
+  ChartSkeleton,
   FloatingButton,
   LoadingSpinner,
+  ListItemSkeleton,
   ProfileShortcutButton,
   SegmentedControl,
+  StatCardSkeleton,
   TabScreenWrapper,
 } from '../../src/components/common';
 import {
@@ -60,6 +63,7 @@ import {
   updateMyMeasurement,
 } from '../../src/services/measurements';
 import { useAuthStore } from '../../src/store/authStore';
+import { toast } from '../../src/store/toastStore';
 import {
   MEASUREMENT_PREFERENCE_LABELS,
   useMeasurementPreferenceStore,
@@ -76,6 +80,7 @@ import {
   formatGlucoseRecordedAt,
   hasAdditionalHealthMetrics,
 } from '../../src/utils/healthMetrics';
+import { hapticError, hapticSuccess } from '../../src/utils/haptics';
 import { getPrimaryScreenHorizontalPadding } from '../../src/utils/layout';
 import { convertMeasurementUnitValue } from '../../src/utils/measurementUnits';
 import {
@@ -108,7 +113,7 @@ const CREATE_ACTIONS = [
   {
     key: 'glucose',
     title: 'Glucosa',
-    description: 'Lectura con fecha, hora y contexto clinico.',
+    description: 'Lectura con fecha, hora y contexto clínico.',
     icon: 'water-outline',
   },
 ] satisfies {
@@ -193,6 +198,12 @@ export default function MeasurementsScreen() {
     null,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [measurementSubmissionError, setMeasurementSubmissionError] = useState<
+    string | null
+  >(null);
+  const [glucoseSubmissionError, setGlucoseSubmissionError] = useState<
+    string | null
+  >(null);
   const [isCreateMenuVisible, setIsCreateMenuVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const {
@@ -310,6 +321,8 @@ export default function MeasurementsScreen() {
       setIsDetailLoading(false);
       setIsFormVisible(false);
       setEditingMeasurementId(null);
+      setMeasurementSubmissionError(null);
+      setGlucoseSubmissionError(null);
       setIsCreateMenuVisible(false);
       resetGlucoseUi();
       return;
@@ -449,6 +462,15 @@ export default function MeasurementsScreen() {
   const closeMeasurementForm = useCallback(() => {
     setIsFormVisible(false);
     setEditingMeasurementId(null);
+    setMeasurementSubmissionError(null);
+  }, []);
+
+  const clearMeasurementSubmissionError = useCallback(() => {
+    setMeasurementSubmissionError(null);
+  }, []);
+
+  const clearGlucoseSubmissionError = useCallback(() => {
+    setGlucoseSubmissionError(null);
   }, []);
 
   const isMeasurementEditable = useCallback(
@@ -518,7 +540,8 @@ export default function MeasurementsScreen() {
       } catch (detailError) {
         const apiError = detailError as ApiError;
         closeMeasurementDetail();
-        Alert.alert('Error', apiError.message || 'No fue posible cargar el detalle.');
+        hapticError();
+        toast.error(apiError.message || 'No fue posible cargar el detalle.');
       } finally {
         setIsDetailLoading(false);
       }
@@ -532,8 +555,9 @@ export default function MeasurementsScreen() {
     }
 
     if (!isMeasurementEditable(selectedMeasurement)) {
+      hapticError();
       Alert.alert(
-        'Edicion no disponible',
+        'Edición no disponible',
         'Solo puedes editar mediciones registradas por ti desde la app.',
       );
       return;
@@ -547,6 +571,7 @@ export default function MeasurementsScreen() {
   const handleSubmitMeasurement = useCallback(
     async (payload: CreateOwnMeasurementPayload) => {
       setIsSubmitting(true);
+      setMeasurementSubmissionError(null);
 
       try {
         const savedMeasurement = editingMeasurementId
@@ -560,7 +585,8 @@ export default function MeasurementsScreen() {
           ...currentCache,
           [savedMeasurement.measurement.id]: savedMeasurement,
         }));
-        Alert.alert(
+        hapticSuccess();
+        toast.success(
           editingMeasurementId ? 'Medición actualizada' : 'Medición registrada',
           editingMeasurementId
             ? 'Tus cambios se guardaron correctamente.'
@@ -568,7 +594,10 @@ export default function MeasurementsScreen() {
         );
       } catch (saveError) {
         const apiError = saveError as ApiError;
-        Alert.alert('Error', apiError.message || 'No fue posible guardar la medición.');
+        hapticError();
+        setMeasurementSubmissionError(
+          apiError.message || 'No fue posible guardar la medición.',
+        );
       } finally {
         setIsSubmitting(false);
       }
@@ -612,7 +641,8 @@ export default function MeasurementsScreen() {
             ? detailError.message
             : 'No fue posible cargar el detalle.';
 
-        Alert.alert('Error', message);
+        hapticError();
+        toast.error(message);
       }
     },
     [openGlucoseDetailRecord],
@@ -620,19 +650,22 @@ export default function MeasurementsScreen() {
 
   const handleSubmitGlucose = useCallback(
     async (payload: Parameters<typeof submitGlucoseRecord>[0]) => {
+      setGlucoseSubmissionError(null);
+
       try {
         const result = await submitGlucoseRecord(payload);
 
-        Alert.alert(
+        hapticSuccess();
+        toast.success(
           result.mode === 'updated' ? 'Glucosa actualizada' : 'Glucosa registrada',
           result.mode === 'updated'
-            ? 'Tu lectura se actualizo correctamente.'
-            : 'Tu lectura se guardo correctamente.',
+            ? 'Tu lectura se actualizó correctamente.'
+            : 'Tu lectura se guardó correctamente.',
         );
       } catch (saveError) {
         const apiError = saveError as ApiError;
-        Alert.alert(
-          'Error',
+        hapticError();
+        setGlucoseSubmissionError(
           apiError.message || 'No fue posible guardar la glucosa.',
         );
       }
@@ -640,17 +673,24 @@ export default function MeasurementsScreen() {
     [submitGlucoseRecord],
   );
 
+  const handleCloseGlucoseForm = useCallback(() => {
+    setGlucoseSubmissionError(null);
+    closeGlucoseForm();
+  }, [closeGlucoseForm]);
+
   const confirmDeleteGlucose = useCallback(async () => {
     try {
       const wasDeleted = await deleteSelectedGlucoseRecord();
 
       if (wasDeleted) {
-        Alert.alert('Registro eliminado', 'La lectura se eliminó correctamente.');
+        hapticSuccess();
+        toast.success('Registro eliminado', 'La lectura se eliminó correctamente.');
       }
     } catch (deleteError) {
       const apiError = deleteError as ApiError;
+      hapticError();
       Alert.alert(
-        'Error',
+        'No se pudo eliminar',
         apiError.message || 'No fue posible eliminar la lectura.',
       );
     }
@@ -662,8 +702,9 @@ export default function MeasurementsScreen() {
     }
 
     if (hasAdditionalHealthMetrics(selectedGlucoseRecord)) {
+      hapticError();
       Alert.alert(
-        'Eliminacion no disponible',
+        'Eliminación no disponible',
         'Este registro también incluye otras métricas clínicas y no puede eliminarse desde la app.',
       );
       return;
@@ -671,7 +712,7 @@ export default function MeasurementsScreen() {
 
     Alert.alert(
       'Eliminar registro',
-      'Esta accion eliminara tu lectura de glucosa.',
+      'Esta acción eliminará tu lectura de glucosa.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -709,7 +750,38 @@ export default function MeasurementsScreen() {
   ) : null;
 
   if (isLoading) {
-    return <LoadingSpinner fullScreen text="Cargando tus medidas..." />;
+    return (
+      <TabScreenWrapper>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+            <View style={styles.headerCopy}>
+              <StatCardSkeleton />
+            </View>
+            <ProfileShortcutButton />
+          </View>
+          <View style={[styles.tabsWrap, { paddingHorizontal: horizontalPadding }]}>
+            <View style={styles.skeletonStatRow}>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </View>
+          </View>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingHorizontal: horizontalPadding, paddingBottom: contentInsetBottom },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <ChartSkeleton />
+            <ListItemSkeleton />
+            <ListItemSkeleton />
+            <ListItemSkeleton />
+          </ScrollView>
+        </SafeAreaView>
+      </TabScreenWrapper>
+    );
   }
 
   return (
@@ -1005,11 +1077,11 @@ export default function MeasurementsScreen() {
                     color={theme.colors.iconMuted}
                   />
                   <Text style={styles.emptyTitle}>
-                    Todavia no tienes mediciones registradas
+                    Todavía no tienes mediciones registradas
                   </Text>
                   <Text style={styles.emptyText}>
                     Captura tu primer registro para empezar a ver peso,
-                    composicion y perimetros.
+                    composición y perímetros.
                   </Text>
                   <Button
                     title="Registrar mi primera medición"
@@ -1233,7 +1305,7 @@ export default function MeasurementsScreen() {
                   ) : null}
 
                   <Card style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>Perimetros corporales</Text>
+                    <Text style={styles.sectionTitle}>Perímetros corporales</Text>
                     <Text style={styles.sectionDescription}>
                       Se muestran únicamente las medidas disponibles del último registro.
                     </Text>
@@ -1437,11 +1509,11 @@ export default function MeasurementsScreen() {
                     color={theme.colors.iconMuted}
                   />
                   <Text style={styles.emptyTitle}>
-                    Todavia no tienes glucosas registradas
+                    Todavía no tienes glucosas registradas
                   </Text>
                   <Text style={styles.emptyText}>
                     Guarda tu primera lectura para compartir el seguimiento con tu
-                    nutriologo.
+                    nutriólogo.
                   </Text>
                   <Button
                     title="Registrar mi primera glucosa"
@@ -1562,6 +1634,8 @@ export default function MeasurementsScreen() {
           isSubmitting={isSubmitting}
           initialMeasurement={editingMeasurement}
           defaultHeightCm={defaultHeightCm}
+          submissionError={measurementSubmissionError}
+          onClearSubmissionError={clearMeasurementSubmissionError}
           onClose={closeMeasurementForm}
           onSubmit={handleSubmitMeasurement}
         />
@@ -1580,7 +1654,9 @@ export default function MeasurementsScreen() {
           visible={isFocused && isGlucoseFormVisible}
           isSubmitting={isSubmittingGlucose}
           initialRecord={editingGlucoseRecord}
-          onClose={closeGlucoseForm}
+          submissionError={glucoseSubmissionError}
+          onClearSubmissionError={clearGlucoseSubmissionError}
+          onClose={handleCloseGlucoseForm}
           onSubmit={handleSubmitGlucose}
         />
       </SafeAreaView>
@@ -1623,6 +1699,10 @@ const createStyles = (theme: AppTheme) =>
     },
     tabsWrap: {
       paddingBottom: spacing.md,
+    },
+    skeletonStatRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
     },
     scrollView: {
       flex: 1,

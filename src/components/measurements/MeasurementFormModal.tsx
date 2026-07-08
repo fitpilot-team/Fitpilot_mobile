@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Input } from '../common';
+import { CalendarDatePickerModal } from '../calendar';
 import {
   BASE_MEASUREMENT_FIELDS,
   BIOIMPEDANCE_SECTIONS,
@@ -34,6 +34,10 @@ import {
   parseMeasurementNumber,
 } from '../../utils/measurements';
 import {
+  formatLocalDate,
+  toLocalDateKey,
+} from '../../utils/date';
+import {
   convertMeasurementInputToMetricValue,
   convertMeasurementUnitValue,
   getMeasurementDisplayUnit,
@@ -46,11 +50,15 @@ type MeasurementFormState = Record<MeasurementNumericFormKey, string> & {
   notes: string;
 };
 
+type MeasurementFormErrors = Partial<Record<keyof MeasurementFormState | 'form', string>>;
+
 interface MeasurementFormModalProps {
   visible: boolean;
   isSubmitting: boolean;
   initialMeasurement?: MeasurementHistoryItem | null;
   defaultHeightCm?: string | null;
+  submissionError?: string | null;
+  onClearSubmissionError?: () => void;
   onClose: () => void;
   onSubmit: (payload: CreateOwnMeasurementPayload) => Promise<void>;
 }
@@ -165,6 +173,8 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   isSubmitting,
   initialMeasurement,
   defaultHeightCm,
+  submissionError = null,
+  onClearSubmissionError,
   onClose,
   onSubmit,
 }) => {
@@ -175,6 +185,8 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   const [formState, setFormState] = useState<MeasurementFormState>(
     createBlankFormState(),
   );
+  const [errors, setErrors] = useState<MeasurementFormErrors>({});
+  const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [showBilateralPerimeters, setShowBilateralPerimeters] = useState(false);
   const isEditing = Boolean(initialMeasurement);
 
@@ -185,6 +197,8 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   useEffect(() => {
     if (!visible) {
       setFormState(createBlankFormState());
+      setErrors({});
+      setIsDatePickerVisible(false);
       setShowBilateralPerimeters(false);
       return;
     }
@@ -196,6 +210,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
         measurementPreference,
       }),
     );
+    setErrors({});
     setShowBilateralPerimeters(hasAdvancedPerimeterValues(initialMeasurement));
   }, [
     defaultHeightCm,
@@ -205,10 +220,21 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   ]);
 
   const handleChangeField = (fieldKey: keyof MeasurementFormState, value: string) => {
+    onClearSubmissionError?.();
     setFormState((currentState) => ({
       ...currentState,
       [fieldKey]: value,
     }));
+    setErrors((currentErrors) => {
+      if (!currentErrors[fieldKey] && !currentErrors.form) {
+        return currentErrors;
+      }
+
+      const nextErrors = { ...currentErrors };
+      delete nextErrors[fieldKey];
+      delete nextErrors.form;
+      return nextErrors;
+    });
   };
 
   const payload = useMemo(() => {
@@ -241,9 +267,12 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
   }, [formState, measurementPreference]);
 
   const handleSubmit = async () => {
+    onClearSubmissionError?.();
+
+    const nextErrors: MeasurementFormErrors = {};
+
     if (!isValidMeasurementDateInput(formState.date.trim())) {
-      Alert.alert('Fecha invalida', 'Captura la fecha en formato YYYY-MM-DD.');
-      return;
+      nextErrors.date = 'Elige una fecha válida.';
     }
 
     const invalidField = MEASUREMENT_NUMERIC_FORM_KEYS.find((fieldKey) => {
@@ -252,11 +281,8 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
     });
 
     if (invalidField) {
-      Alert.alert(
-        'Dato invalido',
-        `Verifica el valor del campo ${MEASUREMENT_FIELD_LABELS[invalidField]}.`,
-      );
-      return;
+      nextErrors[invalidField] =
+        `Verifica el valor de ${MEASUREMENT_FIELD_LABELS[invalidField]}.`;
     }
 
     const hasAnyMeasurementValue = MEASUREMENT_NUMERIC_FORM_KEYS.some(
@@ -264,14 +290,24 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
     );
 
     if (!hasAnyMeasurementValue) {
-      Alert.alert(
-        'Faltan datos',
-        'Captura al menos una medida además de la fecha para guardar el registro.',
-      );
+      nextErrors.form =
+        'Captura al menos una medida además de la fecha para guardar el registro.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
       return;
     }
 
     await onSubmit(payload);
+  };
+
+  const handleDateSelect = (date: Date) => {
+    const nextDateKey = toLocalDateKey(date);
+    if (nextDateKey) {
+      handleChangeField('date', nextDateKey);
+    }
+    setIsDatePickerVisible(false);
   };
 
   const getFieldLabel = (field: { label: string; unit?: string }) => {
@@ -314,18 +350,25 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
     [showBilateralPerimeters],
   );
 
+  const selectedDateLabel =
+    formatLocalDate(formState.date, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }) || formState.date;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={onClose}
+      >
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        enabled={Platform.OS === 'ios'}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.container}>
           <View style={styles.header}>
@@ -335,8 +378,8 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
               </Text>
               <Text style={styles.subtitle}>
                 {isEditing
-                  ? 'Actualiza bioimpedancia y perimetros corporales.'
-                  : 'Bioimpedancia y perimetros corporales.'}
+                  ? 'Actualiza bioimpedancia y perímetros corporales.'
+                  : 'Bioimpedancia y perímetros corporales.'}
               </Text>
             </View>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
@@ -353,16 +396,32 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Datos base</Text>
               <Text style={styles.sectionDescription}>
-                La fecha es obligatoria. Los demas campos son opcionales.
+                La fecha es obligatoria. Los demás campos son opcionales.
               </Text>
-              <Input
-                label="Fecha"
-                value={formState.date}
-                onChangeText={(value) => handleChangeField('date', value)}
-                placeholder="2026-03-14"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Fecha</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.dateField,
+                    errors.date ? styles.dateFieldError : null,
+                  ]}
+                  activeOpacity={0.82}
+                  onPress={() => setIsDatePickerVisible(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Seleccionar fecha de medición"
+                >
+                  <View style={styles.dateFieldCopy}>
+                    <Text style={styles.dateFieldValue}>{selectedDateLabel}</Text>
+                    <Text style={styles.dateFieldHint}>Toca para cambiar la fecha</Text>
+                  </View>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
+                </TouchableOpacity>
+                {errors.date ? <Text style={styles.fieldError}>{errors.date}</Text> : null}
+              </View>
               {BASE_MEASUREMENT_FIELDS.map((field) => (
                 <Input
                   key={field.key}
@@ -371,6 +430,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
                   onChangeText={(value) => handleChangeField(field.key, value)}
                   placeholder={getFieldPlaceholder(field)}
                   keyboardType="numeric"
+                  error={errors[field.key]}
                 />
               ))}
             </View>
@@ -387,6 +447,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
                     onChangeText={(value) => handleChangeField(field.key, value)}
                     placeholder={getFieldPlaceholder(field)}
                     keyboardType="numeric"
+                    error={errors[field.key]}
                   />
                 ))}
               </View>
@@ -398,7 +459,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
                   <Ionicons name="swap-horizontal-outline" size={18} color={theme.colors.primary} />
                 </View>
                 <View style={styles.calloutContent}>
-                  <Text style={styles.calloutTitle}>Perimetros ISAK laterales</Text>
+                  <Text style={styles.calloutTitle}>Perímetros ISAK laterales</Text>
                   <Text style={styles.calloutDescription}>
                     El lado derecho es el flujo operativo por defecto. Activa la medición bilateral para capturar el lado izquierdo.
                   </Text>
@@ -451,6 +512,7 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
                     onChangeText={(value) => handleChangeField(field.key, value)}
                     placeholder={getFieldPlaceholder(field)}
                     keyboardType="numeric"
+                    error={errors[field.key]}
                   />
                 ))}
               </View>
@@ -475,6 +537,10 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
           </ScrollView>
 
           <View style={styles.footer}>
+            {submissionError ? (
+              <Text style={styles.submissionError}>{submissionError}</Text>
+            ) : null}
+            {errors.form ? <Text style={styles.formWarning}>{errors.form}</Text> : null}
             <Button title="Cancelar" variant="secondary" onPress={onClose} />
             <Button
               title={isEditing ? 'Guardar cambios' : 'Guardar medición'}
@@ -484,7 +550,16 @@ export const MeasurementFormModal: React.FC<MeasurementFormModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+      </Modal>
+      <CalendarDatePickerModal
+        visible={visible && isDatePickerVisible}
+        title="Seleccionar fecha"
+        selectedDate={formState.date}
+        maxDate={getTodayDateInput()}
+        onSelect={handleDateSelect}
+        onClose={() => setIsDatePickerVisible(false)}
+      />
+    </>
   );
 };
 
@@ -629,6 +704,51 @@ const createStyles = (theme: AppTheme) =>
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
     },
+    fieldGroup: {
+      marginBottom: spacing.md,
+    },
+    fieldLabel: {
+      marginBottom: spacing.xs,
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+    dateField: {
+      minHeight: 52,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.inputBorder,
+      borderRadius: borderRadius.md,
+      backgroundColor: theme.colors.inputBackground,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    dateFieldError: {
+      borderColor: theme.colors.error,
+    },
+    dateFieldCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+    dateFieldValue: {
+      fontSize: fontSize.base,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+      textTransform: 'capitalize',
+    },
+    dateFieldHint: {
+      marginTop: 2,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+    },
+    fieldError: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.error,
+    },
     notesInput: {
       minHeight: 96,
       borderWidth: 1,
@@ -642,6 +762,7 @@ const createStyles = (theme: AppTheme) =>
     },
     footer: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: spacing.md,
       justifyContent: 'space-between',
       paddingHorizontal: spacing.lg,
@@ -649,5 +770,17 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.surface,
       borderTopWidth: 1,
       borderTopColor: theme.colors.border,
+    },
+    formWarning: {
+      width: '100%',
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.warning,
+    },
+    submissionError: {
+      width: '100%',
+      fontSize: fontSize.sm,
+      lineHeight: 20,
+      color: theme.colors.error,
     },
   });

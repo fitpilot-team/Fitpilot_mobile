@@ -91,10 +91,10 @@ const METRIC_CONFIG: Record<ExerciseDetailMetric, {
     formatValue: (v) => (v != null ? `${new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(v)} min` : '-- min'),
   },
   calories: {
-    lineLabel: 'Calorias',
+    lineLabel: 'Calorías',
     barLabel: '',
     showBars: false,
-    emptyText: 'No hay calorias registradas en este rango.',
+    emptyText: 'No hay calorías registradas en este rango.',
     formatValue: (v) => formatCalories(v),
   },
   distance: {

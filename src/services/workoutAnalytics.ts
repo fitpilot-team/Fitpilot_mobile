@@ -1,5 +1,8 @@
-import { trainingClient } from './api';
+import { isApiNetworkError, trainingClient } from './api';
+import { readPersistentCache, writePersistentCache } from './persistentCache';
+import { useAuthStore } from '../store/authStore';
 import type {
+  ApiError,
   DayTypeScopeKind,
   DayTypeSeriesDetail,
   DayTypeSeriesListResponse,
@@ -15,6 +18,48 @@ import type {
   WorkoutAnalyticsScopeKind,
 } from '../types';
 
+type WorkoutAnalyticsModulesParams = {
+  scopeKind: WorkoutAnalyticsScopeKind;
+  range: WorkoutAnalyticsRange;
+  repBucketId?: string | null;
+  anchorDate?: string;
+  macrocycleId?: string | null;
+  mesocycleId?: string | null;
+  microcycleId?: string | null;
+  cacheUserId?: string | number | null;
+};
+
+const WORKOUT_MODULES_CACHE_VERSION = 1;
+const WORKOUT_MODULES_CACHE_PREFIX = 'fitpilot:cache:workout-modules';
+
+const cacheKeyPart = (value: string | number | null | undefined) =>
+  encodeURIComponent(String(value ?? 'none'));
+
+const buildWorkoutModulesCacheKey = ({
+  cacheUserId,
+  scopeKind,
+  range,
+  repBucketId,
+  anchorDate,
+  macrocycleId,
+  mesocycleId,
+  microcycleId,
+}: WorkoutAnalyticsModulesParams) =>
+  [
+    WORKOUT_MODULES_CACHE_PREFIX,
+    cacheKeyPart(cacheUserId),
+    cacheKeyPart(scopeKind),
+    cacheKeyPart(range),
+    cacheKeyPart(repBucketId),
+    cacheKeyPart(anchorDate),
+    cacheKeyPart(macrocycleId),
+    cacheKeyPart(mesocycleId),
+    cacheKeyPart(microcycleId),
+  ].join(':');
+
+const hasCacheUserId = (cacheUserId: WorkoutAnalyticsModulesParams['cacheUserId']) =>
+  cacheUserId !== null && cacheUserId !== undefined && String(cacheUserId).trim().length > 0;
+
 export const getWorkoutAnalyticsDashboard = (
   range: WorkoutAnalyticsRange,
   anchorDate?: string,
@@ -26,7 +71,7 @@ export const getWorkoutAnalyticsDashboard = (
     },
   });
 
-export const getWorkoutAnalyticsModules = ({
+export const getWorkoutAnalyticsModules = async ({
   scopeKind,
   range,
   repBucketId,
@@ -34,26 +79,54 @@ export const getWorkoutAnalyticsModules = ({
   macrocycleId,
   mesocycleId,
   microcycleId,
-}: {
-  scopeKind: WorkoutAnalyticsScopeKind;
-  range: WorkoutAnalyticsRange;
-  repBucketId?: string | null;
-  anchorDate?: string;
-  macrocycleId?: string | null;
-  mesocycleId?: string | null;
-  microcycleId?: string | null;
-}) =>
-  trainingClient.get<WorkoutAnalyticsModules>('/workout-analytics/me/modules', {
-    params: {
-      scope_kind: scopeKind,
-      ...(scopeKind === 'range' ? { range } : {}),
-      ...(scopeKind === 'range' && repBucketId ? { rep_bucket_id: repBucketId } : {}),
-      ...(anchorDate ? { anchor_date: anchorDate } : {}),
-      ...(macrocycleId ? { macrocycle_id: macrocycleId } : {}),
-      ...(mesocycleId ? { mesocycle_id: mesocycleId } : {}),
-      ...(microcycleId ? { microcycle_id: microcycleId } : {}),
-    },
-  });
+  cacheUserId,
+}: WorkoutAnalyticsModulesParams): Promise<WorkoutAnalyticsModules> => {
+  const cacheKey = hasCacheUserId(cacheUserId)
+    ? buildWorkoutModulesCacheKey({
+        scopeKind,
+        range,
+        repBucketId,
+        anchorDate,
+        macrocycleId,
+        mesocycleId,
+        microcycleId,
+        cacheUserId,
+      })
+    : null;
+
+  try {
+    const modules = await trainingClient.get<WorkoutAnalyticsModules>('/workout-analytics/me/modules', {
+      params: {
+        scope_kind: scopeKind,
+        ...(scopeKind === 'range' ? { range } : {}),
+        ...(scopeKind === 'range' && repBucketId ? { rep_bucket_id: repBucketId } : {}),
+        ...(anchorDate ? { anchor_date: anchorDate } : {}),
+        ...(macrocycleId ? { macrocycle_id: macrocycleId } : {}),
+        ...(mesocycleId ? { mesocycle_id: mesocycleId } : {}),
+        ...(microcycleId ? { microcycle_id: microcycleId } : {}),
+      },
+    });
+
+    if (cacheKey && useAuthStore.getState().isAuthenticated) {
+      await writePersistentCache(cacheKey, WORKOUT_MODULES_CACHE_VERSION, modules);
+    }
+
+    return modules;
+  } catch (error) {
+    if (cacheKey && isApiNetworkError(error as ApiError)) {
+      const cachedModules = await readPersistentCache<WorkoutAnalyticsModules>(
+        cacheKey,
+        WORKOUT_MODULES_CACHE_VERSION,
+      );
+
+      if (cachedModules) {
+        return cachedModules;
+      }
+    }
+
+    throw error;
+  }
+};
 
 export const listWorkoutMacrocycles = ({
   skip = 0,

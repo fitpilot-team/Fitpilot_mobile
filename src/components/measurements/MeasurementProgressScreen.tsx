@@ -43,9 +43,9 @@ const CHART_HEIGHT = 220;
 const CHART_PADDING_X = 24;
 const CHART_PADDING_Y = 20;
 const RANGE_OPTIONS: { key: RangePreset; label: string }[] = [
-  { key: '7d', label: '7 dias' },
-  { key: '30d', label: '30 dias' },
-  { key: '90d', label: '90 dias' },
+  { key: '7d', label: '7 días' },
+  { key: '30d', label: '30 días' },
+  { key: '90d', label: '90 días' },
   { key: 'all', label: 'Todo' },
 ];
 

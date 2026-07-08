@@ -213,7 +213,7 @@ export const CalendarDatePickerPanel: React.FC<CalendarDatePickerPanelProps> = (
       { length: Math.max(0, endYear - startYear + 1) },
       (_, index) => endYear - index,
     );
-  }, [calendarMonth, maxDateKey, minDateKey, parsedMaxDate, parsedMinDate]);
+  }, [calendarMonth, parsedMaxDate, parsedMinDate]);
 
   useEffect(() => {
     if (selectorMode !== 'year') {

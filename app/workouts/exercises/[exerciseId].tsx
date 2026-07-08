@@ -236,7 +236,7 @@ export default function ExerciseTrendDetailScreen() {
           : null,
         detail.summary.total_calories_burned != null && detail.summary.total_calories_burned > 0
           ? {
-              label: 'Calorias',
+              label: 'Calorías',
               value: formatCalories(detail.summary.total_calories_burned),
               context: null,
             }

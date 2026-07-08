@@ -40,7 +40,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { io, type Socket } from 'socket.io-client';
-import { LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
+import { ListItemSkeleton, TabScreenWrapper } from '../../src/components/common';
 import {
   borderRadius,
   fontSize,
@@ -62,6 +62,7 @@ import {
   type ChatUploadFile,
 } from '../../src/services/chat';
 import { useAuthStore } from '../../src/store/authStore';
+import { toast } from '../../src/store/toastStore';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type { AssignedProfessionalSummary } from '../../src/types';
 import type {
@@ -69,7 +70,9 @@ import type {
   ChatConversation,
   ChatDeliveryStatus,
   ChatMessage,
+  ChatMessageReply,
 } from '../../src/types/chat';
+import { hapticError, hapticImpactLight, hapticSuccess } from '../../src/utils/haptics';
 
 const MAX_FILES_PER_MESSAGE = 4;
 const MAX_AUDIO_SECONDS = 300;
@@ -92,6 +95,73 @@ type ProfessionalChatOption = {
 };
 
 const makeLocalId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+// Mensajes optimistas: estado local mientras el servidor confirma el envío.
+type LocalMessageStatus = 'sending' | 'failed';
+
+type LocalChatMessage = ChatMessage & {
+  localStatus?: LocalMessageStatus;
+};
+
+// Ids numéricos locales fuera del rango de ids reales del servidor para que
+// no choquen con mensajes existentes y queden al final al ordenar por id.
+const LOCAL_MESSAGE_ID_BASE = 9_000_000_000_000;
+let localMessageIdCounter = 0;
+const makeLocalMessageId = () => LOCAL_MESSAGE_ID_BASE + ++localMessageIdCounter;
+
+const toReplyPreviewMessage = (message: ChatMessage): ChatMessageReply => ({
+  id: message.id,
+  sender_id: message.sender_id,
+  external_sender_contact_id: message.external_sender_contact_id,
+  sender_type: message.sender_type,
+  body: message.body,
+  created_at: message.created_at,
+  is_deleted: message.is_deleted,
+  deleted_at: message.deleted_at,
+  attachment_count: message.attachments.length,
+  first_attachment_type: message.attachments[0]?.type ?? null,
+});
+
+const matchesPendingMessage = (
+  item: LocalChatMessage,
+  serverMessage: ChatMessage,
+  localMessageId?: number,
+) =>
+  Boolean(item.localStatus) &&
+  ((localMessageId != null && item.id === localMessageId) ||
+    Boolean(
+      serverMessage.client_message_id &&
+        item.client_message_id === serverMessage.client_message_id,
+    ));
+
+// El backend incluye client_message_id tanto en la respuesta HTTP como en el
+// evento 'message:new' del socket; el eco del socket puede llegar antes que
+// la respuesta HTTP, así que ambos caminos reemplazan al pendiente sin duplicar.
+const mergeServerMessage = (
+  currentMessages: LocalChatMessage[],
+  serverMessage: ChatMessage,
+  localMessageId?: number,
+): LocalChatMessage[] => {
+  if (currentMessages.some((item) => item.id === serverMessage.id)) {
+    const withoutPending = currentMessages.filter(
+      (item) => !matchesPendingMessage(item, serverMessage, localMessageId),
+    );
+    return withoutPending.length === currentMessages.length
+      ? currentMessages
+      : withoutPending;
+  }
+
+  const pendingIndex = currentMessages.findIndex((item) =>
+    matchesPendingMessage(item, serverMessage, localMessageId),
+  );
+  if (pendingIndex >= 0) {
+    const nextMessages = [...currentMessages];
+    nextMessages[pendingIndex] = serverMessage;
+    return nextMessages;
+  }
+
+  return [...currentMessages, serverMessage];
+};
 
 const buildDisplayName = (user: ChatConversation['participant']) => {
   const name = [user.name, user.lastname].filter(Boolean).join(' ').trim();
@@ -398,26 +468,30 @@ const getReplyPreview = (
   return 'Adjunto';
 };
 
-const MessageBubble = ({
+const MessageBubble = React.memo(function MessageBubble({
   message,
   isMine,
   senderLabel,
   onReply,
   onDelete,
+  onRetry,
   onReferencePress,
   onPreviewAttachment,
   onDownloadAttachment,
 }: {
-  message: ChatMessage;
+  message: LocalChatMessage;
   isMine: boolean;
   senderLabel: (senderId: number | null) => string;
   onReply: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
+  onRetry: (message: LocalChatMessage) => void;
   onReferencePress: (messageId: number) => void;
   onPreviewAttachment: (attachment: ChatAttachment) => void;
   onDownloadAttachment: (attachment: ChatAttachment) => void;
-}) => {
+}) {
   const styles = useThemedStyles(createStyles);
+  const isPendingSend = message.localStatus === 'sending';
+  const isFailedSend = message.localStatus === 'failed';
   const showActions = () => {
     const buttons = [
       {
@@ -442,10 +516,18 @@ const MessageBubble = ({
   return (
     <TouchableOpacity
       activeOpacity={0.88}
-      onLongPress={showActions}
+      onLongPress={message.localStatus ? undefined : showActions}
+      onPress={isFailedSend ? () => onRetry(message) : undefined}
       style={[styles.messageRow, isMine ? styles.messageRowMine : null]}
     >
-      <View style={[styles.messageBubble, isMine ? styles.messageBubbleMine : null]}>
+      <View
+        style={[
+          styles.messageBubble,
+          isMine ? styles.messageBubbleMine : null,
+          isPendingSend ? styles.messageBubbleSending : null,
+          isFailedSend ? styles.messageBubbleFailed : null,
+        ]}
+      >
         {message.reply_to ? (
           <TouchableOpacity
             activeOpacity={0.78}
@@ -481,7 +563,13 @@ const MessageBubble = ({
             Mensaje eliminado
           </Text>
         ) : message.body ? (
-          <Text style={[styles.messageBody, isMine ? styles.messageBodyMine : null]}>
+          <Text
+            style={[
+              styles.messageBody,
+              isMine ? styles.messageBodyMine : null,
+              isFailedSend ? styles.messageBodyFailed : null,
+            ]}
+          >
             {message.body}
           </Text>
         ) : null}
@@ -498,32 +586,66 @@ const MessageBubble = ({
           </View>
         ) : null}
         <View style={[styles.messageMeta, isMine ? styles.messageMetaMine : null]}>
-          <Text style={[styles.messageTime, isMine ? styles.messageTimeMine : null]}>
+          <Text
+            style={[
+              styles.messageTime,
+              isMine ? styles.messageTimeMine : null,
+              isFailedSend ? styles.messageTimeFailed : null,
+            ]}
+          >
             {formatMessageTime(message.created_at)}
           </Text>
           {isMine ? (
             <View
-              accessibilityLabel={getDeliveryReceiptLabel(message.delivery_status)}
+              accessibilityLabel={
+                isFailedSend
+                  ? 'No se envió'
+                  : isPendingSend
+                    ? 'Enviando'
+                    : getDeliveryReceiptLabel(message.delivery_status)
+              }
               accessibilityRole="image"
               accessible
               style={styles.messageReceipt}
             >
               <Ionicons
-                name={message.delivery_status === 'SENT' ? 'checkmark' : 'checkmark-done'}
+                name={
+                  isFailedSend
+                    ? 'alert-circle'
+                    : isPendingSend
+                      ? 'time-outline'
+                      : message.delivery_status === 'SENT'
+                        ? 'checkmark'
+                        : 'checkmark-done'
+                }
                 size={15}
                 color={
-                  message.delivery_status === 'READ'
-                    ? '#087f7a'
-                    : 'rgba(8,17,31,0.52)'
+                  isFailedSend
+                    ? '#fca5a5'
+                    : message.delivery_status === 'READ'
+                      ? '#087f7a'
+                      : 'rgba(8,17,31,0.52)'
                 }
               />
             </View>
           ) : null}
         </View>
+        {isFailedSend ? (
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => onRetry(message)}
+            style={styles.messageRetryButton}
+            accessibilityRole="button"
+            accessibilityLabel="Reintentar envío"
+          >
+            <Ionicons name="refresh" size={13} color="#fca5a5" />
+            <Text style={styles.messageRetryText}>No se envió · Reintentar</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
-};
+});
 
 const ConversationAvatar = ({
   conversation,
@@ -577,7 +699,7 @@ export default function ChatScreen() {
       return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
     },
   );
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
   const [pendingFiles, setPendingFiles] = useState<PendingChatFile[]>([]);
@@ -693,7 +815,8 @@ export default function ChatScreen() {
         }
       });
     } catch {
-      Alert.alert('Chat', 'No se pudo actualizar el chat.');
+      hapticError();
+      toast.error('No se pudo actualizar el chat.');
     } finally {
       setIsRefreshing(false);
     }
@@ -708,14 +831,16 @@ export default function ChatScreen() {
       const availableSlots = MAX_FILES_PER_MESSAGE - currentFiles.length;
 
       if (availableSlots <= 0) {
-        Alert.alert('Limite de adjuntos', 'Puedes enviar hasta 4 archivos por mensaje.');
+        hapticError();
+        toast.error('Límite de adjuntos', 'Puedes enviar hasta 4 archivos por mensaje.');
         return currentFiles;
       }
 
       const acceptedFiles = files
         .filter((file) => {
           if (file.size && file.size > MAX_FILE_SIZE_BYTES) {
-            Alert.alert('Archivo muy grande', `${file.name} supera el limite de 10 MB.`);
+            hapticError();
+            toast.error('Archivo muy grande', `${file.name} supera el límite de 10 MB.`);
             return false;
           }
 
@@ -724,7 +849,8 @@ export default function ChatScreen() {
         .slice(0, availableSlots);
 
       if (acceptedFiles.length < files.length) {
-        Alert.alert('Limite de adjuntos', 'Algunos archivos no se agregaron.');
+        hapticError();
+        toast.info('Límite de adjuntos', 'Algunos archivos no se agregaron.');
       }
 
       return [...currentFiles, ...acceptedFiles];
@@ -734,7 +860,8 @@ export default function ChatScreen() {
   const handlePickImage = useCallback(async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos.');
+      hapticError();
+      toast.error('Permiso requerido', 'Necesitamos acceso a tus fotos.');
       return;
     }
 
@@ -812,7 +939,8 @@ export default function ChatScreen() {
         ]);
       }
     } catch {
-      Alert.alert('Audio', 'No se pudo guardar la nota de voz.');
+      hapticError();
+      toast.error('No se pudo guardar la nota de voz.');
     } finally {
       recordingStartedAtRef.current = null;
     }
@@ -820,13 +948,15 @@ export default function ChatScreen() {
 
   const startRecording = useCallback(async () => {
     if (pendingFiles.length >= MAX_FILES_PER_MESSAGE) {
-      Alert.alert('Limite de adjuntos', 'Elimina un archivo antes de grabar audio.');
+      hapticError();
+      toast.error('Límite de adjuntos', 'Elimina un archivo antes de grabar audio.');
       return;
     }
 
     const permission = await requestRecordingPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso al microfono.');
+      hapticError();
+      toast.error('Permiso requerido', 'Necesitamos acceso al micrófono.');
       return;
     }
 
@@ -839,7 +969,8 @@ export default function ChatScreen() {
         void stopRecording();
       }, MAX_AUDIO_SECONDS * 1000);
     } catch {
-      Alert.alert('Audio', 'No se pudo iniciar la grabacion.');
+      hapticError();
+      toast.error('No se pudo iniciar la grabación.');
       recordingStartedAtRef.current = null;
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
     }
@@ -864,9 +995,10 @@ export default function ChatScreen() {
         setActiveConversationId(conversation.id);
         setHasAutoSelectedConversation(true);
       } catch {
-        Alert.alert(
+        hapticError();
+        toast.error(
           'Chat no disponible',
-          'No se pudo abrir una conversacion con tu profesional.',
+          'No se pudo abrir una conversación con tu profesional.',
         );
       } finally {
         setIsStartingConversation(false);
@@ -889,7 +1021,8 @@ export default function ChatScreen() {
     (messageId: number) => {
       const index = messages.findIndex((message) => message.id === messageId);
       if (index < 0) {
-        Alert.alert('Chat', 'Ese mensaje no esta cargado en este historial.');
+        hapticError();
+        toast.error('Mensaje no disponible', 'Ese mensaje no está cargado en este historial.');
         return;
       }
 
@@ -926,7 +1059,8 @@ export default function ChatScreen() {
               );
               await loadConversations();
             } catch {
-              Alert.alert('Chat', 'No se pudo eliminar el mensaje.');
+              hapticError();
+              toast.error('No se pudo eliminar el mensaje.');
             }
           },
         },
@@ -935,9 +1069,106 @@ export default function ChatScreen() {
     [activeConversationId, currentUserId, loadConversations],
   );
 
+  const deliverPendingTextMessage = useCallback(
+    async (
+      conversationId: number,
+      localMessageId: number,
+      payload: { body: string; clientMessageId: string; replyToMessageId?: number },
+    ) => {
+      try {
+        const message = await sendChatMessage(conversationId, {
+          body: payload.body,
+          clientMessageId: payload.clientMessageId,
+          replyToMessageId: payload.replyToMessageId,
+        });
+        setMessages((currentMessages) =>
+          mergeServerMessage(currentMessages, message, localMessageId),
+        );
+        await Promise.allSettled([
+          markChatConversationRead(conversationId),
+          loadConversations(),
+        ]);
+      } catch {
+        hapticError();
+        toast.error('Mensaje no enviado', 'Intenta de nuevo en un momento.');
+        setMessages((currentMessages) =>
+          currentMessages.map((item) =>
+            item.id === localMessageId
+              ? { ...item, localStatus: 'failed' as const }
+              : item,
+          ),
+        );
+      }
+    },
+    [loadConversations],
+  );
+
+  const handleRetryMessage = useCallback(
+    (message: LocalChatMessage) => {
+      if (message.localStatus !== 'failed' || !message.client_message_id || !message.body) {
+        return;
+      }
+
+      setMessages((currentMessages) =>
+        currentMessages.map((item) =>
+          item.id === message.id
+            ? { ...item, localStatus: 'sending' as const }
+            : item,
+        ),
+      );
+      // Reutiliza el mismo client_message_id: el backend deduplica el reintento.
+      void deliverPendingTextMessage(message.conversation_id, message.id, {
+        body: message.body,
+        clientMessageId: message.client_message_id,
+        replyToMessageId: message.reply_to_message_id ?? undefined,
+      });
+    },
+    [deliverPendingTextMessage],
+  );
+
   const handleSend = useCallback(async () => {
     const body = draft.trim();
     if (!activeConversationId || (!body && pendingFiles.length === 0) || isSending) {
+      return;
+    }
+
+    if (pendingFiles.length === 0) {
+      // Envío optimista solo texto: la burbuja aparece de inmediato y el
+      // servidor confirma (o falla) en segundo plano sin bloquear el composer.
+      const clientMessageId = makeLocalId();
+      const replyTo = replyToMessage;
+      const pendingMessage: LocalChatMessage = {
+        id: makeLocalMessageId(),
+        conversation_id: activeConversationId,
+        sender_id: currentUserId,
+        external_sender_contact_id: null,
+        sender_type: 'USER',
+        channel: 'IN_APP',
+        reply_to_message_id: replyTo?.id ?? null,
+        reply_to: replyTo ? toReplyPreviewMessage(replyTo) : null,
+        body,
+        client_message_id: clientMessageId,
+        external_message_id: null,
+        external_status: null,
+        external_error: null,
+        created_at: new Date().toISOString(),
+        is_deleted: false,
+        deleted_at: null,
+        deleted_by_user_id: null,
+        delivery_status: null,
+        attachments: [],
+        localStatus: 'sending',
+      };
+
+      setMessages((currentMessages) => [...currentMessages, pendingMessage]);
+      setDraft('');
+      setReplyToMessage(null);
+      hapticImpactLight();
+      void deliverPendingTextMessage(activeConversationId, pendingMessage.id, {
+        body,
+        clientMessageId,
+        replyToMessageId: replyTo?.id,
+      });
       return;
     }
 
@@ -959,22 +1190,26 @@ export default function ChatScreen() {
       setDraft('');
       setReplyToMessage(null);
       setPendingFiles([]);
+      hapticImpactLight();
       await Promise.allSettled([
         markChatConversationRead(activeConversationId),
         loadConversations(),
       ]);
     } catch {
-      Alert.alert('Mensaje no enviado', 'Intenta de nuevo en un momento.');
+      hapticError();
+      toast.error('Mensaje no enviado', 'Intenta de nuevo en un momento.');
     } finally {
       setIsSending(false);
     }
   }, [
     activeConversationId,
+    currentUserId,
+    deliverPendingTextMessage,
     draft,
     isSending,
     loadConversations,
     pendingFiles,
-    replyToMessage?.id,
+    replyToMessage,
   ]);
 
   const confirmScheduleProposal = useCallback(() => {
@@ -1005,9 +1240,11 @@ export default function ChatScreen() {
                 loadConversations(),
               ]);
               setMessages(latestMessages);
-              Alert.alert('Cita agendada', 'Tu cita quedo confirmada.');
+              hapticSuccess();
+              toast.success('Cita agendada', 'Tu cita quedó confirmada.');
             } catch {
-              Alert.alert(
+              hapticError();
+              toast.error(
                 'No se pudo confirmar',
                 'Intenta de nuevo o responde en el chat para acordar otro horario.',
               );
@@ -1058,7 +1295,8 @@ export default function ChatScreen() {
     setIsLoadingConversations(true);
     loadConversations()
       .catch(() => {
-        Alert.alert('Chat', 'No se pudieron cargar tus conversaciones.');
+        hapticError();
+        toast.error('No se pudieron cargar tus conversaciones.');
       })
       .finally(() => {
         setIsLoadingConversations(false);
@@ -1098,7 +1336,8 @@ export default function ChatScreen() {
       })
       .then(() => loadConversations())
       .catch(() => {
-        Alert.alert('Chat', 'No se pudieron cargar los mensajes.');
+        hapticError();
+        toast.error('No se pudieron cargar los mensajes.');
       })
       .finally(() => {
         setIsLoadingMessages(false);
@@ -1129,7 +1368,7 @@ export default function ChatScreen() {
 
         // En una RECONEXION (tunel, cambio de red), el stream no tiene replay:
         // los mensajes llegados durante la desconexion se perdieron del socket.
-        // Recargamos la conversacion activa y la lista para cerrar el hueco.
+        // Recargamos la conversación activa y la lista para cerrar el hueco.
         if (hasConnectedBefore) {
           if (activeConversationId) {
             getChatMessages(activeConversationId)
@@ -1147,13 +1386,10 @@ export default function ChatScreen() {
 
       socket.on('message:new', (message: ChatMessage) => {
         if (message.conversation_id === activeConversationId) {
-          setMessages((currentMessages) => {
-            if (currentMessages.some((item) => item.id === message.id)) {
-              return currentMessages;
-            }
-
-            return [...currentMessages, message];
-          });
+          // Puede ser el eco de un envío optimista propio (llega incluso antes
+          // que la respuesta HTTP): reemplaza al pendiente con el mismo
+          // client_message_id en lugar de duplicarlo.
+          setMessages((currentMessages) => mergeServerMessage(currentMessages, message));
           if (message.sender_id !== currentUserId) {
             void markChatConversationDelivered(message.conversation_id, message.id).catch(
               () => undefined,
@@ -1397,6 +1633,7 @@ export default function ChatScreen() {
                       senderLabel={getSenderLabel}
                       onReply={setReplyToMessage}
                       onDelete={handleDeleteMessage}
+                      onRetry={handleRetryMessage}
                       onReferencePress={scrollToMessage}
                       onPreviewAttachment={setPreviewAttachment}
                       onDownloadAttachment={handleDownloadAttachment}
@@ -1516,7 +1753,7 @@ export default function ChatScreen() {
                 <View style={styles.lockedNotice}>
                   <Ionicons name="lock-closed" size={15} color={theme.colors.warning} />
                   <Text style={styles.lockedNoticeText}>
-                    El historial esta disponible, pero el envio esta cerrado.
+                    El historial está disponible, pero el envío está cerrado.
                   </Text>
                 </View>
               ) : null}
@@ -1551,6 +1788,8 @@ export default function ChatScreen() {
                   activeOpacity={0.75}
                   disabled={isInputDisabled}
                   onPress={handlePickImage}
+                  accessibilityRole="button"
+                  accessibilityLabel="Adjuntar imagen"
                 >
                   <Ionicons
                     name="image-outline"
@@ -1563,6 +1802,8 @@ export default function ChatScreen() {
                   activeOpacity={0.75}
                   disabled={isInputDisabled}
                   onPress={handlePickDocument}
+                  accessibilityRole="button"
+                  accessibilityLabel="Adjuntar archivo"
                 >
                   <Ionicons
                     name="attach"
@@ -1578,6 +1819,10 @@ export default function ChatScreen() {
                   activeOpacity={0.75}
                   disabled={isInputDisabled && !recorderState.isRecording}
                   onPress={handleRecordPress}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    recorderState.isRecording ? 'Detener grabación' : 'Grabar nota de voz'
+                  }
                 >
                   <Ionicons
                     name={recorderState.isRecording ? 'stop' : 'mic-outline'}
@@ -1602,6 +1847,8 @@ export default function ChatScreen() {
                   activeOpacity={0.75}
                   disabled={!canSend}
                   onPress={handleSend}
+                  accessibilityRole="button"
+                  accessibilityLabel="Enviar mensaje"
                 >
                   {isSending ? (
                     <ActivityIndicator size="small" color="#08111f" />
@@ -1649,8 +1896,10 @@ export default function ChatScreen() {
             </View>
 
             {isLoadingConversations ? (
-              <View style={styles.loadingState}>
-                <LoadingSpinner text="Cargando chat..." />
+              <View style={styles.conversationList}>
+                {[1, 2, 3, 4, 5].map((item) => (
+                  <ListItemSkeleton key={item} />
+                ))}
               </View>
             ) : (
               <View style={styles.conversationList}>
@@ -1702,8 +1951,8 @@ export default function ChatScreen() {
                         </Text>
                         <Text style={styles.conversationPreview} numberOfLines={1}>
                           {professional.roleLabel
-                            ? `${professional.roleLabel} · Iniciar conversacion`
-                            : 'Iniciar conversacion'}
+                            ? `${professional.roleLabel} · Iniciar conversación`
+                            : 'Iniciar conversación'}
                         </Text>
                       </View>
                       <Ionicons
@@ -1964,6 +2213,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       borderBottomRightRadius: borderRadius.sm,
       backgroundColor: theme.colors.primary,
     },
+    messageBubbleSending: {
+      opacity: 0.72,
+    },
+    messageBubbleFailed: {
+      borderColor: 'rgba(248,113,113,0.55)',
+      backgroundColor: 'rgba(127,29,29,0.3)',
+    },
     messageBody: {
       color: '#f8fafc',
       fontSize: 15,
@@ -1971,6 +2227,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     messageBodyMine: {
       color: '#08111f',
+    },
+    messageBodyFailed: {
+      color: '#fecaca',
     },
     messageDeleted: {
       color: '#94a3b8',
@@ -2027,11 +2286,26 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     messageTimeMine: {
       color: 'rgba(8,17,31,0.6)',
     },
+    messageTimeFailed: {
+      color: 'rgba(254,202,202,0.78)',
+    },
     messageReceipt: {
       width: 17,
       height: 17,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    messageRetryButton: {
+      alignSelf: 'flex-end',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 2,
+    },
+    messageRetryText: {
+      color: '#fca5a5',
+      fontSize: 11,
+      fontWeight: '800',
     },
     attachmentList: {
       gap: spacing.xs,

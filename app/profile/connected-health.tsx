@@ -374,7 +374,7 @@ export default function ConnectedHealthScreen() {
                   </View>
                 ))
               ) : (
-                <Text style={styles.emptyText}>Sin permisos registrados todavia.</Text>
+                <Text style={styles.emptyText}>Sin permisos registrados todavía.</Text>
               )}
             </View>
           </View>

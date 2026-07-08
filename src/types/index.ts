@@ -947,6 +947,19 @@ export interface ClientDietIngredientRow {
 
 export type ClientDietFoodRow = ClientDietIngredientRow;
 
+export type ClientFoodSwapPreviewBasis = 'exchange_unit' | 'base_serving' | 'unavailable';
+
+export interface ClientFoodSwapPreview {
+  quantity: number | null;
+  unitName: string | null;
+  servingUnitId: number | null;
+  householdLabel: string | null;
+  equivalents: number | null;
+  grams: number | null;
+  caloriesKcal: number | null;
+  basis: ClientFoodSwapPreviewBasis;
+}
+
 export interface ClientFoodSwapCandidate {
   id: number;
   name: string;
@@ -955,7 +968,7 @@ export interface ClientFoodSwapCandidate {
   baseServingSize: number | null;
   baseUnit: string | null;
   caloriesKcal: number | null;
-  servingUnitsCount: number;
+  swapPreview: ClientFoodSwapPreview | null;
 }
 
 export interface ClientDietRecipeCard {
