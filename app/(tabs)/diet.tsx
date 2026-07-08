@@ -733,7 +733,10 @@ export default function DietScreen() {
     setSwapFoodsError(null);
 
     try {
-      const response = await getFoodsByExchangeGroup(ingredient.exchangeGroupId);
+      const response = await getFoodsByExchangeGroup(
+        ingredient.exchangeGroupId,
+        ingredient.portion.equivalents,
+      );
       setSwapFoods(response);
     } catch (loadError) {
       const apiError = loadError as ApiError;

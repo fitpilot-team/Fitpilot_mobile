@@ -14,6 +14,7 @@ import type {
   ClientDietRecipeCard,
   ClientDietRecipeDetail,
   ClientDietWeekDay,
+  ClientFoodSwapPreview,
   ClientFoodSwapCandidate,
   ClientRecipeSummary,
 } from '../types';
@@ -108,9 +109,18 @@ type NutritionFoodSwapCandidateResponse = {
   base_serving_size?: number | string | null;
   base_unit?: string | null;
   calories_kcal?: number | string | null;
-  serving_units?: {
-    id?: number | null;
-  }[] | null;
+  swap_preview?: NutritionFoodSwapPreviewResponse | null;
+};
+
+type NutritionFoodSwapPreviewResponse = {
+  quantity?: number | string | null;
+  unit_name?: string | null;
+  serving_unit_id?: number | string | null;
+  household_label?: string | null;
+  equivalents?: number | string | null;
+  grams?: number | string | null;
+  calories_kcal?: number | string | null;
+  basis?: string | null;
 };
 
 type NutritionCitationResponse = {
@@ -757,12 +767,50 @@ export const getDietRecipeDetail = async (
   return mapDietRecipeDetailResponse(recipe);
 };
 
+const normalizeSwapPreviewBasis = (
+  basis: string | null | undefined,
+): ClientFoodSwapPreview['basis'] => {
+  if (basis === 'exchange_unit' || basis === 'base_serving' || basis === 'unavailable') {
+    return basis;
+  }
+
+  return 'unavailable';
+};
+
+const mapFoodSwapPreview = (
+  preview?: NutritionFoodSwapPreviewResponse | null,
+): ClientFoodSwapPreview | null => {
+  if (!preview) {
+    return null;
+  }
+
+  return {
+    quantity: toNumber(preview.quantity),
+    unitName: preview.unit_name?.trim() || null,
+    servingUnitId: toNumber(preview.serving_unit_id),
+    householdLabel: preview.household_label?.trim() || null,
+    equivalents: toNumber(preview.equivalents),
+    grams: toNumber(preview.grams),
+    caloriesKcal: toNumber(preview.calories_kcal),
+    basis: normalizeSwapPreviewBasis(preview.basis),
+  };
+};
+
 export const getFoodsByExchangeGroup = async (
   groupId: number,
+  targetEquivalents?: number | null,
 ): Promise<ClientFoodSwapCandidate[]> => {
+  const params =
+    targetEquivalents !== null &&
+    targetEquivalents !== undefined &&
+    Number.isFinite(targetEquivalents) &&
+    targetEquivalents > 0
+      ? { target_equivalents: targetEquivalents }
+      : undefined;
+
   const foods = await nutritionClient.get<NutritionFoodSwapCandidateResponse[]>(
     `/foods/exchange-group/${groupId}`,
-    { skipErrorLogging: true },
+    { skipErrorLogging: true, params },
   );
 
   return (foods ?? []).map((food) => ({
@@ -773,7 +821,7 @@ export const getFoodsByExchangeGroup = async (
     baseServingSize: toNumber(food.base_serving_size),
     baseUnit: food.base_unit?.trim() || null,
     caloriesKcal: toNumber(food.calories_kcal),
-    servingUnitsCount: Array.isArray(food.serving_units) ? food.serving_units.length : 0,
+    swapPreview: mapFoodSwapPreview(food.swap_preview),
   }));
 };
 
