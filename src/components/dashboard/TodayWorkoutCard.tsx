@@ -100,6 +100,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 interface TodayWorkoutCardProps {
   cardState: ProgramTimelineCardState;
   onStartPress: () => void;
+  onGoToActionable?: () => void;
   onOpenSessions?: () => void;
   isLoading?: boolean;
   muscleVolume?: MuscleVolumeResponse | null;
@@ -131,6 +132,7 @@ const getEmptyIconName = (
 export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   cardState,
   onStartPress,
+  onGoToActionable,
   onOpenSessions,
   isLoading,
   muscleVolume,
@@ -238,6 +240,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
   const durationText = hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
   const sessionCaption = `Sesión ${trainingDay.session_index}`;
   const isOverdueRecommendation = cardState.recommendation === 'overdue';
+  const isLocked = cardState.locked;
   const durationContainerWidth = compact
     ? Math.max(70, chamferHorizontal - spacing.md)
     : Math.max(chamferHorizontal - spacing.xs, 84);
@@ -307,7 +310,11 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
                       {trainingDay.focus}
                     </Text>
                   ) : null}
-                  {isOverdueRecommendation ? (
+                  {isLocked ? (
+                    <Text style={styles.recommendationText} numberOfLines={compact ? 2 : undefined}>
+                      Completa primero tu entrenamiento del {cardState.actionableDateLabel}.
+                    </Text>
+                  ) : isOverdueRecommendation ? (
                     <Text style={styles.recommendationText} numberOfLines={compact ? 1 : undefined}>
                       Completa esta sesión primero.
                     </Text>
@@ -396,7 +403,7 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
 
             <View style={[styles.actionsRow, compact ? styles.actionsRowCompact : null]}>
               <TouchableOpacity
-                style={styles.startButton}
+                style={[styles.startButton, isLocked ? styles.startButtonLocked : null]}
                 onPress={onStartPress}
                 activeOpacity={0.9}
               >
@@ -407,10 +414,27 @@ export const TodayWorkoutCard: React.FC<TodayWorkoutCardProps> = ({
                 >
                   <Text style={styles.startButtonText}>{cardState.actionLabel}</Text>
                   <View style={[styles.arrowCircle, compact ? styles.arrowCircleCompact : null]}>
-                    <Ionicons name="arrow-forward" size={compact ? 16 : 18} color={theme.colors.primary} />
+                    <Ionicons
+                      name={isLocked ? 'lock-closed' : 'arrow-forward'}
+                      size={compact ? 16 : 18}
+                      color={theme.colors.primary}
+                    />
                   </View>
                 </BlurView>
               </TouchableOpacity>
+
+              {isLocked && onGoToActionable ? (
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={onGoToActionable}
+                  activeOpacity={0.86}
+                >
+                  <BlurView intensity={50} tint={theme.colors.blurTint} style={styles.secondaryButtonBlur}>
+                    <Ionicons name="navigate-outline" size={16} color={colors.white} />
+                    <Text style={styles.secondaryButtonText}>Ir al pendiente</Text>
+                  </BlurView>
+                </TouchableOpacity>
+              ) : null}
 
               {cardState.hasMultipleSessions ? (
                 <TouchableOpacity
@@ -741,6 +765,9 @@ const createStyles = (theme: AppTheme) =>
       alignSelf: 'flex-start',
       borderRadius: borderRadius.full,
       overflow: 'hidden',
+    },
+    startButtonLocked: {
+      opacity: 0.55,
     },
     startButtonBlur: {
       flexDirection: 'row',

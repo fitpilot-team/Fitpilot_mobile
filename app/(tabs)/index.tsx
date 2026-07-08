@@ -64,9 +64,13 @@ import {
   buildProgramTimelineModel,
   buildProgramTimelineView,
   getProgramTimelineCalendarDayLabel,
+  getProgramTimelineDefaultFocusDateKey,
   getProgramTimelineWeekLabel,
+  isSessionActionable,
   shiftProgramTimelineFocusByWeek,
+  type ProgramTimelineSession,
 } from '../../src/utils/programTimeline';
+import { toast } from '../../src/store/toastStore';
 
 const stripExistingClientContextPrefix = (value: string) =>
   value
@@ -334,14 +338,13 @@ export default function HomeScreen() {
   }, [dashboardDataVersion, showInitialLoadingState]);
 
   useEffect(() => {
+    const defaultFocusDateKey = getProgramTimelineDefaultFocusDateKey(programTimelineModel);
     setFocusedDateKey((currentDateKey) => (
-      currentDateKey === programTimelineModel.initialFocusedDateKey
-        ? currentDateKey
-        : programTimelineModel.initialFocusedDateKey
+      currentDateKey === defaultFocusDateKey ? currentDateKey : defaultFocusDateKey
     ));
     setIsSessionPickerVisible(false);
     setIsDatePickerVisible(false);
-  }, [dashboardDataVersion, programTimelineModel.initialFocusedDateKey]);
+  }, [dashboardDataVersion, programTimelineModel]);
 
   useEffect(() => {
     const loadMuscleVolume = async () => {
@@ -426,6 +429,44 @@ export default function HomeScreen() {
     [startWorkout],
   );
 
+  const handleGoToActionable = useCallback(() => {
+    const actionableDateKey = programTimelineView.actionableDateKey;
+    if (actionableDateKey) {
+      setFocusedDateKey(actionableDateKey);
+      setIsSessionPickerVisible(false);
+    }
+  }, [programTimelineView.actionableDateKey]);
+
+  // Puerta de entrada al inicio de una sesión: si no es el frente de cola,
+  // avisa y redirige al pendiente en vez de iniciarla.
+  const attemptOpenSession = useCallback(
+    async (session: MicrocycleSessionProgress) => {
+      const actionableSession = programTimelineView.actionableSession;
+      if (!isSessionActionable(session as ProgramTimelineSession, actionableSession)) {
+        const actionableDateKey = programTimelineView.actionableDateKey;
+        toast.info(
+          'Termina primero tu entrenamiento pendiente',
+          actionableDateKey
+            ? `Completa tu sesión del ${formatLocalDate(actionableDateKey, {
+                weekday: 'long',
+                month: 'short',
+                day: 'numeric',
+              })}`
+            : undefined,
+        );
+        handleGoToActionable();
+        return;
+      }
+      await openWorkoutSession(session);
+    },
+    [
+      handleGoToActionable,
+      openWorkoutSession,
+      programTimelineView.actionableDateKey,
+      programTimelineView.actionableSession,
+    ],
+  );
+
   const handleShiftWeek = useCallback(
     (direction: -1 | 1) => {
       const nextDateKey = shiftProgramTimelineFocusByWeek(
@@ -447,8 +488,8 @@ export default function HomeScreen() {
       return;
     }
 
-    await openWorkoutSession(programTimelineView.cardState.session);
-  }, [openWorkoutSession, programTimelineView.cardState]);
+    await attemptOpenSession(programTimelineView.cardState.session);
+  }, [attemptOpenSession, programTimelineView.cardState]);
 
   const handleOpenSessions = useCallback(() => {
     if ((programTimelineView.focusedDay?.sessions.length ?? 0) > 1) {
@@ -619,6 +660,7 @@ export default function HomeScreen() {
               <TodayWorkoutCard
                 cardState={programTimelineView.cardState}
                 onStartPress={handleStartHighlightedSession}
+                onGoToActionable={handleGoToActionable}
                 onOpenSessions={handleOpenSessions}
                 isLoading={isStartingWorkout || (isLoading && !refreshing)}
                 muscleVolume={muscleVolume}
@@ -719,7 +761,7 @@ export default function HomeScreen() {
           }}
           onSelectSession={async (session) => {
             setIsSessionPickerVisible(false);
-            await openWorkoutSession(session);
+            await attemptOpenSession(session);
           }}
         />
 
