@@ -191,6 +191,15 @@ export default function ConnectedHealthScreen() {
     try {
       const permissions = await connectedHealthService.requestPermissions();
       setState((current) => ({ ...current, permissions }));
+      if (!permissions.granted.length) {
+        Alert.alert(
+          'Sin permisos',
+          Platform.OS === 'android'
+            ? 'No se activó ningún permiso. Abre Health Connect con "Abrir ajustes", concede los permisos de FitPilot y vuelve a sincronizar.'
+            : 'No se activó ningún permiso. Revisa los ajustes de salud y vuelve a intentar.',
+        );
+        return;
+      }
       Alert.alert(
         'Permisos',
         Platform.OS === 'android'

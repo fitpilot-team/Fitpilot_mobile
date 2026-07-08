@@ -10,6 +10,8 @@ import { useAppTheme, useThemedStyles, type AppTheme } from '../../src/theme';
 import { useWorkoutStore } from '../../src/store/workoutStore';
 import { getWorkoutMacrocycleDetail } from '../../src/services/workoutAnalytics';
 import { buildTrainingSplitView, type SplitDay } from '../../src/utils/trainingSplit';
+import { buildProgramTimelineModel, findActionableSession } from '../../src/utils/programTimeline';
+import { toast } from '../../src/store/toastStore';
 import { formatLocalDate, getTodayDateKey } from '../../src/utils/date';
 import type { ApiError, Macrocycle } from '../../src/types';
 
@@ -80,9 +82,19 @@ export default function WorkoutSplitScreen() {
     void loadDetail();
   }, [isFocused, programId, loadDetail]);
 
+  // Frente de cola global (mismo cálculo que el dashboard) para bloquear el
+  // inicio fuera de orden en el split.
+  const actionableTrainingDayId = useMemo(
+    () =>
+      findActionableSession(
+        buildProgramTimelineModel(dashboardBootstrap?.timeline).orderedPlannedSessions,
+      )?.training_day_id ?? null,
+    [dashboardBootstrap],
+  );
+
   const splitView = useMemo(
-    () => buildTrainingSplitView(dashboardBootstrap, macrocycle, todayDateKey),
-    [dashboardBootstrap, macrocycle, todayDateKey],
+    () => buildTrainingSplitView(dashboardBootstrap, macrocycle, todayDateKey, actionableTrainingDayId),
+    [dashboardBootstrap, macrocycle, todayDateKey, actionableTrainingDayId],
   );
 
   // Expand "today" (or the first training day) the first time the split resolves.
@@ -113,6 +125,10 @@ export default function WorkoutSplitScreen() {
 
   const handleAction = useCallback(
     async (day: SplitDay) => {
+      if (day.locked) {
+        toast.info('Termina primero tu entrenamiento pendiente');
+        return;
+      }
       if (day.workoutLogId) {
         router.push({ pathname: '/workout/[id]', params: { id: day.workoutLogId } });
         return;

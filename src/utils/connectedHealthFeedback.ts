@@ -443,7 +443,13 @@ const buildMetrics = (
   const hrvAvg = average(summaries, (summary) => summary.hrv_ms);
   const restingHrAvg = average(summaries, (summary) => summary.resting_hr_bpm);
 
-  return [
+  // En Android (Health Connect) casi nunca hay "kcal activas"; usamos "kcal
+  // totales" como respaldo para no mostrar la tarjeta de energía vacía.
+  const energyFromActive = latest?.active_energy_kcal != null;
+  const energyValue = latest?.active_energy_kcal ?? latest?.total_energy_kcal ?? null;
+  const energyAvg = energyFromActive ? activeEnergyAvg : totalEnergyAvg;
+
+  const metrics: ConnectedHealthMetricCard[] = [
     {
       key: 'recovery',
       label: 'Recuperación',
@@ -464,10 +470,10 @@ const buildMetrics = (
     },
     {
       key: 'active_energy',
-      label: 'Kcal activas',
-      value: formatKcal(latest?.active_energy_kcal),
-      helper: formatAverageHelper(avgLabel, activeEnergyAvg, formatKcal),
-      trendLabel: formatTrend(latest?.active_energy_kcal, activeEnergyAvg, formatKcal),
+      label: energyFromActive ? 'Kcal activas' : 'Kcal totales',
+      value: formatKcal(energyValue),
+      helper: formatAverageHelper(avgLabel, energyAvg, formatKcal),
+      trendLabel: formatTrend(energyValue, energyAvg, formatKcal),
       icon: 'flame-outline',
       tone: 'neutral',
     },
@@ -524,6 +530,9 @@ const buildMetrics = (
           : 'neutral',
     },
   ];
+
+  // Evita duplicar "Kcal totales" cuando la tarjeta de energía ya usa ese valor.
+  return energyFromActive ? metrics : metrics.filter((metric) => metric.key !== 'total_energy');
 };
 
 export const buildConnectedHealthFeedback = (

@@ -34,14 +34,12 @@ import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import kotlin.coroutines.resume
 import kotlin.reflect.KClass
 
 class FitpilotHealthModule : Module() {
@@ -171,25 +169,12 @@ class FitpilotHealthModule : Module() {
       return
     }
 
-    if (Build.VERSION.SDK_INT >= 34) {
-      requestPlatformHealthPermissions(missing.toTypedArray())
-      return
-    }
-
+    // Los permisos de Health Connect (android.permission.health.*) deben pedirse
+    // SIEMPRE con el contrato PermissionController de Health Connect, en cualquier
+    // versión de Android. El diálogo de permisos genérico no puede otorgarlos
+    // (dejaba a los usuarios de Android 14+ con cero permisos), por eso usamos
+    // permissionsLauncher en todas las versiones.
     permissionsLauncher.launch(ArrayList(missing))
-  }
-
-  private suspend fun requestPlatformHealthPermissions(permissions: Array<String>) {
-    val permissionsManager = appContext.permissions
-      ?: throw Exceptions.PermissionsModuleNotFound()
-
-    suspendCancellableCoroutine { continuation ->
-      permissionsManager.askForPermissions({ _ ->
-        if (continuation.isActive) {
-          continuation.resume(Unit)
-        }
-      }, *permissions)
-    }
   }
 
   private fun openHealthConnectSettings() {
