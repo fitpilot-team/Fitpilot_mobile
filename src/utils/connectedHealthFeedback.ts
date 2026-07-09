@@ -579,4 +579,27 @@ export const shouldAutoSyncConnectedHealth = (
   return getFreshness(latestSyncAt, nowMs).isStale;
 };
 
+// Igual que shouldAutoSyncConnectedHealth pero con un umbral de antigüedad
+// configurable (en ms), para permitir re-sincronizar el dispositivo al enfocar
+// la pantalla mucho antes del umbral de 6 h.
+export const isConnectedHealthSyncOlderThan = (
+  summary: ConnectedHealthSummaryResponse | null,
+  maxAgeMs: number,
+  nowMs = Date.now(),
+): boolean => {
+  const hasData = (summary?.summaries ?? []).some(hasMetricValue);
+  const latestSyncAt = getLatestSyncAt(summary);
+
+  if (!hasData || !latestSyncAt) {
+    return true;
+  }
+
+  const parsedMs = Date.parse(latestSyncAt);
+  if (Number.isNaN(parsedMs)) {
+    return true;
+  }
+
+  return nowMs - parsedMs >= maxAgeMs;
+};
+
 export const CONNECTED_HEALTH_AUTO_SYNC_STALE_MS = STALE_SYNC_THRESHOLD_MS;

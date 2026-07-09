@@ -98,23 +98,27 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
     error,
     needsPermissionCta,
     sync,
-    syncIfStale,
-  } = useConnectedHealthFeedback({ days: 7, autoSync: true });
+    refreshOnFocus,
+  } = useConnectedHealthFeedback({
+    days: 7,
+    autoSync: true,
+    foregroundSyncMaxAgeMs: 20 * 60_000,
+  });
 
   useFocusEffect(
     useCallback(() => {
-      void syncIfStale();
-    }, [syncIfStale]),
+      void refreshOnFocus();
+    }, [refreshOnFocus]),
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        void syncIfStale();
+        void refreshOnFocus();
       }
     });
     return () => subscription.remove();
-  }, [syncIfStale]);
+  }, [refreshOnFocus]);
 
   const metricsByKey = new Map<ConnectedHealthMetricKey, ConnectedHealthMetricCard>(
     feedback.metrics.map((m) => [m.key, m]),
