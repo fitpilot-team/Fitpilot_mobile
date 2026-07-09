@@ -13,6 +13,7 @@ import type {
 } from '../types/connectedHealthFeedback';
 import {
   buildConnectedHealthFeedback,
+  isConnectedHealthSyncOlderThan,
   shouldAutoSyncConnectedHealth,
 } from '../utils/connectedHealthFeedback';
 
@@ -21,6 +22,7 @@ type UseConnectedHealthFeedbackOptions = {
   autoSync?: boolean;
   autoSyncThrottleMs?: number;
   enabled?: boolean;
+  foregroundSyncMaxAgeMs?: number;
 };
 
 const DEFAULT_SYNC_THROTTLE_MS = 60_000;
@@ -113,6 +115,7 @@ export function useConnectedHealthFeedback({
   autoSync = false,
   autoSyncThrottleMs = DEFAULT_SYNC_THROTTLE_MS,
   enabled = true,
+  foregroundSyncMaxAgeMs,
 }: UseConnectedHealthFeedbackOptions = {}) {
   const [summary, setSummary] = useState<ConnectedHealthSummaryResponse | null>(null);
   const [availability, setAvailability] = useState<FitpilotHealthAvailability | null>(null);
@@ -331,6 +334,38 @@ export function useConnectedHealthFeedback({
     await sync();
   }, [autoSyncThrottleMs, availability?.available, enabled, sync]);
 
+  // Handler pensado para el foco de pantalla / vuelta a primer plano: hace UNA
+  // sola llamada de red. Si el dispositivo está disponible y la última sync es
+  // más vieja que el umbral (y no está throttled), sincroniza el dispositivo
+  // (que además re-lee el resumen). En caso contrario, solo re-lee el backend
+  // para reflejar el último estado sin coste de sensor.
+  const refreshOnFocus = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
+
+    const checkedAtMs = Date.now();
+    const isAvailable = availability?.available === true;
+    const isStale =
+      foregroundSyncMaxAgeMs != null
+        ? isConnectedHealthSyncOlderThan(summaryRef.current, foregroundSyncMaxAgeMs, checkedAtMs)
+        : shouldAutoSyncConnectedHealth(summaryRef.current, checkedAtMs);
+    const isThrottled = checkedAtMs - lastSyncAttemptRef.current < autoSyncThrottleMs;
+
+    if (isAvailable && isStale && !isThrottled) {
+      await sync();
+    } else {
+      await refresh();
+    }
+  }, [
+    autoSyncThrottleMs,
+    availability?.available,
+    enabled,
+    foregroundSyncMaxAgeMs,
+    refresh,
+    sync,
+  ]);
+
   useEffect(() => {
     if (!enabled) {
       setIsLoading(false);
@@ -366,5 +401,6 @@ export function useConnectedHealthFeedback({
     refresh,
     sync,
     syncIfStale,
+    refreshOnFocus,
   };
 }
