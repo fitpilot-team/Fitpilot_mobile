@@ -37,6 +37,17 @@ const autoSyncAttempted = new Set<string>();
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
+// HealthKit lanza "Authorization not determined" cuando aún no se ha resuelto la
+// autorización (p.ej. tras reinstalar la dev build, que resetea los permisos, o antes
+// de que el usuario responda la hoja de permisos). No es un fallo real de sincronización:
+// no debe mostrarse como error alarmante, sobre todo si el resumen del backend ya tiene
+// datos. connectedHealthService.sync ya pide permisos antes de consultar en iOS, así que
+// esto solo cubre casos residuales.
+const isAuthorizationPendingError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : '';
+  return /not[\s_]?determined/i.test(message);
+};
+
 const pickLatestIsoString = (
   current: string | null | undefined,
   candidate: string | null | undefined,
@@ -240,7 +251,7 @@ export function useConnectedHealthFeedback({
             setNowMs(refreshedAtMs);
           }
         } catch (syncFailure) {
-          if (isMountedRef.current) {
+          if (isMountedRef.current && !isAuthorizationPendingError(syncFailure)) {
             setSyncError(
               getErrorMessage(
                 syncFailure,
@@ -296,7 +307,7 @@ export function useConnectedHealthFeedback({
         setNowMs(refreshedAtMs);
       }
     } catch (syncFailure) {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && !isAuthorizationPendingError(syncFailure)) {
         setSyncError(
           getErrorMessage(syncFailure, 'No se pudo sincronizar salud conectada.'),
         );

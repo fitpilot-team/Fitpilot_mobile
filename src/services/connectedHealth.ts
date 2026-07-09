@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import FitpilotHealth, {
   type FitpilotHealthAvailability,
   type FitpilotHealthPermissionStatus,
@@ -114,6 +115,18 @@ export const connectedHealthService = {
     const availability = await FitpilotHealth.isAvailable();
     if (!availability.available) {
       throw new Error(availability.message || 'Salud conectada no está disponible en este dispositivo.');
+    }
+
+    // iOS (HealthKit): las queries lanzan HKError.errorAuthorizationNotDetermined
+    // ("Authorization not determined") si se ejecutan ANTES de requestAuthorization.
+    // requestPermissions es idempotente: iOS solo muestra la hoja de permisos cuando
+    // los tipos están en `notDetermined` y no muestra nada si el usuario ya decidió,
+    // así que pedirlo antes de cada sync saca los tipos de ese estado sin molestar a
+    // quien ya concedió. En Android NO lo pedimos aquí para no lanzar la UI de Health
+    // Connect de forma inesperada durante el auto-sync (allí las queries ya filtran por
+    // permiso concedido y una lectura sin permiso no lanza error, solo devuelve vacío).
+    if (Platform.OS === 'ios') {
+      await FitpilotHealth.requestPermissions();
     }
 
     const payload = await FitpilotHealth.syncRange(buildSyncRange(days));
