@@ -103,6 +103,13 @@ const MEASUREMENTS_TABS = [
   { key: 'health', label: 'Salud' },
 ] satisfies { key: MeasurementsTab; label: string }[];
 
+const resolveTabParam = (value: string | undefined): MeasurementsTab | null => {
+  if (value === 'summary' || value === 'body' || value === 'glucose' || value === 'health') {
+    return value;
+  }
+  return null;
+};
+
 const CREATE_ACTIONS = [
   {
     key: 'body',
@@ -164,21 +171,20 @@ export default function MeasurementsScreen() {
   );
   const wasFocusedRef = useRef(false);
   const params = useLocalSearchParams<{ initialTab?: string }>();
-  const resolveTabParam = (value: string | undefined): MeasurementsTab | null => {
-    if (value === 'summary' || value === 'body' || value === 'glucose' || value === 'health') {
-      return value;
-    }
-    return null;
-  };
   const [activeTab, setActiveTab] = useState<MeasurementsTab>(
     resolveTabParam(params.initialTab) ?? 'summary',
   );
   useEffect(() => {
     const nextTab = resolveTabParam(params.initialTab);
-    if (nextTab && nextTab !== activeTab) {
-      setActiveTab(nextTab);
+    if (!nextTab) {
+      return;
     }
-  }, [activeTab, params.initialTab]);
+    // Consumir el parámetro de navegación una sola vez y limpiarlo: así el efecto
+    // no se re-dispara al cambiar de pestaña el usuario (no revierte su navegación)
+    // ni re-monta <ConnectedHealthFeedbackDetail /> en bucle.
+    setActiveTab(nextTab);
+    router.setParams({ initialTab: undefined });
+  }, [params.initialTab]);
   const [measurements, setMeasurements] = useState<MeasurementHistoryItem[]>([]);
   const [pagination, setPagination] = useState<MeasurementPagination | null>(null);
   const [detailCache, setDetailCache] = useState<Record<string, MeasurementDetail>>(
