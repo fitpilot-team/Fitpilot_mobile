@@ -217,7 +217,6 @@ export const RecipeIngredientSwapModal: React.FC<RecipeIngredientSwapModalProps>
                 );
                 const gramsValue = formatPreviewNumber(swapPreview?.grams ?? null);
                 const gramsMeasure = gramsValue ? `${gramsValue} g` : null;
-                const equivalentsValue = formatPreviewNumber(swapPreview?.equivalents ?? null);
                 const kcalMeasure = formatPreviewKcal(swapPreview?.caloriesKcal ?? null);
                 const showGramsChip =
                   hasApplicablePreview &&
@@ -266,11 +265,6 @@ export const RecipeIngredientSwapModal: React.FC<RecipeIngredientSwapModalProps>
                       {showGramsChip ? (
                         <View style={styles.metaChip}>
                           <Text style={styles.metaChipText}>{gramsMeasure}</Text>
-                        </View>
-                      ) : null}
-                      {hasApplicablePreview && equivalentsValue ? (
-                        <View style={styles.metaChip}>
-                          <Text style={styles.metaChipText}>{equivalentsValue} eq</Text>
                         </View>
                       ) : null}
                       <View style={styles.metaChip}>
