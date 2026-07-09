@@ -129,6 +129,9 @@ function withFitpilotHealth(config) {
     mod.modResults.NSHealthShareUsageDescription =
       mod.modResults.NSHealthShareUsageDescription ||
       'FitPilot lee datos de salud y actividad para mejorar el seguimiento de kcal, entrenamiento y recuperacion con tu entrenador.';
+    mod.modResults.NSHealthUpdateUsageDescription =
+      mod.modResults.NSHealthUpdateUsageDescription ||
+      'FitPilot guarda entrenamientos y datos de actividad en Salud para mantener tu progreso sincronizado.';
     return mod;
   });
 

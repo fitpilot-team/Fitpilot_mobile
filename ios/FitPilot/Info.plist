@@ -59,6 +59,8 @@
     <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
     <key>NSHealthShareUsageDescription</key>
     <string>FitPilot lee datos de salud y actividad para mejorar el seguimiento de kcal, entrenamiento y recuperacion con tu entrenador.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>FitPilot guarda entrenamientos y datos de actividad en Salud para mantener tu progreso sincronizado.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to record voice notes for chat.</string>
     <key>NSPhotoLibraryUsageDescription</key>
