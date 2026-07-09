@@ -137,6 +137,7 @@ export function useConnectedHealthFeedback({
   const isMountedRef = useRef(true);
   const summaryRef = useRef<ConnectedHealthSummaryResponse | null>(null);
   const lastSyncAttemptRef = useRef<number>(0);
+  const isSyncingRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -162,6 +163,53 @@ export function useConnectedHealthFeedback({
 
     return () => clearInterval(intervalId);
   }, [enabled]);
+
+  // Ejecuta un sync completo (HealthKit -> backend -> refresca resumen). Con guarda de
+  // re-entrada para no lanzar syncs solapados. `ensureAuthorization` solo debe ser true
+  // en acciones EXPLÍCITAS del usuario: pedir permisos desde auto-sync/focus/AppState
+  // (fondo) puede colgar la hoja de HealthKit en iOS y dejar "Sincronizando" infinito.
+  const performSync = useCallback(
+    async ({ ensureAuthorization }: { ensureAuthorization: boolean }) => {
+      if (!enabled || isSyncingRef.current) {
+        return;
+      }
+
+      isSyncingRef.current = true;
+      const syncStartedAtMs = Date.now();
+      lastSyncAttemptRef.current = syncStartedAtMs;
+      setIsSyncing(true);
+      setSyncError(null);
+      setNowMs(syncStartedAtMs);
+
+      try {
+        const syncResult = await connectedHealthService.sync(30, { ensureAuthorization });
+        const refreshedSummary = await connectedHealthService.getSummary(days);
+        const nextSyncedSummary = withSuccessfulSyncTimestamp(
+          refreshedSummary,
+          syncResult,
+        );
+
+        if (isMountedRef.current) {
+          const refreshedAtMs = Date.now();
+          summaryRef.current = nextSyncedSummary;
+          setSummary(nextSyncedSummary);
+          setNowMs(refreshedAtMs);
+        }
+      } catch (syncFailure) {
+        if (isMountedRef.current && !isAuthorizationPendingError(syncFailure)) {
+          setSyncError(
+            getErrorMessage(syncFailure, 'No se pudo sincronizar salud conectada.'),
+          );
+        }
+      } finally {
+        isSyncingRef.current = false;
+        if (isMountedRef.current) {
+          setIsSyncing(false);
+        }
+      }
+    },
+    [days, enabled],
+  );
 
   const load = useCallback(
     async ({ allowAutoSync = false, silent = false }: LoadOptions = {}) => {
@@ -230,40 +278,8 @@ export function useConnectedHealthFeedback({
 
       if (shouldAutoSync) {
         autoSyncAttempted.add(AUTO_SYNC_SESSION_KEY);
-        const autoSyncStartedAtMs = Date.now();
-        lastSyncAttemptRef.current = autoSyncStartedAtMs;
-        setIsSyncing(true);
-        setSyncError(null);
-        setNowMs(autoSyncStartedAtMs);
-
-        try {
-          const syncResult = await connectedHealthService.sync(30);
-          const refreshedSummary = await connectedHealthService.getSummary(days);
-          const nextSyncedSummary = withSuccessfulSyncTimestamp(
-            refreshedSummary,
-            syncResult,
-          );
-
-          if (isMountedRef.current) {
-            const refreshedAtMs = Date.now();
-            summaryRef.current = nextSyncedSummary;
-            setSummary(nextSyncedSummary);
-            setNowMs(refreshedAtMs);
-          }
-        } catch (syncFailure) {
-          if (isMountedRef.current && !isAuthorizationPendingError(syncFailure)) {
-            setSyncError(
-              getErrorMessage(
-                syncFailure,
-                'No se pudo sincronizar salud conectada.',
-              ),
-            );
-          }
-        } finally {
-          if (isMountedRef.current) {
-            setIsSyncing(false);
-          }
-        }
+        // Auto-sync: nunca pide permisos (no presenta hojas de HealthKit en segundo plano).
+        await performSync({ ensureAuthorization: false });
       }
 
       if (isMountedRef.current && !silent) {
@@ -271,7 +287,7 @@ export function useConnectedHealthFeedback({
         setIsRefreshing(false);
       }
     },
-    [autoSync, days, enabled],
+    [autoSync, days, enabled, performSync],
   );
 
   const refresh = useCallback(
@@ -282,42 +298,10 @@ export function useConnectedHealthFeedback({
   );
 
   const sync = useCallback(async () => {
-    if (!enabled) {
-      return;
-    }
-
-    const syncStartedAtMs = Date.now();
-    lastSyncAttemptRef.current = syncStartedAtMs;
-    setIsSyncing(true);
-    setSyncError(null);
-    setNowMs(syncStartedAtMs);
-
-    try {
-      const syncResult = await connectedHealthService.sync(30);
-      const refreshedSummary = await connectedHealthService.getSummary(days);
-      const nextSyncedSummary = withSuccessfulSyncTimestamp(
-        refreshedSummary,
-        syncResult,
-      );
-
-      if (isMountedRef.current) {
-        const refreshedAtMs = Date.now();
-        summaryRef.current = nextSyncedSummary;
-        setSummary(nextSyncedSummary);
-        setNowMs(refreshedAtMs);
-      }
-    } catch (syncFailure) {
-      if (isMountedRef.current && !isAuthorizationPendingError(syncFailure)) {
-        setSyncError(
-          getErrorMessage(syncFailure, 'No se pudo sincronizar salud conectada.'),
-        );
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setIsSyncing(false);
-      }
-    }
-  }, [days, enabled]);
+    // Acción explícita del usuario: aquí SÍ pedimos autorización (idempotente y en primer
+    // plano, contexto seguro para presentar la hoja de permisos de HealthKit).
+    await performSync({ ensureAuthorization: true });
+  }, [performSync]);
 
   const syncIfStale = useCallback(async () => {
     if (!enabled) {
@@ -339,8 +323,9 @@ export function useConnectedHealthFeedback({
       return;
     }
 
-    await sync();
-  }, [autoSyncThrottleMs, availability?.available, enabled, sync]);
+    // Disparo en segundo plano (focus / AppState): NO pide permisos.
+    await performSync({ ensureAuthorization: false });
+  }, [autoSyncThrottleMs, availability?.available, enabled, performSync]);
 
   useEffect(() => {
     if (!enabled) {
