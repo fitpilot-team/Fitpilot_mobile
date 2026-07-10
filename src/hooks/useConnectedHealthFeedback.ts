@@ -196,10 +196,19 @@ export function useConnectedHealthFeedback({
           setNowMs(refreshedAtMs);
         }
       } catch (syncFailure) {
-        if (isMountedRef.current && !isAuthorizationPendingError(syncFailure)) {
-          setSyncError(
-            getErrorMessage(syncFailure, 'No se pudo sincronizar salud conectada.'),
-          );
+        if (isMountedRef.current) {
+          if (!isAuthorizationPendingError(syncFailure)) {
+            setSyncError(
+              getErrorMessage(syncFailure, 'No se pudo sincronizar salud conectada.'),
+            );
+          } else if (ensureAuthorization) {
+            // Sync explícito: ya pedimos autorización y iOS aun así no la aplicó (hoja de
+            // permisos que se cierra sola; estado corrupto tras reinstalar la app). No hay
+            // nada más que la app pueda hacer: guiamos al usuario a arreglarlo en el sistema.
+            setSyncError(
+              'iOS no aplicó los permisos de Salud. Reinicia el iPhone y vuelve a intentar. Si persiste, ve a Ajustes > Privacidad y seguridad > Salud > FitPilot y activa los permisos.',
+            );
+          }
         }
       } finally {
         isSyncingRef.current = false;
