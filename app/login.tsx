@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   View,
@@ -7,24 +7,22 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Dimensions,
   Linking,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../src/store/authStore';
 import { Button, Input, Logo } from '../src/components/common';
 import { TurnstileChallengeModal } from '../src/components/auth/TurnstileChallengeModal';
-import { brandColors, spacing, fontSize, borderRadius } from '../src/constants/colors';
+import { brandColors, spacing, fontSize, scaledFontSize, borderRadius } from '../src/constants/colors';
 import { clientForgotPasswordUrl } from '../src/constants/support';
 import { useThemedStyles, type AppTheme } from '../src/theme';
+import { isSmallScreen, isVerySmallScreen } from '../src/utils/responsive';
 import type { LoginCredentials } from '../src/types';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const isSmallScreen = SCREEN_WIDTH < 400;
-const isVerySmallScreen = SCREEN_WIDTH < 375;
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -34,6 +32,27 @@ export default function LoginScreen() {
   const [pendingCredentials, setPendingCredentials] = useState<LoginCredentials | null>(null);
   const { login, isLoading, error, clearError, isAuthenticated, user } = useAuthStore();
   const styles = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const smallScreen = isSmallScreen(width);
+  const verySmallScreen = isVerySmallScreen(width);
+
+  const scaledText = useMemo(
+    () => ({
+      tagline: { fontSize: scaledFontSize('sm', width) },
+      welcomeTitle: { fontSize: scaledFontSize('2xl', width) },
+      welcomeSubtitle: { fontSize: scaledFontSize('base', width) },
+      errorText: { fontSize: scaledFontSize('sm', width) },
+      forgotPasswordText: { fontSize: scaledFontSize('sm', width) },
+      createAccountText: { fontSize: scaledFontSize('sm', width) },
+      infoCardTitle: { fontSize: scaledFontSize('sm', width) },
+      infoCardText: { fontSize: scaledFontSize('xs', width) },
+      infoCardTextSecondary: { fontSize: scaledFontSize('xs', width) },
+    }),
+    [width],
+  );
+
+  const headerPaddingBottom = verySmallScreen ? 14 : smallScreen ? 18 : 36;
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -42,7 +61,7 @@ export default function LoginScreen() {
         return;
       }
 
-      router.replace('/(tabs)');
+      router.replace('/');
     }
   }, [isAuthenticated, user?.onboardingStatus]);
 
@@ -73,7 +92,7 @@ export default function LoginScreen() {
     if (result.status === 'success') {
       setPendingCredentials(null);
       setIsCaptchaVisible(false);
-      router.replace('/(tabs)');
+      router.replace('/');
       return;
     }
 
@@ -116,7 +135,7 @@ export default function LoginScreen() {
     if (!clientForgotPasswordUrl) {
       Alert.alert(
         'Enlace no disponible',
-        'Todavia no hay una URL configurada para restablecer la contrasena.',
+        'Todavía no hay una URL configurada para restablecer la contraseña.',
       );
       return;
     }
@@ -144,48 +163,62 @@ export default function LoginScreen() {
         colors={[brandColors.navy, brandColors.sky]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.headerGradient}
+        style={[
+          styles.headerGradient,
+          {
+            paddingTop: insets.top + spacing.md,
+            paddingBottom: headerPaddingBottom,
+          },
+        ]}
       >
         <View style={styles.logoContainer}>
           <View
             style={[
               styles.logoBackground,
-              isSmallScreen ? styles.logoBackgroundSmall : null,
-              isVerySmallScreen ? styles.logoBackgroundXSmall : null,
+              smallScreen ? styles.logoBackgroundSmall : null,
+              verySmallScreen ? styles.logoBackgroundXSmall : null,
             ]}
           >
             <Logo
-              size={isVerySmallScreen ? 'xs' : isSmallScreen ? 'sm' : 'md'}
+              size={verySmallScreen ? 'xs' : smallScreen ? 'sm' : 'md'}
               showText
               animated
             />
           </View>
-          <Text style={styles.tagline}>Tu entrenamiento y dieta personalizados</Text>
+          <Text style={[styles.tagline, scaledText.tagline]}>
+            Tu entrenamiento y dieta personalizados
+          </Text>
         </View>
       </LinearGradient>
 
       <ScrollView
         style={styles.formContainer}
-        contentContainerStyle={styles.formContent}
+        contentContainerStyle={[
+          styles.formContent,
+          {
+            flexGrow: 1,
+            paddingBottom: Math.max(insets.bottom + spacing.lg, spacing.lg),
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.welcomeTitle}>Bienvenido</Text>
-        <Text style={styles.welcomeSubtitle}>
-          Inicia sesion o crea tu cuenta para comenzar tu programa
+        <Text style={[styles.welcomeTitle, scaledText.welcomeTitle]}>Bienvenido</Text>
+        <Text style={[styles.welcomeSubtitle, scaledText.welcomeSubtitle]}>
+          Inicia sesión o crea tu cuenta para comenzar tu programa
         </Text>
 
         {error ? (
           <View style={styles.errorContainer}>
             <View style={styles.errorHeader}>
               <Ionicons name="alert-circle" size={20} color={styles.errorIcon.color} />
-              <Text style={styles.errorTitle}>No se pudo iniciar sesion</Text>
+              <Text style={styles.errorTitle}>No se pudo iniciar sesión</Text>
             </View>
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={[styles.errorText, scaledText.errorText]}>{error}</Text>
           </View>
         ) : null}
 
         <Input
-          label="Correo electronico"
+          label="Correo electrónico"
           placeholder="tu@email.com"
           value={email}
           onChangeText={handleChangeEmail}
@@ -196,7 +229,7 @@ export default function LoginScreen() {
         />
 
         <Input
-          label="Contrasena"
+          label="Contraseña"
           placeholder="********"
           value={password}
           onChangeText={handleChangePassword}
@@ -206,11 +239,13 @@ export default function LoginScreen() {
         />
 
         <Pressable onPress={handleForgotPassword} style={styles.forgotPasswordLink}>
-          <Text style={styles.forgotPasswordText}>Olvide mi contraseña</Text>
+          <Text style={[styles.forgotPasswordText, scaledText.forgotPasswordText]}>
+            Olvide mi contraseña
+          </Text>
         </Pressable>
 
         <Button
-          title="Iniciar sesion"
+          title="Iniciar sesión"
           onPress={handleLogin}
           isLoading={isLoading}
           disabled={!email.trim() || !password.trim()}
@@ -218,19 +253,21 @@ export default function LoginScreen() {
         />
 
         <Pressable onPress={() => router.push('/register')} style={styles.createAccountButton}>
-          <Text style={styles.createAccountText}>Crear cuenta nueva</Text>
+          <Text style={[styles.createAccountText, scaledText.createAccountText]}>
+            Crear cuenta nueva
+          </Text>
         </Pressable>
 
         <View style={styles.infoCard}>
           <View style={styles.infoCardHeader}>
             <Ionicons name="information-circle-outline" size={20} color={brandColors.sky} />
-            <Text style={styles.infoCardTitle}>Empieza en FitPilot</Text>
+            <Text style={[styles.infoCardTitle, scaledText.infoCardTitle]}>Empieza en FitPilot</Text>
           </View>
-          <Text style={styles.infoCardText}>
+          <Text style={[styles.infoCardText, scaledText.infoCardText]}>
             Crea tu cuenta desde la app y completa el onboarding para que podamos
             personalizar tu experiencia.
           </Text>
-          <Text style={styles.infoCardTextSecondary}>
+          <Text style={[styles.infoCardTextSecondary, scaledText.infoCardTextSecondary]}>
             Si ya trabajas con un profesional, usa el mismo correo que compartiste con el.
           </Text>
         </View>
@@ -253,8 +290,6 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.colors.background,
     },
     headerGradient: {
-      paddingTop: isVerySmallScreen ? 26 : isSmallScreen ? 32 : 54,
-      paddingBottom: isVerySmallScreen ? 14 : isSmallScreen ? 18 : 36,
       borderBottomLeftRadius: 30,
       borderBottomRightRadius: 30,
     },

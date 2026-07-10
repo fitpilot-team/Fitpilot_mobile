@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import {
   borderRadius,
   brandColors,
+  buttonGradients,
   colors,
   spacing,
   fontSize,
@@ -20,6 +21,9 @@ import { useAppTheme, useThemedStyles } from "../../theme";
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
 type ButtonAppearance = "default" | "profile";
+
+// El tamaño sm mide 36px; el hitSlop lleva el área táctil efectiva a 44px.
+const SM_HIT_SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
 
 interface ButtonProps {
   title: string;
@@ -50,6 +54,9 @@ export const Button: React.FC<ButtonProps> = ({
   const styles = useThemedStyles(createStyles);
   const isDisabled = disabled || isLoading;
   const isProfileAppearance = appearance === "profile";
+  const primaryGradientColors = theme.isDark
+    ? buttonGradients.primary.dark
+    : buttonGradients.primary.light;
   const defaultSizeStyleMap = {
     sm: styles.defaultSize_sm,
     md: styles.defaultSize_md,
@@ -121,6 +128,10 @@ export const Button: React.FC<ButtonProps> = ({
         onPress={onPress}
         disabled={isDisabled}
         activeOpacity={isProfileAppearance ? 0.9 : 0.8}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ disabled: isDisabled, busy: isLoading }}
+        hitSlop={size === "sm" ? SM_HIT_SLOP : undefined}
         style={[
           fullWidth ? styles.fullWidth : null,
           isDisabled ? styles.disabled : null,
@@ -128,9 +139,9 @@ export const Button: React.FC<ButtonProps> = ({
         ]}
       >
         <LinearGradient
-          colors={[brandColors.navy, brandColors.sky]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
+          colors={primaryGradientColors}
+          start={{ x: 0, y: 0.15 }}
+          end={{ x: 1, y: 0.85 }}
           style={[
             styles.base,
             isProfileAppearance ? styles.profileBase : styles.defaultBase,
@@ -163,6 +174,10 @@ export const Button: React.FC<ButtonProps> = ({
       onPress={onPress}
       disabled={isDisabled}
       activeOpacity={isProfileAppearance ? 0.9 : 0.7}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: isDisabled, busy: isLoading }}
+      hitSlop={size === "sm" ? SM_HIT_SLOP : undefined}
     >
       {content}
     </TouchableOpacity>
@@ -178,33 +193,33 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>["theme"]) =>
       overflow: "hidden",
     },
     defaultBase: {
-      borderRadius: borderRadius.lg,
+      borderRadius: borderRadius.full,
     },
     profileBase: {
-      minHeight: 56,
-      paddingHorizontal: spacing.lg,
-      borderRadius: 20,
+      minHeight: 50,
+      paddingHorizontal: 20,
+      borderRadius: borderRadius.full,
     },
     fullWidth: {
       alignSelf: "stretch",
     },
     defaultPrimary: {
-      shadowColor: brandColors.navy,
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.25,
-      shadowRadius: 6,
-      elevation: 4,
+      shadowColor: brandColors.sky,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: theme.isDark ? 0.2 : 0.12,
+      shadowRadius: 10,
+      elevation: 2,
     },
     profilePrimary: {
       borderWidth: 1,
       borderColor: theme.isDark
-        ? "rgba(255,255,255,0.08)"
-        : "rgba(255,255,255,0.12)",
-      shadowColor: brandColors.navy,
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: theme.isDark ? 0.34 : 0.2,
-      shadowRadius: 18,
-      elevation: 8,
+        ? "rgba(255,255,255,0.1)"
+        : "rgba(255,255,255,0.26)",
+      shadowColor: brandColors.sky,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: theme.isDark ? 0.22 : 0.12,
+      shadowRadius: 14,
+      elevation: 3,
     },
     default_secondary: {
       backgroundColor: theme.colors.surface,
@@ -247,16 +262,19 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>["theme"]) =>
       elevation: 4,
     },
     defaultSize_sm: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
+      minHeight: 36,
+      paddingVertical: 7,
+      paddingHorizontal: 14,
     },
     defaultSize_md: {
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.lg,
+      minHeight: 44,
+      paddingVertical: 10,
+      paddingHorizontal: 18,
     },
     defaultSize_lg: {
-      paddingVertical: spacing.lg,
-      paddingHorizontal: spacing.xl,
+      minHeight: 50,
+      paddingVertical: 12,
+      paddingHorizontal: 22,
     },
     disabled: {
       opacity: 0.5,

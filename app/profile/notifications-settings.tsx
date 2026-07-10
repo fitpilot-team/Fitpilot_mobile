@@ -15,6 +15,7 @@ type NotificationPreferences = {
   meals_enabled: boolean;
   assignments_enabled: boolean;
   subscriptions_enabled: boolean;
+  chat_enabled: boolean;
   health_insights_enabled: boolean;
   step_reminders_enabled: boolean;
   quiet_hours_start_min: number;
@@ -45,6 +46,7 @@ export default function NotificationsSettingsScreen() {
     meals_enabled: true,
     assignments_enabled: true,
     subscriptions_enabled: true,
+    chat_enabled: true,
     health_insights_enabled: true,
     step_reminders_enabled: true,
     quiet_hours_start_min: DEFAULT_QUIET_START_MIN,
@@ -87,6 +89,7 @@ export default function NotificationsSettingsScreen() {
         meals_enabled?: boolean;
         assignments_enabled?: boolean;
         subscriptions_enabled?: boolean;
+        chat_enabled?: boolean;
         health_insights_enabled?: boolean;
         step_reminders_enabled?: boolean;
         quiet_hours_start_min?: number;
@@ -98,6 +101,7 @@ export default function NotificationsSettingsScreen() {
         meals_enabled: response.meals_enabled ?? true,
         assignments_enabled: response.assignments_enabled ?? true,
         subscriptions_enabled: response.subscriptions_enabled ?? true,
+        chat_enabled: response.chat_enabled ?? true,
         health_insights_enabled: response.health_insights_enabled ?? true,
         step_reminders_enabled: response.step_reminders_enabled ?? true,
         quiet_hours_start_min: response.quiet_hours_start_min ?? DEFAULT_QUIET_START_MIN,
@@ -114,7 +118,26 @@ export default function NotificationsSettingsScreen() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await nutritionClient.post('/users/notification-preferences', preferences);
+      let nextPreferences = preferences;
+
+      if (preferences.push_enabled) {
+        const registeredPushToken = userId
+          ? await registerDevicePushTokenForUser(userId, { force: true })
+          : false;
+
+        if (!registeredPushToken) {
+          nextPreferences = { ...preferences, push_enabled: false };
+          setPreferences(nextPreferences);
+          await nutritionClient.post('/users/notification-preferences', nextPreferences);
+          Alert.alert(
+            'Notificaciones',
+            'No se pudieron activar las notificaciones en este dispositivo. Revisa los permisos de Android para FitPilot, tu conexión e intenta de nuevo.',
+          );
+          return;
+        }
+      }
+
+      await nutritionClient.post('/users/notification-preferences', nextPreferences);
       Alert.alert(
         'Éxito',
         'Tus preferencias de notificaciones se guardaron correctamente.',
@@ -245,6 +268,20 @@ export default function NotificationsSettingsScreen() {
               <Switch
                 value={preferences.assignments_enabled}
                 onValueChange={() => toggleSwitch('assignments_enabled')}
+                disabled={!preferences.push_enabled}
+                trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primary }}
+                thumbColor={theme.colors.surface}
+              />
+            </View>
+
+            <View style={[styles.settingRow, !preferences.push_enabled ? styles.disabledRow : null]}>
+              <View style={styles.textContainer}>
+                <Text style={styles.settingTitle}>Chat</Text>
+                <Text style={styles.settingDescription}>Mensajes nuevos de tu profesional.</Text>
+              </View>
+              <Switch
+                value={preferences.chat_enabled}
+                onValueChange={() => toggleSwitch('chat_enabled')}
                 disabled={!preferences.push_enabled}
                 trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primary }}
                 thumbColor={theme.colors.surface}

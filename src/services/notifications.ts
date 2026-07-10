@@ -6,6 +6,34 @@ import * as SecureStore from 'expo-secure-store';
 
 const PUSH_TOKEN_FINGERPRINT_KEY = 'fitpilot_push_token_fingerprint';
 
+type RegisterDevicePushTokenOptions = {
+  force?: boolean;
+};
+
+type PublicExtra = {
+  appEnv?: string;
+  nutritionApiUrl?: string;
+  eas?: {
+    projectId?: string;
+  };
+};
+
+const getPushRegistrationScope = () => {
+  const extra = (Constants.expoConfig?.extra ?? {}) as PublicExtra;
+  const projectId =
+    extra.eas?.projectId ??
+    Constants?.easConfig?.projectId ??
+    'unknown-project';
+  const appEnv = extra.appEnv ?? 'unknown-env';
+  const nutritionApiUrl = (
+    process.env.EXPO_PUBLIC_NUTRITION_API_URL ??
+    extra.nutritionApiUrl ??
+    'unknown-api'
+  ).replace(/\/+$/, '');
+
+  return `${appEnv}:${projectId}:${nutritionApiUrl}`;
+};
+
 // Configure how notifications behave when the app is in the foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -88,21 +116,25 @@ export async function sendPushTokenToBackend(pushToken: string): Promise<boolean
   }
 }
 
-export async function registerDevicePushTokenForUser(userId: string): Promise<void> {
+export async function registerDevicePushTokenForUser(
+  userId: string,
+  options: RegisterDevicePushTokenOptions = {},
+): Promise<boolean> {
   const pushToken = await registerForPushNotificationsAsync();
   if (!pushToken) {
-    return;
+    return false;
   }
 
-  const fingerprint = `${userId}:${pushToken}`;
+  const fingerprint = `${getPushRegistrationScope()}:${userId}:${pushToken}`;
   const previousFingerprint = await SecureStore.getItemAsync(PUSH_TOKEN_FINGERPRINT_KEY);
-  if (previousFingerprint === fingerprint) {
-    return;
+  if (!options.force && previousFingerprint === fingerprint) {
+    return true;
   }
 
   const wasRegistered = await sendPushTokenToBackend(pushToken);
   if (!wasRegistered) {
-    return;
+    return false;
   }
   await SecureStore.setItemAsync(PUSH_TOKEN_FINGERPRINT_KEY, fingerprint);
+  return true;
 }

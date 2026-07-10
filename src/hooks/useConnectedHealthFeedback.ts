@@ -5,6 +5,7 @@ import type {
 } from '../../modules/fitpilot-health';
 import {
   connectedHealthService,
+  type ConnectedHealthSyncResponse,
   type ConnectedHealthSummaryResponse,
 } from '../services/connectedHealth';
 import type {
@@ -12,14 +13,20 @@ import type {
 } from '../types/connectedHealthFeedback';
 import {
   buildConnectedHealthFeedback,
+  isConnectedHealthSyncOlderThan,
   shouldAutoSyncConnectedHealth,
 } from '../utils/connectedHealthFeedback';
 
 type UseConnectedHealthFeedbackOptions = {
   days?: ConnectedHealthFeedbackRange;
   autoSync?: boolean;
+  autoSyncThrottleMs?: number;
   enabled?: boolean;
+  foregroundSyncMaxAgeMs?: number;
 };
+
+const DEFAULT_SYNC_THROTTLE_MS = 60_000;
+const FRESHNESS_TICK_MS = 60_000;
 
 type LoadOptions = {
   allowAutoSync?: boolean;
@@ -32,10 +39,94 @@ const autoSyncAttempted = new Set<string>();
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
 
+// HealthKit lanza "Authorization not determined" cuando aún no se ha resuelto la
+// autorización (p.ej. tras reinstalar la dev build, que resetea los permisos, o antes
+// de que el usuario responda la hoja de permisos). No es un fallo real de sincronización:
+// no debe mostrarse como error alarmante, sobre todo si el resumen del backend ya tiene
+// datos. connectedHealthService.sync ya pide permisos antes de consultar en iOS, así que
+// esto solo cubre casos residuales.
+const isAuthorizationPendingError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : '';
+  return /not[\s_]?determined/i.test(message);
+};
+
+const pickLatestIsoString = (
+  current: string | null | undefined,
+  candidate: string | null | undefined,
+): string | null => {
+  const candidateMs = candidate ? Date.parse(candidate) : Number.NaN;
+  if (Number.isNaN(candidateMs)) {
+    return current ?? null;
+  }
+
+  const currentMs = current ? Date.parse(current) : Number.NaN;
+  if (!Number.isNaN(currentMs) && currentMs > candidateMs) {
+    return current ?? null;
+  }
+
+  return candidate ?? null;
+};
+
+const withSuccessfulSyncTimestamp = (
+  summary: ConnectedHealthSummaryResponse,
+  syncResult: ConnectedHealthSyncResponse,
+): ConnectedHealthSummaryResponse => {
+  const syncedAt = pickLatestIsoString(null, syncResult.synced_at);
+  if (!syncedAt) {
+    return summary;
+  }
+
+  let updatedPlatformConnection = false;
+  const connections = summary.connections.map((connection) => {
+    if (connection.platform !== syncResult.platform) {
+      return connection;
+    }
+
+    updatedPlatformConnection = true;
+    return {
+      ...connection,
+      last_sync_at: pickLatestIsoString(connection.last_sync_at, syncedAt),
+    };
+  });
+
+  const nextConnections =
+    updatedPlatformConnection || connections.length !== 1
+      ? connections
+      : connections.map((connection) => ({
+          ...connection,
+          last_sync_at: pickLatestIsoString(connection.last_sync_at, syncedAt),
+        }));
+
+  return {
+    ...summary,
+    connections: nextConnections,
+    latest_sync: summary.latest_sync
+      ? {
+          ...summary.latest_sync,
+          platform: syncResult.platform,
+          status: 'completed',
+          completed_at: pickLatestIsoString(summary.latest_sync.completed_at, syncedAt),
+          records_received: Math.max(
+            summary.latest_sync.records_received,
+            syncResult.records_received,
+          ),
+        }
+      : {
+          platform: syncResult.platform,
+          status: 'completed',
+          completed_at: syncedAt,
+          records_received: syncResult.records_received,
+          records_upserted: 0,
+        },
+  };
+};
+
 export function useConnectedHealthFeedback({
   days = 7,
   autoSync = false,
+  autoSyncThrottleMs = DEFAULT_SYNC_THROTTLE_MS,
   enabled = true,
+  foregroundSyncMaxAgeMs,
 }: UseConnectedHealthFeedbackOptions = {}) {
   const [summary, setSummary] = useState<ConnectedHealthSummaryResponse | null>(null);
   const [availability, setAvailability] = useState<FitpilotHealthAvailability | null>(null);
@@ -45,8 +136,11 @@ export function useConnectedHealthFeedback({
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const isMountedRef = useRef(true);
   const summaryRef = useRef<ConnectedHealthSummaryResponse | null>(null);
+  const lastSyncAttemptRef = useRef<number>(0);
+  const isSyncingRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -57,6 +151,77 @@ export function useConnectedHealthFeedback({
   useEffect(() => {
     summaryRef.current = summary;
   }, [summary]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    setNowMs(Date.now());
+    const intervalId = setInterval(() => {
+      if (isMountedRef.current) {
+        setNowMs(Date.now());
+      }
+    }, FRESHNESS_TICK_MS);
+
+    return () => clearInterval(intervalId);
+  }, [enabled]);
+
+  // Ejecuta un sync completo (HealthKit -> backend -> refresca resumen). Con guarda de
+  // re-entrada para no lanzar syncs solapados. `ensureAuthorization` solo debe ser true
+  // en acciones EXPLÍCITAS del usuario: pedir permisos desde auto-sync/focus/AppState
+  // (fondo) puede colgar la hoja de HealthKit en iOS y dejar "Sincronizando" infinito.
+  const performSync = useCallback(
+    async ({ ensureAuthorization }: { ensureAuthorization: boolean }) => {
+      if (!enabled || isSyncingRef.current) {
+        return;
+      }
+
+      isSyncingRef.current = true;
+      const syncStartedAtMs = Date.now();
+      lastSyncAttemptRef.current = syncStartedAtMs;
+      setIsSyncing(true);
+      setSyncError(null);
+      setNowMs(syncStartedAtMs);
+
+      try {
+        const syncResult = await connectedHealthService.sync(30, { ensureAuthorization });
+        const refreshedSummary = await connectedHealthService.getSummary(days);
+        const nextSyncedSummary = withSuccessfulSyncTimestamp(
+          refreshedSummary,
+          syncResult,
+        );
+
+        if (isMountedRef.current) {
+          const refreshedAtMs = Date.now();
+          summaryRef.current = nextSyncedSummary;
+          setSummary(nextSyncedSummary);
+          setNowMs(refreshedAtMs);
+        }
+      } catch (syncFailure) {
+        if (isMountedRef.current) {
+          if (!isAuthorizationPendingError(syncFailure)) {
+            setSyncError(
+              getErrorMessage(syncFailure, 'No se pudo sincronizar salud conectada.'),
+            );
+          } else if (ensureAuthorization) {
+            // Sync explícito: ya pedimos autorización y iOS aun así no la aplicó (hoja de
+            // permisos que se cierra sola; estado corrupto tras reinstalar la app). No hay
+            // nada más que la app pueda hacer: guiamos al usuario a arreglarlo en el sistema.
+            setSyncError(
+              'iOS no aplicó los permisos de Salud. Reinicia el iPhone y vuelve a intentar. Si persiste, ve a Ajustes > Privacidad y seguridad > Salud > FitPilot y activa los permisos.',
+            );
+          }
+        }
+      } finally {
+        isSyncingRef.current = false;
+        if (isMountedRef.current) {
+          setIsSyncing(false);
+        }
+      }
+    },
+    [days, enabled],
+  );
 
   const load = useCallback(
     async ({ allowAutoSync = false, silent = false }: LoadOptions = {}) => {
@@ -86,6 +251,7 @@ export function useConnectedHealthFeedback({
         return;
       }
 
+      const loadedAtMs = Date.now();
       const nextSummary =
         summaryResult.status === 'fulfilled' ? summaryResult.value : summaryRef.current;
       const nextAvailability =
@@ -93,7 +259,10 @@ export function useConnectedHealthFeedback({
       const nextPermissions =
         permissionResult.status === 'fulfilled' ? permissionResult.value : null;
 
+      setNowMs(loadedAtMs);
+
       if (summaryResult.status === 'fulfilled') {
+        summaryRef.current = nextSummary;
         setSummary(nextSummary);
       } else {
         setError(
@@ -117,34 +286,12 @@ export function useConnectedHealthFeedback({
         autoSync &&
         !autoSyncAttempted.has(AUTO_SYNC_SESSION_KEY) &&
         nextAvailability?.available === true &&
-        shouldAutoSyncConnectedHealth(nextSummary);
+        shouldAutoSyncConnectedHealth(nextSummary, loadedAtMs);
 
       if (shouldAutoSync) {
         autoSyncAttempted.add(AUTO_SYNC_SESSION_KEY);
-        setIsSyncing(true);
-        setSyncError(null);
-
-        try {
-          await connectedHealthService.sync(30);
-          const refreshedSummary = await connectedHealthService.getSummary(days);
-
-          if (isMountedRef.current) {
-            setSummary(refreshedSummary);
-          }
-        } catch (syncFailure) {
-          if (isMountedRef.current) {
-            setSyncError(
-              getErrorMessage(
-                syncFailure,
-                'No se pudo sincronizar salud conectada.',
-              ),
-            );
-          }
-        } finally {
-          if (isMountedRef.current) {
-            setIsSyncing(false);
-          }
-        }
+        // Auto-sync: nunca pide permisos (no presenta hojas de HealthKit en segundo plano).
+        await performSync({ ensureAuthorization: false });
       }
 
       if (isMountedRef.current && !silent) {
@@ -152,7 +299,7 @@ export function useConnectedHealthFeedback({
         setIsRefreshing(false);
       }
     },
-    [autoSync, days, enabled],
+    [autoSync, days, enabled, performSync],
   );
 
   const refresh = useCallback(
@@ -163,32 +310,66 @@ export function useConnectedHealthFeedback({
   );
 
   const sync = useCallback(async () => {
+    // Acción explícita del usuario: aquí SÍ pedimos autorización (idempotente y en primer
+    // plano, contexto seguro para presentar la hoja de permisos de HealthKit).
+    await performSync({ ensureAuthorization: true });
+  }, [performSync]);
+
+  const syncIfStale = useCallback(async () => {
     if (!enabled) {
       return;
     }
 
-    setIsSyncing(true);
-    setSyncError(null);
+    const checkedAtMs = Date.now();
+    setNowMs(checkedAtMs);
 
-    try {
-      await connectedHealthService.sync(30);
-      const refreshedSummary = await connectedHealthService.getSummary(days);
-
-      if (isMountedRef.current) {
-        setSummary(refreshedSummary);
-      }
-    } catch (syncFailure) {
-      if (isMountedRef.current) {
-        setSyncError(
-          getErrorMessage(syncFailure, 'No se pudo sincronizar salud conectada.'),
-        );
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setIsSyncing(false);
-      }
+    if (availability?.available !== true) {
+      return;
     }
-  }, [days, enabled]);
+
+    if (!shouldAutoSyncConnectedHealth(summaryRef.current, checkedAtMs)) {
+      return;
+    }
+
+    if (checkedAtMs - lastSyncAttemptRef.current < autoSyncThrottleMs) {
+      return;
+    }
+
+    // Disparo en segundo plano (focus / AppState): NO pide permisos.
+    await performSync({ ensureAuthorization: false });
+  }, [autoSyncThrottleMs, availability?.available, enabled, performSync]);
+
+  // Handler pensado para el foco de pantalla / vuelta a primer plano: hace UNA
+  // sola llamada de red. Si el dispositivo está disponible y la última sync es
+  // más vieja que el umbral (y no está throttled), sincroniza el dispositivo
+  // (que además re-lee el resumen). En caso contrario, solo re-lee el backend
+  // para reflejar el último estado sin coste de sensor.
+  const refreshOnFocus = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
+
+    const checkedAtMs = Date.now();
+    const isAvailable = availability?.available === true;
+    const isStale =
+      foregroundSyncMaxAgeMs != null
+        ? isConnectedHealthSyncOlderThan(summaryRef.current, foregroundSyncMaxAgeMs, checkedAtMs)
+        : shouldAutoSyncConnectedHealth(summaryRef.current, checkedAtMs);
+    const isThrottled = checkedAtMs - lastSyncAttemptRef.current < autoSyncThrottleMs;
+
+    if (isAvailable && isStale && !isThrottled) {
+      await sync();
+    } else {
+      await refresh();
+    }
+  }, [
+    autoSyncThrottleMs,
+    availability?.available,
+    enabled,
+    foregroundSyncMaxAgeMs,
+    refresh,
+    sync,
+  ]);
 
   useEffect(() => {
     if (!enabled) {
@@ -201,8 +382,8 @@ export function useConnectedHealthFeedback({
   }, [autoSync, enabled, load]);
 
   const feedback = useMemo(
-    () => buildConnectedHealthFeedback(summary, days),
-    [days, summary],
+    () => buildConnectedHealthFeedback(summary, days, nowMs),
+    [days, nowMs, summary],
   );
 
   const hasGrantedPermissions = (permissions?.granted.length ?? 0) > 0;
@@ -224,5 +405,7 @@ export function useConnectedHealthFeedback({
     needsPermissionCta,
     refresh,
     sync,
+    syncIfStale,
+    refreshOnFocus,
   };
 }

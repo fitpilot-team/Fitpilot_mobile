@@ -55,7 +55,7 @@ export const GlucoseDetailModal: React.FC<GlucoseDetailModalProps> = ({
 
     if (record.systolic_mmhg !== null || record.diastolic_mmhg !== null) {
       metrics.push({
-        label: 'Presion arterial',
+        label: 'Presión arterial',
         value:
           record.systolic_mmhg !== null && record.diastolic_mmhg !== null
             ? `${record.systolic_mmhg}/${record.diastolic_mmhg} mmHg`
@@ -65,14 +65,14 @@ export const GlucoseDetailModal: React.FC<GlucoseDetailModalProps> = ({
 
     if (record.heart_rate_bpm !== null) {
       metrics.push({
-        label: 'Frecuencia cardiaca',
+        label: 'Frecuencia cardíaca',
         value: `${record.heart_rate_bpm} bpm`,
       });
     }
 
     if (oxygenValue !== null) {
       metrics.push({
-        label: 'Saturacion de oxigeno',
+        label: 'Saturación de oxígeno',
         value: `${formatMeasurementNumber(oxygenValue, 1)} %`,
       });
     }
@@ -131,7 +131,7 @@ export const GlucoseDetailModal: React.FC<GlucoseDetailModalProps> = ({
               showsVerticalScrollIndicator={false}
             >
               <Card style={styles.heroCard}>
-                <Text style={styles.heroEyebrow}>Ultima lectura</Text>
+                <Text style={styles.heroEyebrow}>Última lectura</Text>
                 <Text style={styles.heroValue}>
                   {displayValue}
                   <Text style={styles.heroUnit}> mg/dL</Text>
@@ -151,9 +151,9 @@ export const GlucoseDetailModal: React.FC<GlucoseDetailModalProps> = ({
 
               {additionalMetrics.length > 0 ? (
                 <Card style={styles.sectionCard}>
-                  <Text style={styles.sectionTitle}>Otras metricas del registro</Text>
+                  <Text style={styles.sectionTitle}>Otras métricas del registro</Text>
                   <Text style={styles.sectionDescription}>
-                    Este registro tambien incluye otros datos clinicos.
+                    Este registro también incluye otros datos clínicos.
                   </Text>
                   <View style={styles.metricList}>
                     {additionalMetrics.map((metric) => (
@@ -174,11 +174,11 @@ export const GlucoseDetailModal: React.FC<GlucoseDetailModalProps> = ({
                       size={18}
                       color={theme.colors.warning}
                     />
-                    <Text style={styles.warningTitle}>Eliminacion bloqueada</Text>
+                    <Text style={styles.warningTitle}>Eliminación bloqueada</Text>
                   </View>
                   <Text style={styles.warningText}>
-                    No puedes eliminar este registro desde la app porque tambien
-                    incluye otras metricas clinicas.
+                    No puedes eliminar este registro desde la app porque también
+                    incluye otras métricas clínicas.
                   </Text>
                 </Card>
               ) : null}

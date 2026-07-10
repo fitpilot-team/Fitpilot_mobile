@@ -35,7 +35,7 @@ export const RepRangeVolumeChart: React.FC<RepRangeVolumeChartProps> = ({
     return (
       <View style={styles.emptyState}>
         <Text style={styles.emptyText}>
-          No hay volumen con carga en este rango. Completa sesiones con peso para ver la distribucion semanal.
+          No hay volumen con carga en este rango. Completa sesiones con peso para ver la distribución semanal.
         </Text>
       </View>
     );

@@ -57,13 +57,13 @@ const permissionLabels: Record<string, string> = {
   distance: 'Distancia',
   exercise_minutes: 'Minutos de ejercicio',
   workouts: 'Entrenamientos',
-  sleep: 'Sueno',
-  heart_rate: 'Frecuencia cardiaca',
+  sleep: 'Sueño',
+  heart_rate: 'Frecuencia cardíaca',
   resting_heart_rate: 'FC reposo',
   heart_rate_variability: 'HRV',
   glucose: 'Glucosa',
-  blood_pressure_systolic: 'Presion sistolica',
-  blood_pressure_diastolic: 'Presion diastolica',
+  blood_pressure_systolic: 'Presión sistólica',
+  blood_pressure_diastolic: 'Presión diastólica',
   weight: 'Peso',
   body_fat: 'Grasa corporal',
   lean_body_mass: 'Masa magra',
@@ -76,12 +76,12 @@ const healthConnectPermissionLabels: [string, string][] = [
   ['READ_STEPS', 'Pasos'],
   ['READ_DISTANCE', 'Distancia'],
   ['READ_EXERCISE', 'Entrenamientos'],
-  ['READ_SLEEP', 'Sueno'],
+  ['READ_SLEEP', 'Sueño'],
   ['READ_HEART_RATE_VARIABILITY', 'HRV'],
   ['READ_RESTING_HEART_RATE', 'FC reposo'],
-  ['READ_HEART_RATE', 'Frecuencia cardiaca'],
+  ['READ_HEART_RATE', 'Frecuencia cardíaca'],
   ['READ_BLOOD_GLUCOSE', 'Glucosa'],
-  ['READ_BLOOD_PRESSURE', 'Presion arterial'],
+  ['READ_BLOOD_PRESSURE', 'Presión arterial'],
   ['READ_WEIGHT', 'Peso'],
   ['READ_BODY_FAT', 'Grasa corporal'],
   ['READ_LEAN_BODY_MASS', 'Masa magra'],
@@ -191,6 +191,15 @@ export default function ConnectedHealthScreen() {
     try {
       const permissions = await connectedHealthService.requestPermissions();
       setState((current) => ({ ...current, permissions }));
+      if (!permissions.granted.length) {
+        Alert.alert(
+          'Sin permisos',
+          Platform.OS === 'android'
+            ? 'No se activó ningún permiso. Abre Health Connect con "Abrir ajustes", concede los permisos de FitPilot y vuelve a sincronizar.'
+            : 'No se activó ningún permiso. Revisa los ajustes de salud y vuelve a intentar.',
+        );
+        return;
+      }
       Alert.alert(
         'Permisos',
         Platform.OS === 'android'
@@ -208,7 +217,8 @@ export default function ConnectedHealthScreen() {
     setIsSyncing(true);
     setError(null);
     try {
-      await connectedHealthService.sync(30);
+      // Botón explícito: pide permisos (iOS) antes de sincronizar si aún no se concedieron.
+      await connectedHealthService.sync(30, { ensureAuthorization: true });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo sincronizar.');
@@ -237,7 +247,7 @@ export default function ConnectedHealthScreen() {
   return (
     <ProfileDetailScreen
       title="Salud conectada"
-      subtitle="Datos de solo lectura para kcal, entrenamiento y recuperacion."
+      subtitle="Datos de solo lectura para kcal, entrenamiento y recuperación."
     >
       {isLoading ? (
         <View style={styles.loadingState}>
@@ -259,7 +269,7 @@ export default function ConnectedHealthScreen() {
                   {isAvailable ? getPlatformLabel(state.availability?.platform) : 'No disponible'}
                 </Text>
                 <Text style={styles.statusDescription}>
-                  Ultima lectura: {formatDateTime(latestSyncAt)}
+                  Última lectura: {formatDateTime(latestSyncAt)}
                 </Text>
               </View>
             </View>
@@ -276,7 +286,7 @@ export default function ConnectedHealthScreen() {
                 icon={<Ionicons name="key-outline" size={18} color={theme.colors.textPrimary} />}
               />
               <Button
-                title="Sincronizar 30 dias"
+                title="Sincronizar 30 días"
                 onPress={handleSync}
                 isLoading={isSyncing}
                 disabled={!isAvailable || isRequesting}
@@ -323,7 +333,7 @@ export default function ConnectedHealthScreen() {
               />
             </View>
             <Text style={styles.sectionCopy}>
-              Tu entrenador solo vera agregados diarios y sesiones resumidas con fuente y frescura.
+              Tu entrenador solo verá agregados diarios y sesiones resumidas con fuente y frescura.
             </Text>
           </View>
 
@@ -332,20 +342,20 @@ export default function ConnectedHealthScreen() {
             <MetricTile label="Kcal activas" value={metricFormatters.kcal(latestSummary?.active_energy_kcal)} />
             <MetricTile label="Pasos" value={metricFormatters.count(latestSummary?.steps)} />
             <MetricTile label="Ejercicio" value={metricFormatters.minutes(latestSummary?.exercise_minutes)} />
-            <MetricTile label="Sueno" value={metricFormatters.minutes(latestSummary?.sleep_minutes)} />
-            <MetricTile label="Recuperacion" value={metricFormatters.score(latestSummary?.recovery_score)} />
+            <MetricTile label="Sueño" value={metricFormatters.minutes(latestSummary?.sleep_minutes)} />
+            <MetricTile label="Recuperación" value={metricFormatters.score(latestSummary?.recovery_score)} />
             <MetricTile label="FC reposo" value={metricFormatters.bpm(latestSummary?.resting_hr_bpm)} />
             <MetricTile label="HRV" value={metricFormatters.ms(latestSummary?.hrv_ms)} />
           </View>
 
           {state.summary?.recommendations.suggested_tdee_kcal ? (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Senal de kcal</Text>
+              <Text style={styles.sectionTitle}>Señal de kcal</Text>
               <Text style={styles.recommendationValue}>
                 {state.summary.recommendations.suggested_tdee_kcal.toLocaleString('es-MX')} kcal TDEE observado
               </Text>
               <Text style={styles.sectionCopy}>
-                Se muestra como recomendacion para el profesional; no cambia tu plan automaticamente.
+                Se muestra como recomendación para el profesional; no cambia tu plan automáticamente.
               </Text>
             </View>
           ) : null}
@@ -365,7 +375,7 @@ export default function ConnectedHealthScreen() {
                   </View>
                 ))
               ) : (
-                <Text style={styles.emptyText}>Sin permisos registrados todavia.</Text>
+                <Text style={styles.emptyText}>Sin permisos registrados todavía.</Text>
               )}
             </View>
           </View>

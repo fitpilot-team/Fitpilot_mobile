@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import FitpilotHealth, {
   type FitpilotHealthAvailability,
   type FitpilotHealthPermissionStatus,
@@ -93,12 +94,24 @@ const withSharingEnabled = (
   sharing_enabled: true,
 });
 
+// Solicitud de permisos en vuelo (compartida). Presentar dos hojas de permisos de
+// HealthKit a la vez cuelga a iOS (no invoca el completion), así que serializamos.
+let permissionRequestInFlight: Promise<FitpilotHealthPermissionStatus> | null = null;
+
 export const connectedHealthService = {
   isAvailable: (): Promise<FitpilotHealthAvailability> =>
     FitpilotHealth.isAvailable(),
 
-  requestPermissions: (): Promise<FitpilotHealthPermissionStatus> =>
-    FitpilotHealth.requestPermissions(),
+  requestPermissions: (): Promise<FitpilotHealthPermissionStatus> => {
+    // Serializado: si ya hay una solicitud en vuelo, las llamadas concurrentes comparten
+    // la misma promesa en lugar de intentar presentar una segunda hoja de HealthKit.
+    if (!permissionRequestInFlight) {
+      permissionRequestInFlight = FitpilotHealth.requestPermissions().finally(() => {
+        permissionRequestInFlight = null;
+      });
+    }
+    return permissionRequestInFlight;
+  },
 
   getGrantedPermissions: (): Promise<FitpilotHealthPermissionStatus> =>
     FitpilotHealth.getGrantedPermissions(),
@@ -110,10 +123,26 @@ export const connectedHealthService = {
       `/connected-health/me/summary?days=${days}`,
     ),
 
-  sync: async (days = 30): Promise<ConnectedHealthSyncResponse> => {
+  sync: async (
+    days = 30,
+    options: { ensureAuthorization?: boolean } = {},
+  ): Promise<ConnectedHealthSyncResponse> => {
     const availability = await FitpilotHealth.isAvailable();
     if (!availability.available) {
-      throw new Error(availability.message || 'Salud conectada no esta disponible en este dispositivo.');
+      throw new Error(availability.message || 'Salud conectada no está disponible en este dispositivo.');
+    }
+
+    // iOS (HealthKit): una query lanzada mientras los tipos están en `notDetermined` lanza
+    // HKError.errorAuthorizationNotDetermined. Para evitarlo pedimos autorización antes de
+    // consultar, PERO solo cuando el sync nace de una acción EXPLÍCITA del usuario (botón
+    // Sincronizar/Conectar), nunca desde el auto-sync ni desde focus/AppState: presentar la
+    // hoja de permisos de HealthKit desde un contexto de fondo o de forma concurrente hace
+    // que iOS no invoque el completion y la promesa nativa se cuelgue -> "Sincronizando"
+    // infinito. requestPermissions está serializado y es idempotente (no muestra hoja si el
+    // usuario ya decidió). El auto-sync no pide permisos: si aún no se concedieron, syncRange
+    // devuelve notDetermined y el hook lo trata como estado silencioso (sin banner de error).
+    if (options.ensureAuthorization && Platform.OS === 'ios') {
+      await connectedHealthService.requestPermissions();
     }
 
     const payload = await FitpilotHealth.syncRange(buildSyncRange(days));
@@ -131,4 +160,9 @@ export const connectedHealthService = {
       platform,
       sharing_enabled: sharingEnabled,
     }),
+
+  setSetupStatus: (
+    status: 'completed' | 'skipped',
+  ): Promise<{ connected_health_setup_status: string }> =>
+    nutritionClient.patch('/connected-health/me/setup', { status }),
 };

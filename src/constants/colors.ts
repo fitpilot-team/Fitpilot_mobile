@@ -1,15 +1,27 @@
 // Colores de marca del logo FitPilot
+import { getScaledFontSize } from '../utils/responsive';
+
 export const brandColors = {
   navy: '#182f50',      // Azul oscuro (alas, texto "FitPilot")
   sky: '#67b6df',       // Azul claro (letra P)
   accent: '#6bb7e1',    // Azul acento (circulo)
 };
 
+export const buttonGradients = {
+  primary: {
+    light: ['#2b628d', '#53abd5', '#8bd8ee'],
+    dark: ['#1f3d62', '#3e88b8', '#67b6df'],
+  },
+} as const;
+
+const nutritionAccentLight = '#6EE7B7';
+
 // Paleta verde especifica para Nutricion
 export const nutritionTheme = {
   heroGradientStart: '#14532D',
   heroGradientMiddle: '#15803D',
-  heroGradientEnd: '#6EE7B7',
+  heroGradientEnd: nutritionAccentLight,
+  accentLight: nutritionAccentLight,
   accentStrong: '#166534',
   accentSoft: '#DCFCE7',
   accentSurface: '#ECFDF5',
@@ -99,3 +111,10 @@ export const fontSize = {
   '2xl': 24,
   '3xl': 30,
 };
+
+export function scaledFontSize(
+  token: keyof typeof fontSize,
+  width?: number,
+): number {
+  return getScaledFontSize(fontSize[token], width);
+}

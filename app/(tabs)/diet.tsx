@@ -13,9 +13,17 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { Button, Card, LoadingSpinner, TabScreenWrapper } from '../../src/components/common';
+import {
+  Button,
+  Card,
+  ProfileShortcutButton,
+  Skeleton,
+  TabScreenWrapper,
+  WorkoutCardSkeleton,
+} from '../../src/components/common';
 import {
   CalendarDatePickerModal,
   HistoricalNavigator,
@@ -25,6 +33,7 @@ import {
   DietHero,
   DietMealCard,
   DietMenuSelectorModal,
+  DietSourcesCard,
   RecipeIngredientSwapModal,
 } from '../../src/components/diet';
 import { borderRadius, brandColors, fontSize, spacing, nutritionTheme } from '../../src/constants/colors';
@@ -195,65 +204,7 @@ const applyUpdatedMenuToWeekDays = (
     };
   });
 
-const buildDietMenuLabel = (index: number) => `Menu ${index + 1}`;
-
-const buildCitationCountLabel = (count: number) => `${count} fuente${count === 1 ? '' : 's'}`;
-
-const getCitationHostname = (url: string) => {
-  const hostname =
-    url.match(/^https?:\/\/([^/]+)/i)?.[1] ??
-    url.replace(/^https?:\/\//, '').split('/')[0];
-
-  return hostname?.replace(/^www\./, '') || url;
-};
-
-const normalizeExchangeSystemName = (value: string | null | undefined) =>
-  value?.trim().replace(/\s+/g, ' ') ?? '';
-
-const resolveExchangeSystemLabels = (value: string | null | undefined) => {
-  const normalizedName = normalizeExchangeSystemName(value);
-  const fallbackLabel = 'Sistema del plan';
-  const smaeBaseName = 'Sistema Mexicano de Alimentos Equivalentes';
-
-  if (!normalizedName) {
-    return {
-      shortLabel: fallbackLabel,
-      collapsedSubtitle: null,
-      expandedLabel: fallbackLabel,
-    };
-  }
-
-  if (
-    normalizedName.toUpperCase().includes('SMAE') ||
-    normalizedName.toLowerCase() === smaeBaseName.toLowerCase()
-  ) {
-    return {
-      shortLabel: 'SMAE',
-      collapsedSubtitle: smaeBaseName,
-      expandedLabel: normalizedName.includes('(SMAE)')
-        ? normalizedName
-        : `${smaeBaseName} (SMAE)`,
-    };
-  }
-
-  const acronymMatch = normalizedName.match(/\(([^()]{2,12})\)\s*$/);
-  if (!acronymMatch) {
-    return {
-      shortLabel: normalizedName,
-      collapsedSubtitle: null,
-      expandedLabel: normalizedName,
-    };
-  }
-
-  const acronym = acronymMatch[1].trim();
-  const baseName = normalizedName.replace(/\s*\([^()]{2,12}\)\s*$/, '').trim();
-
-  return {
-    shortLabel: acronym || normalizedName,
-    collapsedSubtitle: baseName || null,
-    expandedLabel: normalizedName,
-  };
-};
+const buildDietMenuLabel = (index: number) => `Menú ${index + 1}`;
 
 type LoadDietOptions = {
   mode?: 'initial' | 'refresh';
@@ -452,7 +403,7 @@ export default function DietScreen() {
           [dateKey]: null,
         }));
       } catch (loadError: any) {
-        const message = loadError?.message || 'No se pudieron cargar los menus visibles.';
+        const message = loadError?.message || 'No se pudieron cargar los menús visibles.';
         setMenuOptionsErrorByDate((currentState) => ({
           ...currentState,
           [dateKey]: message,
@@ -547,53 +498,27 @@ export default function DietScreen() {
   );
   const visibleMenuLabel = visibleMenu
     ? menuLabelsById.get(visibleMenu.menuId) ?? buildDietMenuLabel(0)
-    : 'Sin menu asignado';
+    : 'Sin menú asignado';
   const visibleMenuExchangeSystem = visibleMenu?.exchangeSystem ?? null;
-  const visibleMenuSourceCitations = useMemo(
-    () => (visibleMenuExchangeSystem?.citations ?? [])
-      .slice()
-      .sort(
-        (left, right) =>
-          left.sortOrder - right.sortOrder || left.title.localeCompare(right.title),
-      ),
-    [visibleMenuExchangeSystem],
-  );
-  const sourceCountLabel = buildCitationCountLabel(visibleMenuSourceCitations.length);
-  const hasSourceCitations = visibleMenuSourceCitations.length > 0;
-  const previewCitation = visibleMenuSourceCitations[0] ?? null;
-  const exchangeSystemLabels = useMemo(
-    () => resolveExchangeSystemLabels(visibleMenuExchangeSystem?.name),
-    [visibleMenuExchangeSystem?.name],
-  );
-  const displayedSourceCitations = isSourcesExpanded
-    ? visibleMenuSourceCitations
-    : previewCitation
-      ? [previewCitation]
-      : [];
-  const visibleSourceSystemLabel = isSourcesExpanded
-    ? exchangeSystemLabels.expandedLabel
-    : exchangeSystemLabels.shortLabel;
-  const visibleSourceSystemSubtitle = !isSourcesExpanded
-    ? exchangeSystemLabels.collapsedSubtitle
-    : null;
+  const visibleMenuSourceCitations = visibleMenuExchangeSystem?.citations ?? [];
 
   const hasHydratedOptionsForSelectedDate = Boolean(menuOptionsHydratedByDate[selectedDate]);
   const hasAvailableMenuOptions = Boolean(selectedDay) && (
     selectorMenus.length > 0 || Boolean(selectedDay?.backendPrimaryMenuId) || !hasHydratedOptionsForSelectedDate
   );
   const selectorSubtitle = !selectedDay
-    ? 'No hay menus disponibles para esta fecha.'
+    ? 'No hay menús disponibles para esta fecha.'
     : isPreviewingMenu
-        ? 'Estas revisando un cambio pendiente para este dia.'
+        ? 'Estás revisando un cambio pendiente para este día.'
     : menuOptionsErrorByDate[selectedDate]
-        ? menuOptionsErrorByDate[selectedDate] || 'No se pudieron cargar los menus.'
+        ? menuOptionsErrorByDate[selectedDate] || 'No se pudieron cargar los menús.'
       : menuOptionsLoadingByDate[selectedDate]
-          ? 'Cargando menus visibles.'
+          ? 'Cargando menús visibles.'
         : hasHydratedOptionsForSelectedDate
             ? selectorMenus.length > 0
-              ? `${selectorMenus.length} opcion${selectorMenus.length === 1 ? '' : 'es'} disponible${selectorMenus.length === 1 ? '' : 's'}`
-              : 'Sin menus visibles para este dia.'
-            : 'Cargando menus visibles.';
+              ? `${selectorMenus.length} opción${selectorMenus.length === 1 ? '' : 'es'} disponible${selectorMenus.length === 1 ? '' : 's'}`
+              : 'Sin menús visibles para este día.'
+            : 'Cargando menús visibles.';
   const previewBannerDateLabel = selectedDay ? formatLongDate(selectedDay.assignedDate) : '';
   useEffect(() => {
     if (selectedPreviewMenuId !== null && !previewMenu) {
@@ -742,7 +667,7 @@ export default function DietScreen() {
       const apiError = saveError as ApiError;
       Alert.alert(
         'Error',
-        apiError.message || 'No fue posible guardar el menu elegido para este dia.',
+        apiError.message || 'No fue posible guardar el menú elegido para este día.',
       );
     } finally {
       setIsPersistingMenuSelection(false);
@@ -808,7 +733,10 @@ export default function DietScreen() {
     setSwapFoodsError(null);
 
     try {
-      const response = await getFoodsByExchangeGroup(ingredient.exchangeGroupId);
+      const response = await getFoodsByExchangeGroup(
+        ingredient.exchangeGroupId,
+        ingredient.portion.equivalents,
+      );
       setSwapFoods(response);
     } catch (loadError) {
       const apiError = loadError as ApiError;
@@ -871,6 +799,17 @@ export default function DietScreen() {
       setIsSwapModalVisible(true);
     },
     [],
+  );
+
+  const handleVisibleMenuStandaloneFoodPress = useCallback(
+    (food: ClientDietFoodRow) => {
+      if (!visibleMenu) {
+        return;
+      }
+
+      handleOpenStandaloneFoodSwap(visibleMenu, food);
+    },
+    [handleOpenStandaloneFoodSwap, visibleMenu],
   );
 
   const handleCloseSwapModal = useCallback(() => {
@@ -976,7 +915,43 @@ export default function DietScreen() {
   }
 
   if (showInitialLoadingState) {
-    return <LoadingSpinner fullScreen text="Cargando tu dieta..." />;
+    return (
+      <TabScreenWrapper>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: contentInsetBottom },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={[styles.skeletonHeader, { maxWidth: contentWidth }]}>
+              <View style={styles.headerCopy}>
+                <Skeleton width={92} height={18} />
+                <Skeleton width={180} height={28} style={{ marginTop: spacing.sm }} />
+              </View>
+              <ProfileShortcutButton />
+            </View>
+            <View style={[styles.skeletonDateRow, { maxWidth: contentWidth }]}>
+              {[1, 2, 3, 4, 5].map((item) => (
+                <Skeleton
+                  key={item}
+                  width="18%"
+                  height={58}
+                  borderRadius={borderRadius.lg}
+                />
+              ))}
+            </View>
+            {[1, 2, 3].map((item) => (
+              <View key={item} style={{ maxWidth: contentWidth, width: '100%' }}>
+                <WorkoutCardSkeleton />
+              </View>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </TabScreenWrapper>
+    );
   }
 
   return (
@@ -1008,11 +983,14 @@ export default function DietScreen() {
             entering={getEntryAnimation(0)}
             style={[styles.header, { paddingHorizontal: horizontalPadding }]}
           >
-            <Text style={styles.eyebrow}>Nutricion</Text>
-            <Text style={styles.title}>Dieta</Text>
-            <Text style={styles.subtitle}>
-              Revisa tu menu del dia y las recetas asignadas.
-            </Text>
+            <View style={styles.headerCopy}>
+              <Text style={styles.eyebrow}>Nutrición</Text>
+              <Text style={styles.title}>Dieta</Text>
+              <Text style={styles.subtitle}>
+                Revisa tu menú del día y las recetas asignadas.
+              </Text>
+            </View>
+            <ProfileShortcutButton />
           </Animated.View>
 
           {selectedDay ? (
@@ -1029,11 +1007,35 @@ export default function DietScreen() {
                   contentWidth={contentWidth}
                   isTabletPortrait={isTabletPortrait}
                   showWeekButtons={isTablet}
-                  accentColor={nutritionTheme.accentStrong}
+                  accentColor={theme.isDark ? nutritionTheme.accentLight : nutritionTheme.accentStrong}
                   datePickerLabel="Fecha"
                   onShiftWeek={handleShiftWeek}
                   onOpenDatePicker={handleOpenDatePicker}
                 />
+              </Animated.View>
+
+              <Animated.View
+                entering={getEntryAnimation(110)}
+                style={[styles.weeklyPlanCtaSection, { paddingHorizontal: horizontalPadding }]}
+              >
+                <TouchableOpacity
+                  style={styles.weeklyPlanCta}
+                  onPress={() => router.push('/diet/weekly-plan')}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="Plan semanal y lista del súper"
+                >
+                  <View style={styles.weeklyPlanCtaIcon}>
+                    <Ionicons name="list-outline" size={20} color={nutritionTheme.accentStrong} />
+                  </View>
+                  <View style={styles.weeklyPlanCtaCopy}>
+                    <Text style={styles.weeklyPlanCtaTitle}>Plan semanal y lista del súper</Text>
+                    <Text style={styles.weeklyPlanCtaSubtitle} numberOfLines={2}>
+                      Elige los menús de la semana y genera tu lista de compras.
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={theme.colors.iconMuted} />
+                </TouchableOpacity>
               </Animated.View>
 
               {visibleMenu ? (
@@ -1047,130 +1049,14 @@ export default function DietScreen() {
                     assignedDate={selectedDay.assignedDate}
                     isToday={selectedDay.isToday}
                     isPreview={isPreviewingMenu}
+                    sourceSystemName={visibleMenuExchangeSystem?.name}
+                    sourceCount={visibleMenuSourceCitations.length}
                   />
                 </Animated.View>
               ) : null}
 
-              {visibleMenu ? (
-                <Animated.View
-                  entering={getEntryAnimation(180)}
-                  style={[styles.sourcesSection, { paddingHorizontal: horizontalPadding }]}
-                >
-                  <Card style={styles.sourcesCard}>
-                    <View style={styles.sourcesHeader}>
-                      <View style={styles.sourcesHeaderCopy}>
-                        <Text style={styles.sourcesEyebrow}>Fuentes</Text>
-                        <Text
-                          numberOfLines={isSourcesExpanded ? 3 : visibleSourceSystemSubtitle ? 1 : 2}
-                          style={styles.sourcesTitle}
-                        >
-                          {visibleSourceSystemLabel}
-                        </Text>
-                        {visibleSourceSystemSubtitle ? (
-                          <Text numberOfLines={1} style={styles.sourcesSystemSubtitle}>
-                            {visibleSourceSystemSubtitle}
-                          </Text>
-                        ) : null}
-                        <View style={styles.sourcesMetaRow}>
-                          <View style={styles.sourcesCountBadge}>
-                            <Text style={styles.sourcesCountText}>
-                              {visibleMenuSourceCitations.length > 0 ? sourceCountLabel : 'Sin fuentes'}
-                            </Text>
-                          </View>
-                          {previewCitation && !isSourcesExpanded ? (
-                            <Text numberOfLines={1} style={styles.sourcesPreviewHint}>
-                              Fuente visible aqui
-                            </Text>
-                          ) : null}
-                        </View>
-                      </View>
-
-                      {hasSourceCitations ? (
-                        <TouchableOpacity
-                          style={styles.sourcesToggle}
-                          onPress={handleToggleSources}
-                          activeOpacity={0.85}
-                          accessibilityRole="button"
-                          accessibilityLabel={
-                            isSourcesExpanded
-                              ? 'Ocultar fuentes'
-                              : `Ver ${sourceCountLabel}`
-                          }
-                        >
-                          <Text style={styles.sourcesToggleText}>
-                            {isSourcesExpanded ? 'Ocultar' : 'Ver fuentes'}
-                          </Text>
-                          <Ionicons
-                            name={isSourcesExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
-                            size={16}
-                            color={nutritionTheme.accentStrong}
-                          />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-
-                    {displayedSourceCitations.length > 0 ? (
-                      <View style={styles.sourcesList}>
-                        {displayedSourceCitations.map((citation) => (
-                          <TouchableOpacity
-                            key={`${citation.sortOrder}-${citation.url}`}
-                            style={styles.sourceLink}
-                            onPress={() => {
-                              void handleOpenCitation(citation.url);
-                            }}
-                            activeOpacity={0.85}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Abrir fuente ${citation.title}${citation.publisher ? ` de ${citation.publisher}` : ''}`}
-                          >
-                            <View style={styles.sourceCopy}>
-                              <Text
-                                numberOfLines={isSourcesExpanded ? 2 : 1}
-                                style={styles.sourceTitle}
-                              >
-                                {citation.title}
-                              </Text>
-                              {citation.publisher ? (
-                                <Text numberOfLines={1} style={styles.sourcePublisher}>
-                                  {citation.publisher}
-                                </Text>
-                              ) : null}
-                              <Text numberOfLines={1} style={styles.sourceUrl}>
-                                {getCitationHostname(citation.url)}
-                              </Text>
-                            </View>
-
-                            <View style={styles.sourceActionPill}>
-                              <Text style={styles.sourceActionText}>Abrir</Text>
-                              <Ionicons
-                                name="open-outline"
-                                size={13}
-                                color={nutritionTheme.accentStrong}
-                              />
-                            </View>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    ) : (
-                      <Text style={styles.sourceEmptyState}>
-                        La referencia oficial de este sistema aparecera aqui cuando este disponible.
-                      </Text>
-                    )}
-
-                    {!isSourcesExpanded && visibleMenuSourceCitations.length > 1 ? (
-                      <Text style={styles.sourcesCollapsedNote}>
-                        1 de {visibleMenuSourceCitations.length} fuentes
-                      </Text>
-                    ) : null}
-
-                    <Text style={styles.sourcesDescription}>
-                      Consulta a tu medico antes de tomar decisiones medicas.
-                    </Text>
-                  </Card>
-                </Animated.View>
-              ) : null}
-
               <Animated.View
-                entering={getEntryAnimation(220)}
+                entering={getEntryAnimation(180)}
                 style={[styles.selectorSection, { paddingHorizontal: horizontalPadding }]}
               >
                 <View style={styles.selectorCardShell}>
@@ -1184,15 +1070,15 @@ export default function DietScreen() {
                     activeOpacity={0.85}
                   >
                     <View style={styles.selectorCopy}>
-                      <Text style={styles.selectorEyebrow}>Menu visible</Text>
+                      <Text style={styles.selectorEyebrow}>Menú visible</Text>
                       <Text style={styles.selectorTitle}>
                         {visibleMenuLabel}
                       </Text>
                       <Text numberOfLines={2} style={styles.selectorSubtitle}>
                         {isPreviewingMenu
-                          ? 'Estas revisando este menu antes de confirmarlo.'
+                          ? 'Estás revisando este menú antes de confirmarlo.'
                           : hasPersistedOverride
-                            ? 'Elegiste una opcion distinta para este dia.'
+                            ? 'Elegiste una opción distinta para este día.'
                             : selectorSubtitle}
                       </Text>
                     </View>
@@ -1212,14 +1098,14 @@ export default function DietScreen() {
                 </View>
               </Animated.View>
 
-              <Animated.View entering={getEntryAnimation(260)} style={styles.mealsSection}>
+              <Animated.View entering={getEntryAnimation(220)} style={styles.mealsSection}>
                 <View style={[styles.sectionHeader, { paddingHorizontal: horizontalPadding }]}>
                   <View>
-                    <Text style={styles.sectionTitle}>Comidas del dia</Text>
+                    <Text style={styles.sectionTitle}>Comidas del día</Text>
                     <Text style={styles.sectionSubtitle}>
                       {visibleMenu
                         ? isPreviewingMenu
-                          ? `Estas revisando ${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} antes de confirmar el cambio`
+                          ? `Estás revisando ${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} antes de confirmar el cambio`
                           : `${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} organizados para ti`
                         : 'No hay comidas programadas para esta fecha'}
                     </Text>
@@ -1241,7 +1127,7 @@ export default function DietScreen() {
                             }
                             onStandaloneFoodPress={
                               !isPreviewingMenu && visibleMenu
-                                ? (food) => handleOpenStandaloneFoodSwap(visibleMenu, food)
+                                ? handleVisibleMenuStandaloneFoodPress
                                 : undefined
                             }
                           />
@@ -1251,20 +1137,35 @@ export default function DietScreen() {
                       <Card style={styles.noMealsCard}>
                         <Text style={styles.noMealsTitle}>Sin comidas cargadas</Text>
                         <Text style={styles.noMealsText}>
-                          Tu menu fue encontrado, pero este dia todavia no contiene bloques de comida visibles.
+                          Tu menú fue encontrado, pero este día todavía no contiene bloques de comida visibles.
                         </Text>
                       </Card>
                     )
                   ) : (
                     <Card style={styles.noMealsCard}>
-                      <Text style={styles.noMealsTitle}>Sin menu asignado</Text>
+                      <Text style={styles.noMealsTitle}>Sin menú asignado</Text>
                       <Text style={styles.noMealsText}>
-                        No tienes un menu cargado para {formatLongDate(selectedDay.assignedDate)}.
+                        No tienes un menú cargado para {formatLongDate(selectedDay.assignedDate)}.
                       </Text>
                     </Card>
                   )}
                 </View>
               </Animated.View>
+
+              {visibleMenu ? (
+                <Animated.View
+                  entering={getEntryAnimation(300)}
+                  style={[styles.sourcesSection, { paddingHorizontal: horizontalPadding }]}
+                >
+                  <DietSourcesCard
+                    exchangeSystemName={visibleMenuExchangeSystem?.name}
+                    citations={visibleMenuSourceCitations}
+                    isExpanded={isSourcesExpanded}
+                    onToggleExpanded={handleToggleSources}
+                    onOpenCitation={handleOpenCitation}
+                  />
+                </Animated.View>
+              ) : null}
             </>
           ) : (
             <Animated.View
@@ -1276,12 +1177,12 @@ export default function DietScreen() {
                   <Ionicons name={error ? 'alert-circle-outline' : 'restaurant-outline'} size={30} color={nutritionTheme.accentStrong} />
                 </View>
                 <Text style={styles.emptyTitle}>
-                  {error ? 'No pudimos cargar tu dieta' : 'Todavia no tienes una dieta asignada'}
+                  {error ? 'No pudimos cargar tu dieta' : 'Todavía no tienes una dieta asignada'}
                 </Text>
                 <Text style={styles.emptyText}>
                   {error
                     ? error
-                    : 'Cuando tu nutriologo publique un plan, aparecera aqui con sus comidas y recetas.'}
+                    : 'Cuando tu nutriólogo publique un plan, aparecerá aquí con sus comidas y recetas.'}
                 </Text>
                 <Button
                   title="Reintentar"
@@ -1300,7 +1201,7 @@ export default function DietScreen() {
         <CalendarDatePickerModal
           visible={isDatePickerVisible}
           title="Ir a fecha"
-          subtitle="Salta a cualquier dia para revisar semanas anteriores o futuras."
+          subtitle="Salta a cualquier día para revisar semanas anteriores o futuras."
           selectedDate={selectedDate}
           onClose={handleCloseDatePicker}
           onSelect={handleSelectAnchorDate}
@@ -1334,10 +1235,12 @@ export default function DietScreen() {
           >
             <View style={styles.previewActionCard}>
               <View style={styles.previewActionCopy}>
-                <Text style={styles.previewActionEyebrow}>Previsualizacion</Text>
-                <Text style={styles.previewActionTitle}>{previewMenu.title}</Text>
+                <Text style={styles.previewActionEyebrow}>Previsualización</Text>
+                <Text style={styles.previewActionTitle}>
+                  {menuLabelsById.get(previewMenu.menuId) ?? 'Menú seleccionado'}
+                </Text>
                 <Text style={styles.previewActionText}>
-                  Revisa lo que comerias el {previewBannerDateLabel} y confirma si quieres cambiar a este menu.
+                  Revisa lo que comerías el {previewBannerDateLabel} y confirma si quieres cambiar a este menú.
                 </Text>
               </View>
 
@@ -1390,8 +1293,34 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     scrollContent: {
       paddingBottom: spacing.xxl,
     },
-    header: {
+    skeletonHeader: {
+      width: '100%',
+      alignSelf: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+      paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
+    },
+    skeletonDateRow: {
+      width: '100%',
+      alignSelf: 'center',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+      paddingTop: spacing.md,
+    },
+    headerCopy: {
+      flex: 1,
+      minWidth: 0,
     },
     eyebrow: {
       color: nutritionTheme.accentStrong,
@@ -1418,147 +1347,6 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     sourcesSection: {
       marginTop: spacing.md,
     },
-    sourcesCard: {
-      padding: spacing.md,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryBorder,
-      backgroundColor: theme.colors.primarySoft,
-    },
-    sourcesHeader: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      justifyContent: 'space-between',
-      gap: spacing.sm,
-    },
-    sourcesHeaderCopy: {
-      flex: 1,
-      gap: spacing.xs,
-      paddingRight: spacing.sm,
-    },
-    sourcesEyebrow: {
-      color: nutritionTheme.accentStrong,
-      fontSize: fontSize.xs,
-      fontWeight: '800',
-      textTransform: 'uppercase',
-      letterSpacing: 0.7,
-    },
-    sourcesTitle: {
-      color: theme.colors.textPrimary,
-      fontSize: fontSize.sm,
-      fontWeight: '800',
-    },
-    sourcesSystemSubtitle: {
-      color: theme.colors.textSecondary,
-      fontSize: fontSize.xs,
-      lineHeight: 18,
-    },
-    sourcesMetaRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flexWrap: 'wrap',
-      gap: spacing.xs,
-    },
-    sourcesCountBadge: {
-      borderRadius: borderRadius.full,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryBorder,
-    },
-    sourcesCountText: {
-      color: nutritionTheme.accentStrong,
-      fontSize: fontSize.xs,
-      fontWeight: '700',
-    },
-    sourcesPreviewHint: {
-      flexShrink: 1,
-      color: theme.colors.textMuted,
-      fontSize: fontSize.xs,
-    },
-    sourcesToggle: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      borderRadius: borderRadius.full,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryBorder,
-      backgroundColor: theme.colors.surface,
-      paddingHorizontal: 10,
-      paddingVertical: 7,
-    },
-    sourcesToggleText: {
-      color: nutritionTheme.accentStrong,
-      fontSize: fontSize.xs,
-      fontWeight: '700',
-    },
-    sourcesDescription: {
-      marginTop: spacing.sm,
-      color: theme.colors.textMuted,
-      fontSize: fontSize.xs,
-      lineHeight: 18,
-    },
-    sourcesList: {
-      marginTop: spacing.sm,
-      gap: spacing.xs,
-    },
-    sourceLink: {
-      borderRadius: borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryBorder,
-      backgroundColor: theme.colors.surface,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: spacing.sm,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-    },
-    sourceCopy: {
-      flex: 1,
-      gap: 2,
-    },
-    sourceTitle: {
-      color: theme.colors.textPrimary,
-      fontSize: fontSize.sm,
-      fontWeight: '700',
-    },
-    sourceActionPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      borderRadius: borderRadius.full,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryBorder,
-      backgroundColor: theme.colors.surface,
-      paddingHorizontal: 9,
-      paddingVertical: 6,
-    },
-    sourceActionText: {
-      color: nutritionTheme.accentStrong,
-      fontSize: fontSize.xs,
-      fontWeight: '700',
-    },
-    sourcePublisher: {
-      color: theme.colors.textSecondary,
-      fontSize: fontSize.xs,
-      fontWeight: '600',
-    },
-    sourceUrl: {
-      color: theme.colors.textMuted,
-      fontSize: fontSize.xs,
-    },
-    sourceEmptyState: {
-      marginTop: spacing.sm,
-      color: theme.colors.textMuted,
-      fontSize: fontSize.xs,
-      lineHeight: 18,
-    },
-    sourcesCollapsedNote: {
-      marginTop: spacing.xs,
-      color: theme.colors.textMuted,
-      fontSize: fontSize.xs,
-    },
     sectionHeader: {
       marginTop: spacing.lg,
       marginBottom: spacing.md,
@@ -1578,6 +1366,45 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     selectorCardShell: {
       borderRadius: borderRadius.md,
+    },
+    weeklyPlanCtaSection: {
+      marginTop: spacing.md,
+    },
+    weeklyPlanCta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      borderRadius: borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    weeklyPlanCtaIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.isDark
+        ? 'rgba(56, 189, 248, 0.16)'
+        : `${nutritionTheme.accentStrong}1A`,
+    },
+    weeklyPlanCtaCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    weeklyPlanCtaTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '800',
+      color: theme.colors.textPrimary,
+    },
+    weeklyPlanCtaSubtitle: {
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      lineHeight: 16,
     },
     selectorCard: {
       flexDirection: 'row',

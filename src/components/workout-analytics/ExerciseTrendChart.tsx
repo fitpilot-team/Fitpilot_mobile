@@ -84,17 +84,17 @@ const METRIC_CONFIG: Record<ExerciseDetailMetric, {
     formatValue: (v) => (v != null ? `${Math.round(v)} reps` : '-- reps'),
   },
   duration: {
-    lineLabel: 'Duracion',
+    lineLabel: 'Duración',
     barLabel: '',
     showBars: false,
     emptyText: 'No hay sesiones de cardio registradas en este rango.',
     formatValue: (v) => (v != null ? `${new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(v)} min` : '-- min'),
   },
   calories: {
-    lineLabel: 'Calorias',
+    lineLabel: 'Calorías',
     barLabel: '',
     showBars: false,
-    emptyText: 'No hay calorias registradas en este rango.',
+    emptyText: 'No hay calorías registradas en este rango.',
     formatValue: (v) => formatCalories(v),
   },
   distance: {
@@ -276,7 +276,7 @@ export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
           </Text>
         </View>
         <View style={styles.metaColumn}>
-          <Text style={styles.metaLabel}>Ultima</Text>
+          <Text style={styles.metaLabel}>Última</Text>
           <Text style={styles.metaValue}>
             {formatLocalDate(series[series.length - 1].performed_on_date, { day: 'numeric', month: 'short' })}
           </Text>
@@ -290,7 +290,7 @@ export const ExerciseTrendChart: React.FC<ExerciseTrendChartProps> = ({
 
       {shouldShowBars ? (
         <Text style={styles.chartHint}>
-          Las barras apiladas muestran como se repartio el volumen de la sesion entre los rangos de reps que tocaste ese dia.
+          Las barras apiladas muestran cómo se repartió el volumen de la sesión entre los rangos de reps que tocaste ese día.
         </Text>
       ) : null}
     </View>

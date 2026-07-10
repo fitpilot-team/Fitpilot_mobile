@@ -119,24 +119,24 @@ const METRIC_LABELS: Record<ExerciseDetailMetric, string> = {
   e1rm: '1RM estimado',
   top_set_weight: 'Top set',
   total_reps: 'Total reps',
-  duration: 'Duracion',
-  calories: 'Calorias',
+  duration: 'Duración',
+  calories: 'Calorías',
   distance: 'Distancia',
 };
 
 const METRIC_CHART_SUBTITLES: Record<ExerciseDetailMetric, string> = {
   best_weight:
-    'La linea principal sigue la mejor carga registrada; las barras dejan ver el volumen por rango de reps.',
-  volume: 'Volumen total (reps x kg) por sesion a lo largo del tiempo.',
-  best_reps: 'Las repeticiones mas altas logradas en un set por sesion.',
+    'La línea principal sigue la mejor carga registrada; las barras dejan ver el volumen por rango de reps.',
+  volume: 'Volumen total (reps x kg) por sesión a lo largo del tiempo.',
+  best_reps: 'Las repeticiones más altas logradas en un set por sesión.',
   effort:
-    'Esfuerzo promedio registrado (RIR/RPE) por sesion. Menor valor = mas cerca del fallo.',
-  e1rm: '1RM estimado (Epley) basado en el top set de cada sesion. Util como tendencia relativa.',
-  top_set_weight: 'Peso del top set (set con mayor carga) por sesion.',
-  total_reps: 'Total de repeticiones completadas por sesion.',
-  duration: 'Duracion total ejecutada por sesion.',
-  calories: 'Calorias registradas por sesion.',
-  distance: 'Distancia recorrida por sesion.',
+    'Esfuerzo promedio registrado (RIR/RPE) por sesión. Menor valor = más cerca del fallo.',
+  e1rm: '1RM estimado (Epley) basado en el top set de cada sesión. Útil como tendencia relativa.',
+  top_set_weight: 'Peso del top set (set con mayor carga) por sesión.',
+  total_reps: 'Total de repeticiones completadas por sesión.',
+  duration: 'Duración total ejecutada por sesión.',
+  calories: 'Calorías registradas por sesión.',
+  distance: 'Distancia recorrida por sesión.',
 };
 
 export type MetricContextVariant =
@@ -295,19 +295,19 @@ export const getProfileContextCopy = (
   const profile = getProfileConfig(profileId);
 
   if (profile.id === 'percentage_1rm_strength') {
-    return 'La progresion prioriza 1RM estimado, top set e intensidad relativa frente al volumen total.';
+    return 'La progresión prioriza 1RM estimado, top set e intensidad relativa frente al volumen total.';
   }
 
   if (profile.id === 'rpe_strength') {
-    return 'La lectura principal combina top set, esfuerzo real y adherencia a la prescripcion.';
+    return 'La lectura principal combina top set, esfuerzo real y adherencia a la prescripción.';
   }
 
   if (profile.id === 'bodyweight_progression') {
-    return 'La senal principal es reps y densidad; el peso externo deja de ser la metrica dominante.';
+    return 'La señal principal es reps y densidad; el peso externo deja de ser la métrica dominante.';
   }
 
   if (profile.id === 'cardio_progression') {
-    return 'La lectura principal sigue duracion, calorias y distancia; las metricas de fuerza dejan de aplicar.';
+    return 'La lectura principal sigue duración, calorías y distancia; las métricas de fuerza dejan de aplicar.';
   }
 
   return 'La lectura principal sigue la mejor carga, pero mantiene el volumen repartido por rangos de reps.';

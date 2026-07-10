@@ -26,10 +26,14 @@ import {
   MicrocycleStats,
   ScienceTips,
   SessionPickerModal,
+  SplitOverviewCta,
   TodayWorkoutCard,
   UserHeader,
 } from '../../src/components/dashboard';
-import { ConnectedHealthFeedbackSummaryCard } from '../../src/components/connected-health';
+import {
+  ConnectedHealthFeedbackSummaryCard,
+  ConnectedHealthSetupBanner,
+} from '../../src/components/connected-health';
 import { CareTeamSection } from '../../src/components/care-team';
 import type { ScienceTip } from '../../src/constants/scienceTips';
 import { spacing } from '../../src/constants/colors';
@@ -44,6 +48,8 @@ import {
 import type { TipContext } from '../../src/utils/contextualTips';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type {
+  AssignedProfessionalDomain,
+  AssignedProfessionalSummary,
   MicrocycleMode,
   MicrocycleSessionProgress,
   MuscleVolumeResponse,
@@ -58,9 +64,75 @@ import {
   buildProgramTimelineModel,
   buildProgramTimelineView,
   getProgramTimelineCalendarDayLabel,
+  getProgramTimelineDefaultFocusDateKey,
   getProgramTimelineWeekLabel,
+  isSessionActionable,
   shiftProgramTimelineFocusByWeek,
+  type ProgramTimelineSession,
 } from '../../src/utils/programTimeline';
+import { toast } from '../../src/store/toastStore';
+
+const stripExistingClientContextPrefix = (value: string) =>
+  value
+    .trim()
+    .replace(/^tu\s+(plan|promedio semanal|nutrición|nutricion):\s*/i, '')
+    .replace(/^promedio semanal:\s*/i, '')
+    .trim();
+
+const getClientContextPrefix = (
+  domain: AssignedProfessionalDomain,
+  contextLabel: string,
+) => {
+  if (domain === 'training') {
+    return 'Tu plan';
+  }
+
+  return /kcal|promedio/i.test(contextLabel)
+    ? 'Tu promedio semanal'
+    : 'Tu nutrición';
+};
+
+const formatClientContextLabel = (
+  contextLabel: string | null,
+  domain: AssignedProfessionalDomain,
+) => {
+  const trimmedContext = contextLabel?.trim();
+
+  if (!trimmedContext) {
+    return null;
+  }
+
+  if (/^tu\s+(plan|promedio semanal|nutrición|nutricion):/i.test(trimmedContext)) {
+    return trimmedContext;
+  }
+
+  const value = stripExistingClientContextPrefix(trimmedContext);
+  return `${getClientContextPrefix(domain, trimmedContext)}: ${value}`;
+};
+
+const formatHomeCareTeamSummary = (
+  summary: AssignedProfessionalSummary | null,
+  domain: AssignedProfessionalDomain,
+  contextOverride?: string | null,
+) => {
+  if (!summary || summary.status !== 'assigned') {
+    return summary;
+  }
+
+  const contextLabel = formatClientContextLabel(
+    contextOverride ?? summary.contextLabel,
+    domain,
+  );
+
+  if (summary.contextLabel === contextLabel) {
+    return summary;
+  }
+
+  return {
+    ...summary,
+    contextLabel,
+  };
+};
 
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
@@ -73,24 +145,22 @@ export default function HomeScreen() {
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset();
   const isFocused = useIsFocused();
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
   const {
     summaries: careTeamSummaries,
     errors: careTeamErrors,
     isLoading: isLoadingCareTeam,
     refreshCareTeam,
   } = useCareTeam(user?.id ?? null);
-  const {
-    dashboardBootstrap,
-    dashboardDataVersion,
-    workoutLogsVersion,
-    isLoading,
-    isStartingWorkout,
-    error,
-    loadDashboardData,
-    startWorkout,
-    clearError,
-  } = useWorkoutStore();
+  const dashboardBootstrap = useWorkoutStore((state) => state.dashboardBootstrap);
+  const dashboardDataVersion = useWorkoutStore((state) => state.dashboardDataVersion);
+  const workoutLogsVersion = useWorkoutStore((state) => state.workoutLogsVersion);
+  const isLoading = useWorkoutStore((state) => state.isLoading);
+  const isStartingWorkout = useWorkoutStore((state) => state.isStartingWorkout);
+  const error = useWorkoutStore((state) => state.error);
+  const loadDashboardData = useWorkoutStore((state) => state.loadDashboardData);
+  const startWorkout = useWorkoutStore((state) => state.startWorkout);
+  const clearError = useWorkoutStore((state) => state.clearError);
 
   const [refreshing, setRefreshing] = useState(false);
   const [currentWeekDietCaloriesAverage, setCurrentWeekDietCaloriesAverage] = useState<number | null>(null);
@@ -205,6 +275,14 @@ export default function HomeScreen() {
       return;
     }
 
+    void refreshCareTeam();
+  }, [isFocused, refreshCareTeam, user?.id]);
+
+  useEffect(() => {
+    if (!isFocused || !user?.id) {
+      return;
+    }
+
     if (
       dashboardDataVersion !== 0 &&
       lastLoadedWorkoutLogsVersionRef.current === workoutLogsVersion
@@ -258,14 +336,13 @@ export default function HomeScreen() {
   }, [dashboardDataVersion, showInitialLoadingState]);
 
   useEffect(() => {
+    const defaultFocusDateKey = getProgramTimelineDefaultFocusDateKey(programTimelineModel);
     setFocusedDateKey((currentDateKey) => (
-      currentDateKey === programTimelineModel.initialFocusedDateKey
-        ? currentDateKey
-        : programTimelineModel.initialFocusedDateKey
+      currentDateKey === defaultFocusDateKey ? currentDateKey : defaultFocusDateKey
     ));
     setIsSessionPickerVisible(false);
     setIsDatePickerVisible(false);
-  }, [dashboardDataVersion, programTimelineModel.initialFocusedDateKey]);
+  }, [dashboardDataVersion, programTimelineModel]);
 
   useEffect(() => {
     const loadMuscleVolume = async () => {
@@ -350,6 +427,44 @@ export default function HomeScreen() {
     [startWorkout],
   );
 
+  const handleGoToActionable = useCallback(() => {
+    const actionableDateKey = programTimelineView.actionableDateKey;
+    if (actionableDateKey) {
+      setFocusedDateKey(actionableDateKey);
+      setIsSessionPickerVisible(false);
+    }
+  }, [programTimelineView.actionableDateKey]);
+
+  // Puerta de entrada al inicio de una sesión: si no es el frente de cola,
+  // avisa y redirige al pendiente en vez de iniciarla.
+  const attemptOpenSession = useCallback(
+    async (session: MicrocycleSessionProgress) => {
+      const actionableSession = programTimelineView.actionableSession;
+      if (!isSessionActionable(session as ProgramTimelineSession, actionableSession)) {
+        const actionableDateKey = programTimelineView.actionableDateKey;
+        toast.info(
+          'Termina primero tu entrenamiento pendiente',
+          actionableDateKey
+            ? `Completa tu sesión del ${formatLocalDate(actionableDateKey, {
+                weekday: 'long',
+                month: 'short',
+                day: 'numeric',
+              })}`
+            : undefined,
+        );
+        handleGoToActionable();
+        return;
+      }
+      await openWorkoutSession(session);
+    },
+    [
+      handleGoToActionable,
+      openWorkoutSession,
+      programTimelineView.actionableDateKey,
+      programTimelineView.actionableSession,
+    ],
+  );
+
   const handleShiftWeek = useCallback(
     (direction: -1 | 1) => {
       const nextDateKey = shiftProgramTimelineFocusByWeek(
@@ -371,8 +486,8 @@ export default function HomeScreen() {
       return;
     }
 
-    await openWorkoutSession(programTimelineView.cardState.session);
-  }, [openWorkoutSession, programTimelineView.cardState]);
+    await attemptOpenSession(programTimelineView.cardState.session);
+  }, [attemptOpenSession, programTimelineView.cardState]);
 
   const handleOpenSessions = useCallback(() => {
     if ((programTimelineView.focusedDay?.sessions.length ?? 0) > 1) {
@@ -406,7 +521,7 @@ export default function HomeScreen() {
 
   const sessionPickerTitle = useMemo(() => {
     if (!programTimelineView.focusedDay) {
-      return 'Sesiones del dia';
+      return 'Sesiones del día';
     }
 
     return formatLocalDate(programTimelineView.focusedDay.dateKey, {
@@ -439,31 +554,21 @@ export default function HomeScreen() {
     () => (
       currentWeekDietCaloriesAverage === null
         ? null
-        : `Promedio semanal: ${currentWeekDietCaloriesAverage} kcal/dia`
+        : `Tu promedio semanal: ${currentWeekDietCaloriesAverage} kcal/dia`
     ),
     [currentWeekDietCaloriesAverage],
   );
   const homeCareTeamSummaries = useMemo(() => {
-    const nutritionSummary = careTeamSummaries.nutrition;
-
-    if (
-      !nutritionSummary ||
-      nutritionSummary.status !== 'assigned' ||
-      !nutritionContextOverride
-    ) {
-      return careTeamSummaries;
-    }
-
-    if (nutritionSummary.contextLabel === nutritionContextOverride) {
-      return careTeamSummaries;
-    }
-
     return {
-      ...careTeamSummaries,
-      nutrition: {
-        ...nutritionSummary,
-        contextLabel: nutritionContextOverride,
-      },
+      training: formatHomeCareTeamSummary(
+        careTeamSummaries.training,
+        'training',
+      ),
+      nutrition: formatHomeCareTeamSummary(
+        careTeamSummaries.nutrition,
+        'nutrition',
+        nutritionContextOverride,
+      ),
     };
   }, [careTeamSummaries, nutritionContextOverride]);
   const handleOpenScienceTip = useCallback((tip: ScienceTip) => {
@@ -474,6 +579,15 @@ export default function HomeScreen() {
   }, []);
   const handleOpenMeasurements = useCallback(() => {
     router.push('/(tabs)/measurements');
+  }, []);
+  const handleOpenProfile = useCallback(() => {
+    router.push('/profile');
+  }, []);
+  const handleOpenProfessionals = useCallback(() => {
+    router.push('/professionals');
+  }, []);
+  const handleOpenSplit = useCallback(() => {
+    router.push('/workouts/split');
   }, []);
 
   if (!user) {
@@ -510,6 +624,7 @@ export default function HomeScreen() {
               <UserHeader
                 user={user}
                 program={program}
+                onProfilePress={handleOpenProfile}
                 contentWidth={contentWidth}
                 horizontalPadding={horizontalPadding}
               />
@@ -533,18 +648,28 @@ export default function HomeScreen() {
               </View>
             </Animated.View>
 
+            {microcycleProgress?.microcycle_id ? (
+              <Animated.View entering={getEntryAnimation(120)}>
+                <SplitOverviewCta onPress={handleOpenSplit} horizontalPadding={horizontalPadding} />
+              </Animated.View>
+            ) : null}
+
             <Animated.View entering={getEntryAnimation(160)}>
-              <CareTeamSection
-                summaries={homeCareTeamSummaries}
-                errors={careTeamErrors}
-                isLoading={isLoadingCareTeam}
-                compact
-                subtitle="Quienes elaboran tus planes actuales."
+              <TodayWorkoutCard
+                cardState={programTimelineView.cardState}
+                onStartPress={handleStartHighlightedSession}
+                onGoToActionable={handleGoToActionable}
+                onOpenSessions={handleOpenSessions}
+                isLoading={isStartingWorkout || (isLoading && !refreshing)}
+                muscleVolume={muscleVolume}
+                isMuscleVolumeLoading={!shouldLoadDeferredContent || isLoadingVolume}
+                contentWidth={contentWidth}
                 horizontalPadding={horizontalPadding}
+                compact={!isTablet}
               />
             </Animated.View>
 
-            <Animated.View entering={getEntryAnimation(240)}>
+            <Animated.View entering={getEntryAnimation(220)}>
               <MicrocycleStats
                 microcycleProgress={microcycleProgress}
                 actualAdherenceMetrics={programTimelineModel.actualAdherenceMetrics}
@@ -552,30 +677,25 @@ export default function HomeScreen() {
                 onModeChange={setMicrocycleMode}
                 isLoading={isLoading && !refreshing}
                 horizontalPadding={horizontalPadding}
+                variant="strip"
               />
             </Animated.View>
 
-            <Animated.View entering={getEntryAnimation(320)}>
+            {user?.connectedHealthSetupStatus !== 'completed' ? (
+              <Animated.View entering={getEntryAnimation(280)}>
+                <ConnectedHealthSetupBanner horizontalPadding={horizontalPadding} />
+              </Animated.View>
+            ) : null}
+
+            <Animated.View entering={getEntryAnimation(280)}>
               <ConnectedHealthFeedbackSummaryCard
                 contentWidth={contentWidth}
                 horizontalPadding={horizontalPadding}
+                variant="compact"
               />
             </Animated.View>
 
-            <Animated.View entering={getEntryAnimation(380)}>
-              <TodayWorkoutCard
-                cardState={programTimelineView.cardState}
-                onStartPress={handleStartHighlightedSession}
-                onOpenSessions={handleOpenSessions}
-                isLoading={isStartingWorkout || (isLoading && !refreshing)}
-                muscleVolume={muscleVolume}
-                isMuscleVolumeLoading={!shouldLoadDeferredContent || isLoadingVolume}
-                contentWidth={contentWidth}
-                horizontalPadding={horizontalPadding}
-              />
-            </Animated.View>
-
-            <Animated.View entering={getEntryAnimation(460)}>
+            <Animated.View entering={getEntryAnimation(340)}>
               <ActivityChart
                 muscleVolume={muscleVolume}
                 isLoading={!shouldLoadDeferredContent || isLoadingVolume || (isLoading && !refreshing)}
@@ -583,10 +703,28 @@ export default function HomeScreen() {
                 onToggleSecondary={setCountSecondaryMuscles}
                 contentWidth={contentWidth}
                 horizontalPadding={horizontalPadding}
+                maxRows={2}
+                collapsible
+                compact
               />
             </Animated.View>
 
-            <Animated.View entering={getEntryAnimation(540)}>
+            <Animated.View entering={getEntryAnimation(400)}>
+              <CareTeamSection
+                summaries={homeCareTeamSummaries}
+                errors={careTeamErrors}
+                isLoading={isLoadingCareTeam}
+                compact
+                variant="summary"
+                emptyPresentation="combined-summary"
+                horizontalPadding={horizontalPadding}
+                actionLabel="Buscar"
+                actionAccessibilityLabel="Buscar profesionales"
+                onActionPress={handleOpenProfessionals}
+              />
+            </Animated.View>
+
+            <Animated.View entering={getEntryAnimation(460)}>
               <ScienceTips
                 context={tipContext}
                 contentWidth={contentWidth}
@@ -596,7 +734,7 @@ export default function HomeScreen() {
             </Animated.View>
 
             {shouldLoadDeferredContent ? (
-              <Animated.View entering={getEntryAnimation(600)}>
+              <Animated.View entering={getEntryAnimation(520)}>
                 <MetricsSummary
                   onPress={handleOpenMeasurements}
                   contentWidth={contentWidth}
@@ -612,7 +750,7 @@ export default function HomeScreen() {
           title={sessionPickerTitle}
           subtitle={
             programTimelineView.focusedDay
-              ? `${programTimelineView.focusedDay.sessions.length} sesion${programTimelineView.focusedDay.sessions.length > 1 ? 'es' : ''} disponible${programTimelineView.focusedDay.sessions.length > 1 ? 's' : ''}`
+              ? `${programTimelineView.focusedDay.sessions.length} sesión${programTimelineView.focusedDay.sessions.length > 1 ? 'es' : ''} disponible${programTimelineView.focusedDay.sessions.length > 1 ? 's' : ''}`
               : null
           }
           sessions={programTimelineView.focusedDay?.sessions ?? []}
@@ -621,7 +759,7 @@ export default function HomeScreen() {
           }}
           onSelectSession={async (session) => {
             setIsSessionPickerVisible(false);
-            await openWorkoutSession(session);
+            await attemptOpenSession(session);
           }}
         />
 

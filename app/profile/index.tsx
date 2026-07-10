@@ -15,10 +15,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
-import {
-  useBottomTabBarContentInset,
-  useBottomTabBarScroll,
-} from '../../src/hooks/useBottomTabBarVisibility';
+import { toast } from '../../src/store/toastStore';
 import { useCareTeam } from '../../src/hooks/useCareTeam';
 import {
   getThemePreferenceLabel,
@@ -39,9 +36,9 @@ import {
 } from '../../src/constants/colors';
 import {
   ProfileImagePreviewModal,
-  TabScreenWrapper,
 } from '../../src/components/common';
 import { getPrimaryScreenHorizontalPadding } from '../../src/utils/layout';
+import { hapticError, hapticSuccess } from '../../src/utils/haptics';
 import { pickProfileImageFromLibrary } from '../../src/utils/profileImagePicker';
 import {
   cancelAccountDeletion,
@@ -131,8 +128,6 @@ export default function ProfileScreen() {
   } = useCareTeam(user?.id ?? null);
   const { preference, theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
-  const tabBarScroll = useBottomTabBarScroll();
-  const contentInsetBottom = useBottomTabBarContentInset();
   const measurementPreference = useMeasurementPreferenceStore(
     (state) => state.preference,
   );
@@ -211,9 +206,10 @@ export default function ProfileScreen() {
       const result = await pickProfileImageFromLibrary();
 
       if (result.status === 'permission_denied') {
-        Alert.alert(
+        hapticError();
+        toast.error(
           'Permiso requerido',
-          'Necesitamos acceso a tu galeria para actualizar tu foto de perfil.',
+          'Necesitamos acceso a tu galería para actualizar tu foto de perfil.',
         );
         return;
       }
@@ -224,7 +220,8 @@ export default function ProfileScreen() {
 
       await handleAvatarChange(result.uri);
     } catch {
-      Alert.alert(
+      hapticError();
+      toast.error(
         'No se pudo cambiar la foto',
         'Intenta de nuevo en un momento.',
       );
@@ -233,12 +230,12 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'Cerrar sesion',
-      'Estas seguro de que deseas cerrar sesion?',
+      'Cerrar sesión',
+      '¿Estás seguro de que deseas cerrar sesión?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Cerrar sesion',
+          text: 'Cerrar sesión',
           style: 'destructive',
           onPress: async () => {
             await logout();
@@ -254,13 +251,15 @@ export default function ProfileScreen() {
       const nextStatus = await requestAccountDeletion();
       setAccountDeletionStatus(nextStatus);
       const scheduledLabel =
-        formatAccountDeletionDate(nextStatus.scheduled_deletion_at) || '30 dias';
-      Alert.alert(
-        'Eliminacion programada',
-        `Tu cuenta se eliminara automaticamente el ${scheduledLabel}. Puedes cancelar la solicitud desde Perfil antes de esa fecha.`,
+        formatAccountDeletionDate(nextStatus.scheduled_deletion_at) || '30 días';
+      hapticSuccess();
+      toast.success(
+        'Eliminación programada',
+        `Tu cuenta se eliminará automáticamente el ${scheduledLabel}. Puedes cancelar la solicitud desde Perfil antes de esa fecha.`,
       );
     } catch {
-      Alert.alert(
+      hapticError();
+      toast.error(
         'No se pudo programar',
         'Intenta de nuevo en unos minutos o contacta a soporte.',
       );
@@ -274,12 +273,14 @@ export default function ProfileScreen() {
     try {
       const nextStatus = await cancelAccountDeletion();
       setAccountDeletionStatus(nextStatus);
-      Alert.alert(
+      hapticSuccess();
+      toast.success(
         'Solicitud cancelada',
-        'Tu cuenta seguira activa y no se eliminara automaticamente.',
+        'Tu cuenta seguirá activa y no se eliminará automáticamente.',
       );
     } catch {
-      Alert.alert(
+      hapticError();
+      toast.error(
         'No se pudo cancelar',
         'Intenta de nuevo en unos minutos o contacta a soporte.',
       );
@@ -298,14 +299,14 @@ export default function ProfileScreen() {
         accountDeletionStatus.scheduled_deletion_at,
       );
       Alert.alert(
-        'Eliminacion programada',
+        'Eliminación programada',
         scheduledLabel
-          ? `Tu cuenta esta programada para eliminarse automaticamente el ${scheduledLabel}.`
-          : 'Tu cuenta esta programada para eliminarse automaticamente.',
+          ? `Tu cuenta está programada para eliminarse automáticamente el ${scheduledLabel}.`
+          : 'Tu cuenta está programada para eliminarse automáticamente.',
         [
           { text: 'Cerrar', style: 'cancel' },
           {
-            text: 'Cancelar eliminacion',
+            text: 'Cancelar eliminación',
             onPress: () => {
               void handleCancelAccountDeletion();
             },
@@ -317,11 +318,11 @@ export default function ProfileScreen() {
 
     Alert.alert(
       'Eliminar cuenta y datos',
-      'Tu cuenta de cliente y los datos asociados se programaran para eliminarse automaticamente en 30 dias. Podras cancelar la solicitud desde Perfil antes de esa fecha.',
+      'Tu cuenta de cliente y los datos asociados se programarán para eliminarse automáticamente en 30 días. Podrás cancelar la solicitud desde Perfil antes de esa fecha.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Programar eliminacion',
+          text: 'Programar eliminación',
           style: 'destructive',
           onPress: () => {
             void handleRequestAccountDeletion();
@@ -337,7 +338,8 @@ export default function ProfileScreen() {
     try {
       await setMeasurementPreference(nextPreference);
     } catch {
-      Alert.alert('Error', 'No se pudo guardar tu preferencia de unidades.');
+      hapticError();
+      toast.error('No se pudo guardar tu preferencia de unidades.');
     }
   };
 
@@ -354,7 +356,7 @@ export default function ProfileScreen() {
           },
         },
         {
-          text: 'Mexico',
+          text: 'México',
           onPress: () => {
             void handleMeasurementPreferenceSelect('mx');
           },
@@ -367,16 +369,16 @@ export default function ProfileScreen() {
     ? 'Cargando'
     : accountDeletionStatus?.requested
       ? accountDeletionStatus.days_until_deletion !== null
-        ? `${accountDeletionStatus.days_until_deletion} dias restantes`
+        ? `${accountDeletionStatus.days_until_deletion} días restantes`
         : 'Programada'
-      : 'Automatica en 30 dias';
+      : 'Automática en 30 días';
 
   const professionalsValue =
     !hasLoadedCareTeam && isLoadingCareTeam
       ? 'Cargando'
       : assignedCount > 0
         ? `${assignedCount} asignado${assignedCount > 1 ? 's' : ''}`
-        : 'Sin asignacion';
+        : 'Sin asignación';
 
   const profileImageUrl = user?.profilePictureUrl ?? undefined;
   const hasProfileImage = Boolean(profileImageUrl && !hasProfileImageError);
@@ -395,9 +397,17 @@ export default function ProfileScreen() {
   );
 
   return (
-    <TabScreenWrapper>
-      <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Volver"
+            activeOpacity={0.85}
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <Ionicons name="arrow-back" size={20} color={theme.colors.icon} />
+          </TouchableOpacity>
           <Text style={styles.title}>Perfil</Text>
         </View>
 
@@ -407,11 +417,9 @@ export default function ProfileScreen() {
             styles.scrollContent,
             {
               paddingHorizontal: horizontalPadding,
-              paddingBottom: contentInsetBottom,
+              paddingBottom: spacing.xxl,
             },
           ]}
-          onScroll={tabBarScroll.onScroll}
-          scrollEventThrottle={tabBarScroll.scrollEventThrottle}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.userCard}>
@@ -454,7 +462,7 @@ export default function ProfileScreen() {
             />
             <MenuItem
               icon="person-outline"
-              label="Informacion personal"
+              label="Información personal"
               onPress={() => router.push('/profile/personal-info')}
             />
             <MenuItem
@@ -511,7 +519,7 @@ export default function ProfileScreen() {
             />
             <MenuItem
               icon="document-text-outline"
-              label="Terminos y condiciones"
+              label="Términos y condiciones"
               onPress={() => {
                 const url =
                   process.env.EXPO_PUBLIC_TERMS_URL ||
@@ -519,13 +527,14 @@ export default function ProfileScreen() {
                 if (url) {
                   Linking.openURL(url);
                 } else {
-                  Alert.alert('No configurado', 'Enlace no disponible.');
+                  hapticError();
+                  toast.error('Enlace no disponible.');
                 }
               }}
             />
             <MenuItem
               icon="shield-checkmark-outline"
-              label="Politica de privacidad"
+              label="Política de privacidad"
               onPress={() => {
                 const url =
                   process.env.EXPO_PUBLIC_PRIVACY_URL ||
@@ -533,7 +542,8 @@ export default function ProfileScreen() {
                 if (url) {
                   Linking.openURL(url);
                 } else {
-                  Alert.alert('No configurado', 'Enlace no disponible.');
+                  hapticError();
+                  toast.error('Enlace no disponible.');
                 }
               }}
             />
@@ -542,7 +552,7 @@ export default function ProfileScreen() {
           <View style={styles.menuSection}>
             <MenuItem
               icon="log-out-outline"
-              label="Cerrar sesion"
+              label="Cerrar sesión"
               onPress={handleLogout}
               showChevron={false}
               danger
@@ -561,7 +571,6 @@ export default function ProfileScreen() {
           isUploading={isProfileImageUploading}
         />
       </SafeAreaView>
-    </TabScreenWrapper>
   );
 }
 
@@ -572,10 +581,24 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       backgroundColor: theme.colors.background,
     },
     header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
       paddingTop: spacing.md,
       paddingBottom: spacing.sm,
     },
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: borderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
     title: {
+      flex: 1,
       fontSize: fontSize['2xl'],
       fontWeight: 'bold',
       color: theme.colors.textPrimary,

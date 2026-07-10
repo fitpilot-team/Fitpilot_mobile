@@ -41,7 +41,7 @@ import { getRecipeRichTextBlocks } from '../../src/utils/recipeRichText';
 type RecipeTab = 'description' | 'ingredients';
 
 const tabOptions: { key: RecipeTab; label: string }[] = [
-  { key: 'description', label: 'Descripcion' },
+  { key: 'description', label: 'Descripción' },
   { key: 'ingredients', label: 'Ingredientes' },
 ];
 
@@ -263,7 +263,10 @@ export default function RecipeDetailScreen() {
     setSwapFoodsError(null);
 
     try {
-      const response = await getFoodsByExchangeGroup(ingredient.exchangeGroupId);
+      const response = await getFoodsByExchangeGroup(
+        ingredient.exchangeGroupId,
+        ingredient.portion.equivalents,
+      );
       setSwapFoods(response);
     } catch (loadError) {
       const apiError = loadError as ApiError;
@@ -363,7 +366,7 @@ export default function RecipeDetailScreen() {
   }, [parsedRecipeId, selectedIngredient?.recipeIngredientId]);
 
   if (!isInitialized) {
-    return <LoadingSpinner fullScreen text="Validando sesion..." />;
+    return <LoadingSpinner fullScreen text="Validando sesión..." />;
   }
 
   if (!user) {
@@ -381,7 +384,7 @@ export default function RecipeDetailScreen() {
   const placeholderColors = theme.isDark ? DARK_PLACEHOLDER_COLORS : LIGHT_PLACEHOLDER_COLORS;
   const recipeCountLabel = detail
     ? `${detail.ingredientCount} ingrediente${detail.ingredientCount === 1 ? '' : 's'}`
-    : 'Consulta descripcion e ingredientes';
+    : 'Consulta descripción e ingredientes';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -503,7 +506,7 @@ export default function RecipeDetailScreen() {
               </View>
             ) : (
               <Text style={styles.descriptionText}>
-                Esta receta no tiene descripcion disponible.
+                Esta receta no tiene descripción disponible.
               </Text>
             )}
           </Card>
@@ -524,7 +527,7 @@ export default function RecipeDetailScreen() {
               <Card style={styles.contentCard}>
                 <Text style={styles.emptyTitle}>Sin ingredientes visibles</Text>
                 <Text style={styles.emptyText}>
-                  Esta receta no trae ingredientes detallados para mostrar aqui.
+                  Esta receta no trae ingredientes detallados para mostrar aquí.
                 </Text>
               </Card>
             )}

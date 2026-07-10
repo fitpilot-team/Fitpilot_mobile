@@ -26,6 +26,7 @@ interface DietMealCardProps {
   meal: ClientDietMeal;
   onRecipeIngredientPress?: (recipe: ClientDietRecipeCard, ingredient: ClientDietIngredientRow) => void;
   onStandaloneFoodPress?: (food: ClientDietFoodRow) => void;
+  onRecipePress?: (recipe: ClientDietRecipeCard) => void;
 }
 
 type DietMealCardStyles = ReturnType<typeof createStyles>;
@@ -406,10 +407,11 @@ const RecipeCard: React.FC<{
   );
 };
 
-export const DietMealCard: React.FC<DietMealCardProps> = ({
+const DietMealCardComponent: React.FC<DietMealCardProps> = ({
   meal,
   onRecipeIngredientPress,
   onStandaloneFoodPress,
+  onRecipePress,
 }) => {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
@@ -430,6 +432,20 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({
       ...currentState,
       [recipeId]: !currentState[recipeId],
     }));
+  };
+
+  const handleRecipePress = (recipe: ClientDietRecipeCard) => {
+    if (onRecipePress) {
+      onRecipePress(recipe);
+      return;
+    }
+
+    router.push({
+      pathname: '/recipes/[recipeId]',
+      params: {
+        recipeId: String(recipe.recipeId),
+      },
+    });
   };
 
   return (
@@ -463,12 +479,7 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({
                 <RecipeCard
                   key={recipe.id}
                   recipe={recipe}
-                  onPress={() => router.push({
-                    pathname: '/recipes/[recipeId]',
-                    params: {
-                      recipeId: String(recipe.recipeId),
-                    },
-                  })}
+                  onPress={() => handleRecipePress(recipe)}
                   expanded={Boolean(expandedRecipeIds[recipe.id])}
                   onToggle={() => toggleRecipe(recipe.id)}
                   onIngredientPress={
@@ -510,6 +521,8 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({
     </Card>
   );
 };
+
+export const DietMealCard = React.memo(DietMealCardComponent);
 
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({

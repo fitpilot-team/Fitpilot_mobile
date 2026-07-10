@@ -159,9 +159,9 @@ export function MeasurementProgressScreen({
     () => getMeasurementProgressMetricConfig(metricKey),
     [metricKey],
   );
-  const metricLabel = metricConfig?.label ?? 'Medicion';
+  const metricLabel = metricConfig?.label ?? 'Medición';
   const metricLabelLower = metricLabel.toLowerCase();
-  const metricTitle = metricConfig?.progressTitle ?? 'Progreso de medicion';
+  const metricTitle = metricConfig?.progressTitle ?? 'Progreso de medición';
   const metricSubtitle = metricConfig?.progressSubtitle
     ?? 'Tendencia real, filtros por rango y detalle de cada registro.';
   const metricValueDecimals = metricConfig?.decimals ?? 1;
@@ -208,7 +208,7 @@ export function MeasurementProgressScreen({
       setError(null);
     } catch (loadError) {
       const apiError = loadError as ApiError;
-      setError(apiError.message || 'No fue posible cargar el progreso de la medicion.');
+      setError(apiError.message || 'No fue posible cargar el progreso de la medición.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -561,7 +561,7 @@ export function MeasurementProgressScreen({
 
         <View style={styles.scrollContent}>
           <Card style={styles.errorCard}>
-            <Text style={styles.errorTitle}>No fue posible abrir esta medicion</Text>
+            <Text style={styles.errorTitle}>No fue posible abrir esta medición</Text>
             <Text style={styles.errorText}>
               Regresa a la pantalla anterior y selecciona una medida compatible.
             </Text>
@@ -632,7 +632,7 @@ export function MeasurementProgressScreen({
         {!canUseAutoRotation ? (
           <Card style={styles.inlineNotice}>
             <Text style={styles.noticeText}>
-              Este build no permite landscape todavia. Auto se mantendra en vertical hasta que recompiles la app.
+              Este build no permite landscape todavía. Auto se mantendrá en vertical hasta que recompiles la app.
             </Text>
           </Card>
         ) : null}
@@ -653,9 +653,9 @@ export function MeasurementProgressScreen({
         {!error && allRecords.length === 0 ? (
           <Card style={styles.emptyCard}>
             <Ionicons name={metricIconName} size={40} color={theme.colors.iconMuted} />
-            <Text style={styles.emptyTitle}>Todavia no hay registros de {metricLabelLower}</Text>
+            <Text style={styles.emptyTitle}>Todavía no hay registros de {metricLabelLower}</Text>
             <Text style={styles.emptyText}>
-              En cuanto existan registros validos de {metricLabelLower}, aqui vas a poder revisar la evolucion completa.
+              En cuanto existan registros válidos de {metricLabelLower}, aquí vas a poder revisar la evolución completa.
             </Text>
           </Card>
         ) : (
@@ -734,11 +734,11 @@ export function MeasurementProgressScreen({
 
               <View style={styles.chartLegend}>
                 <View>
-                  <Text style={styles.legendLabel}>Maximo</Text>
+                  <Text style={styles.legendLabel}>Máximo</Text>
                   <Text style={styles.legendValue}>{maxLabel}{unitSuffix}</Text>
                 </View>
                 <View style={styles.legendRight}>
-                  <Text style={styles.legendLabel}>Minimo</Text>
+                  <Text style={styles.legendLabel}>Mínimo</Text>
                   <Text style={styles.legendValue}>{minLabel}{unitSuffix}</Text>
                 </View>
               </View>
@@ -848,7 +848,7 @@ export function MeasurementProgressScreen({
 
                   {filteredRecords.length === 1 ? (
                     <Text style={styles.singlePointHint}>
-                      Necesitas una segunda medicion para ver una tendencia completa.
+                      Necesitas una segunda medición para ver una tendencia completa.
                     </Text>
                   ) : null}
                 </>
@@ -857,7 +857,7 @@ export function MeasurementProgressScreen({
                   <Ionicons name="calendar-outline" size={28} color={theme.colors.iconMuted} />
                   <Text style={styles.filteredEmptyTitle}>No hay registros en este rango</Text>
                   <Text style={styles.filteredEmptyText}>
-                    Ajusta el periodo o selecciona fechas distintas para ver la grafica.
+                    Ajusta el periodo o selecciona fechas distintas para ver la gráfica.
                   </Text>
                 </View>
               )}
@@ -866,7 +866,7 @@ export function MeasurementProgressScreen({
             <Card style={styles.listCard}>
               <Text style={styles.sectionTitle}>Registros del rango</Text>
               <Text style={styles.sectionDescription}>
-                Lista simple del periodo actual para revisar {metricLabelLower} y fecha de cada medicion.
+                Lista simple del periodo actual para revisar {metricLabelLower} y fecha de cada medición.
               </Text>
 
               {listRecords.length > 0 ? (
@@ -919,7 +919,7 @@ export function MeasurementProgressScreen({
       <CalendarDatePickerModal
         visible={Boolean(pickerTarget && rangePreset === 'custom')}
         title={pickerTarget === 'start' ? 'Selecciona fecha inicial' : 'Selecciona fecha final'}
-        subtitle="Elige el dia que quieres usar para este rango."
+        subtitle="Elige el día que quieres usar para este rango."
         selectedDate={pickerTarget === 'start' ? customStartDate : customEndDate}
         minDate={pickerTarget === 'end' ? customStartDate : null}
         maxDate={pickerTarget === 'start' ? customEndDate : null}

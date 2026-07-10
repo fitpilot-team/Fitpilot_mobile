@@ -1,5 +1,9 @@
-import { nutritionClient } from './api';
+import { isApiNetworkError, nutritionClient } from './api';
+import { readPersistentCache, writePersistentCache } from './persistentCache';
+import { useAuthStore } from '../store/authStore';
+import { useConnectivityStore } from '../store/connectivityStore';
 import type {
+  ApiError,
   Citation,
   ClientDietExchangeSystem,
   ClientDietFoodRow,
@@ -10,6 +14,7 @@ import type {
   ClientDietRecipeCard,
   ClientDietRecipeDetail,
   ClientDietWeekDay,
+  ClientFoodSwapPreview,
   ClientFoodSwapCandidate,
   ClientRecipeSummary,
 } from '../types';
@@ -104,9 +109,18 @@ type NutritionFoodSwapCandidateResponse = {
   base_serving_size?: number | string | null;
   base_unit?: string | null;
   calories_kcal?: number | string | null;
-  serving_units?: {
-    id?: number | null;
-  }[] | null;
+  swap_preview?: NutritionFoodSwapPreviewResponse | null;
+};
+
+type NutritionFoodSwapPreviewResponse = {
+  quantity?: number | string | null;
+  unit_name?: string | null;
+  serving_unit_id?: number | string | null;
+  household_label?: string | null;
+  equivalents?: number | string | null;
+  grams?: number | string | null;
+  calories_kcal?: number | string | null;
+  basis?: string | null;
 };
 
 type NutritionCitationResponse = {
@@ -198,6 +212,15 @@ type RecipeGroupAccumulator = {
 };
 
 const DIET_LOOKAHEAD_DAYS = 7;
+const DIET_CALENDAR_CACHE_VERSION = 1;
+const DIET_CALENDAR_CACHE_PREFIX = 'fitpilot:cache:diet-calendar';
+
+const buildDietCalendarCacheKey = (clientId: number, weekStartDate: string) =>
+  [
+    DIET_CALENDAR_CACHE_PREFIX,
+    encodeURIComponent(String(clientId)),
+    encodeURIComponent(weekStartDate),
+  ].join(':');
 
 const toNumber = (value: number | string | null | undefined): number | null => {
   if (value === null || value === undefined || value === '') {
@@ -744,12 +767,50 @@ export const getDietRecipeDetail = async (
   return mapDietRecipeDetailResponse(recipe);
 };
 
+const normalizeSwapPreviewBasis = (
+  basis: string | null | undefined,
+): ClientFoodSwapPreview['basis'] => {
+  if (basis === 'exchange_unit' || basis === 'base_serving' || basis === 'unavailable') {
+    return basis;
+  }
+
+  return 'unavailable';
+};
+
+const mapFoodSwapPreview = (
+  preview?: NutritionFoodSwapPreviewResponse | null,
+): ClientFoodSwapPreview | null => {
+  if (!preview) {
+    return null;
+  }
+
+  return {
+    quantity: toNumber(preview.quantity),
+    unitName: preview.unit_name?.trim() || null,
+    servingUnitId: toNumber(preview.serving_unit_id),
+    householdLabel: preview.household_label?.trim() || null,
+    equivalents: toNumber(preview.equivalents),
+    grams: toNumber(preview.grams),
+    caloriesKcal: toNumber(preview.calories_kcal),
+    basis: normalizeSwapPreviewBasis(preview.basis),
+  };
+};
+
 export const getFoodsByExchangeGroup = async (
   groupId: number,
+  targetEquivalents?: number | null,
 ): Promise<ClientFoodSwapCandidate[]> => {
+  const params =
+    targetEquivalents !== null &&
+    targetEquivalents !== undefined &&
+    Number.isFinite(targetEquivalents) &&
+    targetEquivalents > 0
+      ? { target_equivalents: targetEquivalents }
+      : undefined;
+
   const foods = await nutritionClient.get<NutritionFoodSwapCandidateResponse[]>(
     `/foods/exchange-group/${groupId}`,
-    { skipErrorLogging: true },
+    { skipErrorLogging: true, params },
   );
 
   return (foods ?? []).map((food) => ({
@@ -760,7 +821,7 @@ export const getFoodsByExchangeGroup = async (
     baseServingSize: toNumber(food.base_serving_size),
     baseUnit: food.base_unit?.trim() || null,
     caloriesKcal: toNumber(food.calories_kcal),
-    servingUnitsCount: Array.isArray(food.serving_units) ? food.serving_units.length : 0,
+    swapPreview: mapFoodSwapPreview(food.swap_preview),
   }));
 };
 
@@ -823,7 +884,7 @@ export const updateClientDailyPrimarySelection = async (
   const targetDate = normalizeDateKey(date);
 
   if (!targetDate || !Number.isInteger(menuId)) {
-    throw new Error('No se pudo guardar el menu elegido para este dia.');
+    throw new Error('No se pudo guardar el menú elegido para este día.');
   }
 
   return nutritionClient.patch<NutritionDailyPrimarySelectionResponse>(
@@ -835,25 +896,11 @@ export const updateClientDailyPrimarySelection = async (
   );
 };
 
-export const getClientDietCalendar = async (
-  clientId: string,
-  date: string = getTodayDateKey(),
+const mapDailyMenusToClientDietCalendar = async (
+  dailyMenus: NutritionDailyBatchResponseItem[],
+  weekDateKeys: string[],
+  todayDate: string,
 ): Promise<ClientDietWeekDay[]> => {
-  const numericClientId = Number(clientId);
-
-  if (!Number.isInteger(numericClientId)) {
-    throw new Error('No se pudo resolver el cliente autenticado para cargar la dieta.');
-  }
-
-  const todayDate = getTodayDateKey();
-  const anchorDate = normalizeDateKey(date) || todayDate;
-  const weekStartDate = getStartOfLocalWeekDateKey(anchorDate) || todayDate;
-  const weekDateKeys = getLocalWeekDateKeys(anchorDate);
-  const dailyMenus = await nutritionClient.get<NutritionDailyBatchResponseItem[]>(
-    `/menus/daily/batch?client_id=${numericClientId}&date=${weekStartDate}&days=${DIET_LOOKAHEAD_DAYS}`,
-    { skipErrorLogging: true },
-  );
-
   const recipeSummaryMap = await buildRecipeSummaryMap(dailyMenus);
   const menusByDate = new Map<string, ClientDietMenu>();
 
@@ -885,6 +932,76 @@ export const getClientDietCalendar = async (
       menuOptions: assignedMenu ? [assignedMenu] : [],
     };
   });
+};
+
+const normalizeCachedDietCalendar = (days: unknown): ClientDietWeekDay[] | null => {
+  if (!Array.isArray(days)) {
+    return null;
+  }
+
+  const todayDate = getTodayDateKey();
+  const normalizedDays = days
+    .filter((day): day is ClientDietWeekDay =>
+      Boolean(
+        day &&
+        typeof day === 'object' &&
+        'assignedDate' in day &&
+        typeof day.assignedDate === 'string',
+      ),
+    )
+    .map((day) => ({
+      ...day,
+      isToday: day.assignedDate === todayDate,
+      rotationMenuOptions: Array.isArray(day.rotationMenuOptions)
+        ? day.rotationMenuOptions
+        : [],
+      menuOptions: Array.isArray(day.menuOptions) ? day.menuOptions : [],
+    }));
+
+  return normalizedDays.length > 0 ? normalizedDays : null;
+};
+
+export const getClientDietCalendar = async (
+  clientId: string,
+  date: string = getTodayDateKey(),
+): Promise<ClientDietWeekDay[]> => {
+  const numericClientId = Number(clientId);
+
+  if (!Number.isInteger(numericClientId)) {
+    throw new Error('No se pudo resolver el cliente autenticado para cargar la dieta.');
+  }
+
+  const todayDate = getTodayDateKey();
+  const anchorDate = normalizeDateKey(date) || todayDate;
+  const weekStartDate = getStartOfLocalWeekDateKey(anchorDate) || todayDate;
+  const weekDateKeys = getLocalWeekDateKeys(anchorDate);
+  const cacheKey = buildDietCalendarCacheKey(numericClientId, weekStartDate);
+
+  try {
+    const dailyMenus = await nutritionClient.get<NutritionDailyBatchResponseItem[]>(
+      `/menus/daily/batch?client_id=${numericClientId}&date=${weekStartDate}&days=${DIET_LOOKAHEAD_DAYS}`,
+      { skipErrorLogging: true },
+    );
+
+    const days = await mapDailyMenusToClientDietCalendar(dailyMenus, weekDateKeys, todayDate);
+    if (useAuthStore.getState().isAuthenticated) {
+      await writePersistentCache(cacheKey, DIET_CALENDAR_CACHE_VERSION, days);
+    }
+
+    return days;
+  } catch (error) {
+    if (isApiNetworkError(error as ApiError)) {
+      const cachedDays = normalizeCachedDietCalendar(
+        await readPersistentCache<unknown>(cacheKey, DIET_CALENDAR_CACHE_VERSION),
+      );
+
+      if (cachedDays) {
+        return cachedDays;
+      }
+    }
+
+    throw error;
+  }
 };
 
 const getRotationMenuPoolCandidates = (
@@ -922,7 +1039,12 @@ const loadClientDietRotationMenuPool = async (
       if (poolMenus.length > 0) {
         return poolMenus;
       }
-    } catch {
+    } catch (error) {
+      if (isApiNetworkError(error as ApiError)) {
+        // The backend is unreachable, so the remaining candidates would only
+        // burn full request timeouts before failing the same way.
+        break;
+      }
       // Fall back to the next candidate date and keep the week usable without rotation.
     }
   }
@@ -940,12 +1062,14 @@ export const getClientEffectiveDietWeek = async (
   const preferredSelectedDate =
     normalizeDateKey(options?.selectedDate) || resolvedAnchorDate;
   const baseDays = await getClientDietCalendar(clientId, resolvedAnchorDate);
-  const rotationMenus = await loadClientDietRotationMenuPool(
-    clientId,
-    resolvedAnchorDate,
-    preferredSelectedDate,
-    baseDays,
-  );
+  const rotationMenus = useConnectivityStore.getState().isOffline
+    ? ([] as ClientDietMenu[])
+    : await loadClientDietRotationMenuPool(
+        clientId,
+        resolvedAnchorDate,
+        preferredSelectedDate,
+        baseDays,
+      );
 
   return applyDietRotationMenuOptions(baseDays, rotationMenus);
 };
@@ -973,7 +1097,7 @@ export const getClientDietMenuCalendar = async (
   const targetDate = normalizeDateKey(date);
 
   if (!Number.isInteger(numericClientId) || !targetDate) {
-    throw new Error('No se pudo resolver el cliente autenticado para cargar los menus del calendario.');
+    throw new Error('No se pudo resolver el cliente autenticado para cargar los menús del calendario.');
   }
 
   const calendarMenus = await nutritionClient.get<NutritionMenuCalendarResponseItem[]>(
@@ -1016,7 +1140,7 @@ export const getClientDietMenuPool = async (
   const targetDate = normalizeDateKey(date);
 
   if (!Number.isInteger(numericClientId) || !targetDate) {
-    throw new Error('No se pudo resolver el cliente autenticado para cargar el pool de menus.');
+    throw new Error('No se pudo resolver el cliente autenticado para cargar el pool de menús.');
   }
 
   const poolMenus = await nutritionClient.get<NutritionMenuPoolResponseItem[]>(

@@ -63,7 +63,7 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
       const apiError = loadError as ApiError;
 
       if (apiError.status !== 403 && apiError.status !== 404 && apiError.status !== 501) {
-        setError('Error al cargar metricas');
+        setError('Error al cargar métricas');
       }
     } finally {
       setIsLoading(false);
@@ -74,7 +74,7 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
     return (
       <View style={[styles.container, { paddingHorizontal: horizontalPadding }]}>
         <View style={styles.header}>
-          <Text style={styles.title}>Mis metricas</Text>
+          <Text style={styles.title}>Mis métricas</Text>
         </View>
         <View style={[styles.metricsGrid, contentWidth >= 720 ? styles.metricsGridTablet : null]}>
           {Array.from({ length: 4 }, (_, index) => (
@@ -99,7 +99,7 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Ionicons name="analytics" size={20} color={theme.colors.primary} />
-          <Text style={styles.title}>Mis metricas</Text>
+          <Text style={styles.title}>Mis métricas</Text>
         </View>
         <TouchableOpacity style={styles.seeAllButton} onPress={onPress}>
           <Text style={styles.seeAllText}>Ver todo</Text>
