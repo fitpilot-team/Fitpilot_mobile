@@ -6,22 +6,27 @@ import { ProfileDetailScreen } from '../../src/components/profile/ProfileDetailS
 import { borderRadius, fontSize, shadows, spacing } from '../../src/constants/colors';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import { nutritionClient } from '../../src/services/api';
+import { registerDevicePushTokenForUser } from '../../src/services/notifications';
+import { useAuthStore } from '../../src/store/authStore';
 
 type NotificationPreferences = {
   push_enabled: boolean;
   meals_enabled: boolean;
   assignments_enabled: boolean;
   subscriptions_enabled: boolean;
+  chat_enabled: boolean;
 };
 
 export default function NotificationsSettingsScreen() {
   const styles = useThemedStyles(createStyles);
   const { theme } = useAppTheme();
+  const userId = useAuthStore((state) => state.user?.id);
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     push_enabled: true,
     meals_enabled: true,
     assignments_enabled: true,
     subscriptions_enabled: true,
+    chat_enabled: true,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -37,6 +42,7 @@ export default function NotificationsSettingsScreen() {
         meals_enabled?: boolean;
         assignments_enabled?: boolean;
         subscriptions_enabled?: boolean;
+        chat_enabled?: boolean;
       }>('/users/notification-preferences');
 
       setPreferences({
@@ -44,6 +50,7 @@ export default function NotificationsSettingsScreen() {
         meals_enabled: response.meals_enabled ?? true,
         assignments_enabled: response.assignments_enabled ?? true,
         subscriptions_enabled: response.subscriptions_enabled ?? true,
+        chat_enabled: response.chat_enabled ?? true,
       });
     } catch (error) {
       console.error('Failed to load preferences', error);
@@ -56,7 +63,26 @@ export default function NotificationsSettingsScreen() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await nutritionClient.post('/users/notification-preferences', preferences);
+      let nextPreferences = preferences;
+
+      if (preferences.push_enabled) {
+        const registeredPushToken = userId
+          ? await registerDevicePushTokenForUser(userId, { force: true })
+          : false;
+
+        if (!registeredPushToken) {
+          nextPreferences = { ...preferences, push_enabled: false };
+          setPreferences(nextPreferences);
+          await nutritionClient.post('/users/notification-preferences', nextPreferences);
+          Alert.alert(
+            'Notificaciones',
+            'No se pudieron activar las notificaciones en este dispositivo. Revisa los permisos de Android para FitPilot, tu conexión e intenta de nuevo.',
+          );
+          return;
+        }
+      }
+
+      await nutritionClient.post('/users/notification-preferences', nextPreferences);
       Alert.alert(
         'Éxito',
         'Tus preferencias de notificaciones se guardaron correctamente.',
@@ -143,6 +169,20 @@ export default function NotificationsSettingsScreen() {
               <Switch
                 value={preferences.assignments_enabled}
                 onValueChange={() => toggleSwitch('assignments_enabled')}
+                disabled={!preferences.push_enabled}
+                trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primary }}
+                thumbColor={theme.colors.surface}
+              />
+            </View>
+
+            <View style={[styles.settingRow, !preferences.push_enabled ? styles.disabledRow : null]}>
+              <View style={styles.textContainer}>
+                <Text style={styles.settingTitle}>Chat</Text>
+                <Text style={styles.settingDescription}>Mensajes nuevos de tu profesional.</Text>
+              </View>
+              <Switch
+                value={preferences.chat_enabled}
+                onValueChange={() => toggleSwitch('chat_enabled')}
                 disabled={!preferences.push_enabled}
                 trackColor={{ false: theme.colors.borderStrong, true: theme.colors.primary }}
                 thumbColor={theme.colors.surface}

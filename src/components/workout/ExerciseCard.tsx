@@ -845,7 +845,7 @@ const CardioExerciseBody = ({
     return (
       <TouchableOpacity activeOpacity={0.88} onPress={onAdvance} disabled={!onAdvance || isSavingSet}>
         <View style={styles.inlineStaticMetricsStack}>
-          <InlineStaticMetric styles={styles} label="Duracion" value={formatDurationSeconds(draft.durationSeconds)} />
+          <InlineStaticMetric styles={styles} label="Duración" value={formatDurationSeconds(draft.durationSeconds)} />
           <View style={styles.inlineDivider} />
           <InlineStaticMetric
             styles={styles}
@@ -855,7 +855,7 @@ const CardioExerciseBody = ({
           <View style={styles.inlineDivider} />
           <InlineStaticMetric
             styles={styles}
-            label="Calorias"
+            label="Calorías"
             value={draft.caloriesBurned != null && draft.caloriesBurned > 0 ? `${formatCompact(draft.caloriesBurned)} cal` : '--'}
           />
           <View style={styles.inlineDivider} />
@@ -871,7 +871,7 @@ const CardioExerciseBody = ({
         <EditableStepperMetric
           field="duration"
           metricId={`cardio-duration-${draft.currentSetNumber}`}
-          label="Duracion (min)"
+          label="Duración (min)"
           value={draft.durationSeconds / 60}
           onAdjust={(delta) => onCardioMetricChange('duration', delta)}
           onCommitValue={(value) => onCardioMetricCommit('duration', value)}
@@ -899,7 +899,7 @@ const CardioExerciseBody = ({
         <EditableStepperMetric
           field="calories"
           metricId={`cardio-calories-${draft.currentSetNumber}`}
-          label="Calorias"
+          label="Calorías"
           value={draft.caloriesBurned}
           onAdjust={(delta) => onCardioMetricChange('calories', delta)}
           onCommitValue={(value) => onCardioMetricCommit('calories', value)}
@@ -992,7 +992,7 @@ const MovementExerciseBody = ({
             <>
               <InlineStaticMetric
                 styles={styles}
-                label={isTimedMovement ? 'Duracion' : 'Cumplimiento'}
+                label={isTimedMovement ? 'Duración' : 'Cumplimiento'}
                 value={isTimedMovement && draft.durationSeconds != null ? formatDurationSeconds(draft.durationSeconds) : 'Completar'}
               />
               <View style={styles.inlineDivider} />
@@ -1041,7 +1041,7 @@ const MovementExerciseBody = ({
           <EditableStepperMetric
             field="duration"
             metricId={`movement-duration-${draft.currentSetNumber}`}
-            label="Duracion (min)"
+            label="Duración (min)"
             value={draft.durationSeconds != null ? draft.durationSeconds / 60 : null}
             onAdjust={(delta) => onMovementMetricChange('duration', delta)}
             onCommitValue={(value) => onMovementMetricCommit('duration', value)}

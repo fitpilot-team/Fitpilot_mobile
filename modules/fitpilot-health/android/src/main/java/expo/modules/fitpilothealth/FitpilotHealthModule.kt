@@ -1,5 +1,6 @@
 package expo.modules.fitpilothealth
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -26,6 +27,8 @@ import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import expo.modules.kotlin.activityresult.AppContextActivityResultContract
+import expo.modules.kotlin.activityresult.AppContextActivityResultLauncher
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
@@ -42,6 +45,8 @@ import kotlin.reflect.KClass
 class FitpilotHealthModule : Module() {
   private val context
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
+
+  private lateinit var permissionsLauncher: AppContextActivityResultLauncher<ArrayList<String>, Set<String>>
 
   private val requiredPermissions = setOf(
     HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
@@ -69,7 +74,7 @@ class FitpilotHealthModule : Module() {
     }
 
     AsyncFunction("requestPermissions") Coroutine { ->
-      openHealthConnectPermissions()
+      requestHealthConnectPermissions()
       permissionStatus(requiresManualGrant = false)
     }
 
@@ -103,6 +108,10 @@ class FitpilotHealthModule : Module() {
 
     AsyncFunction("openSettings") Coroutine { ->
       openHealthConnectSettings()
+    }
+
+    RegisterActivityContracts {
+      permissionsLauncher = registerForActivityResult(HealthConnectPermissionsContract())
     }
   }
 
@@ -148,16 +157,24 @@ class FitpilotHealthModule : Module() {
   private fun hasPermission(granted: Set<String>, recordClass: KClass<out Record>): Boolean =
     granted.contains(HealthPermission.getReadPermission(recordClass))
 
-  private fun openHealthConnectPermissions() {
+  private suspend fun requestHealthConnectPermissions() {
     if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) {
       openHealthConnectSettings()
       return
     }
 
-    val intent = PermissionController.createRequestPermissionResultContract()
-      .createIntent(context, requiredPermissions)
-      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    context.startActivity(intent)
+    val granted = grantedPermissions()
+    val missing = requiredPermissions.minus(granted)
+    if (missing.isEmpty()) {
+      return
+    }
+
+    // Los permisos de Health Connect (android.permission.health.*) deben pedirse
+    // SIEMPRE con el contrato PermissionController de Health Connect, en cualquier
+    // versión de Android. El diálogo de permisos genérico no puede otorgarlos
+    // (dejaba a los usuarios de Android 14+ con cero permisos), por eso usamos
+    // permissionsLauncher en todas las versiones.
+    permissionsLauncher.launch(ArrayList(missing))
   }
 
   private fun openHealthConnectSettings() {
@@ -435,4 +452,15 @@ class FitpilotHealthModule : Module() {
       "source_name" to sourceName.ifBlank { "Health Connect" },
       "metadata" to metadata.filterValues { it != null },
     ).filterValues { it != null }
+}
+
+private class HealthConnectPermissionsContract :
+  AppContextActivityResultContract<ArrayList<String>, Set<String>> {
+  private val delegate = PermissionController.createRequestPermissionResultContract()
+
+  override fun createIntent(context: Context, input: ArrayList<String>): Intent =
+    delegate.createIntent(context, input.toSet())
+
+  override fun parseResult(input: ArrayList<String>, resultCode: Int, intent: Intent?): Set<String> =
+    delegate.parseResult(resultCode, intent)
 }

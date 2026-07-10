@@ -23,9 +23,9 @@ import {
 type RangeKey = '7' | '14' | '30';
 
 const RANGE_OPTIONS = [
-  { key: '7', label: '7 dias' },
-  { key: '14', label: '14 dias' },
-  { key: '30', label: '30 dias' },
+  { key: '7', label: '7 días' },
+  { key: '14', label: '14 días' },
+  { key: '30', label: '30 días' },
 ] satisfies { key: RangeKey; label: string }[];
 
 const toRange = (value: RangeKey): ConnectedHealthFeedbackRange =>
@@ -74,7 +74,7 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
             </View>
             <View style={styles.heroCopy}>
               <Text style={styles.eyebrow}>Salud</Text>
-              <Text style={styles.title}>Recuperacion y energia</Text>
+              <Text style={styles.title}>Recuperación y energía</Text>
               <Text style={styles.subtitle}>
                 Fuente: {feedback.sourceLabel} - {feedback.latestDateLabel}
               </Text>
@@ -116,7 +116,7 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
             message={
               needsPermissionCta
                 ? 'Activa permisos para que FitPilot pueda leer datos agregados.'
-                : 'Sincroniza para calcular feedback de sueno, kcal, pasos y recuperacion.'
+                : 'Sincroniza para calcular feedback de sueño, kcal, pasos y recuperación.'
             }
             action={{
               label: needsPermissionCta ? 'Configurar permisos' : 'Sincronizar ahora',
@@ -161,7 +161,7 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
 
           <Card style={styles.sectionCard} padding="md">
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Metricas relevantes</Text>
+              <Text style={styles.sectionTitle}>Métricas relevantes</Text>
               <Button
                 title="Refrescar"
                 size="sm"
@@ -182,8 +182,8 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
 
           <Card style={styles.sectionCard} padding="md">
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Senales accionables</Text>
-              <Text style={styles.sectionMeta}>{range} dias</Text>
+              <Text style={styles.sectionTitle}>Señales accionables</Text>
+              <Text style={styles.sectionMeta}>{range} días</Text>
             </View>
             <ConnectedHealthInsightList insights={feedback.insights} />
           </Card>

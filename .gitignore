@@ -13,7 +13,10 @@ web-build/
 *.p12
 *.key
 *.mobileprovision
+service-account-key*.json
+firebase-adminsdk*.json
 modules/**/android/build/
+modules/**/android/.gradle/
 
 # Metro
 .metro-health-check*

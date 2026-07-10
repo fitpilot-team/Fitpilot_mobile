@@ -27,7 +27,7 @@ type WebViewLoadState = 'idle' | 'loading' | 'loaded' | 'error';
 type BridgeState = 'waiting' | 'ready' | 'token' | 'expired' | 'error';
 
 const CONFIGURATION_ERROR_MESSAGE =
-  'No fue posible abrir la verificacion de seguridad. Revisa la configuracion publica del bridge.';
+  'No fue posible abrir la verificación de seguridad. Revisa la configuración pública del bridge.';
 const LOAD_ERROR_MESSAGE =
   'No se pudo cargar la verificacion de seguridad. Intenta de nuevo.';
 const WAITING_HELP_MESSAGE =
@@ -168,7 +168,7 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
             <View style={styles.headerCopy}>
               <Text style={styles.title}>Verificacion de seguridad</Text>
               <Text style={styles.subtitle}>
-                Completa el challenge para continuar con el inicio de sesion.
+                Completa el challenge para continuar con el inicio de sesión.
               </Text>
             </View>
             <TouchableOpacity
@@ -259,7 +259,7 @@ export const TurnstileChallengeModal: React.FC<TurnstileChallengeModalProps> = (
           ) : null}
 
           <Text style={styles.footerText}>
-            Si cierras este modal, tu sesion no se iniciara hasta completar la verificacion.
+            Si cierras este modal, tu sesión no se iniciará hasta completar la verificación.
           </Text>
         </View>
       </View>

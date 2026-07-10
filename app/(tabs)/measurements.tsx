@@ -17,9 +17,13 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   Button,
   Card,
+  ChartSkeleton,
   FloatingButton,
   LoadingSpinner,
+  ListItemSkeleton,
+  ProfileShortcutButton,
   SegmentedControl,
+  StatCardSkeleton,
   TabScreenWrapper,
 } from '../../src/components/common';
 import {
@@ -59,6 +63,7 @@ import {
   updateMyMeasurement,
 } from '../../src/services/measurements';
 import { useAuthStore } from '../../src/store/authStore';
+import { toast } from '../../src/store/toastStore';
 import {
   MEASUREMENT_PREFERENCE_LABELS,
   useMeasurementPreferenceStore,
@@ -75,6 +80,7 @@ import {
   formatGlucoseRecordedAt,
   hasAdditionalHealthMetrics,
 } from '../../src/utils/healthMetrics';
+import { hapticError, hapticSuccess } from '../../src/utils/haptics';
 import { getPrimaryScreenHorizontalPadding } from '../../src/utils/layout';
 import { convertMeasurementUnitValue } from '../../src/utils/measurementUnits';
 import {
@@ -97,17 +103,24 @@ const MEASUREMENTS_TABS = [
   { key: 'health', label: 'Salud' },
 ] satisfies { key: MeasurementsTab; label: string }[];
 
+const resolveTabParam = (value: string | undefined): MeasurementsTab | null => {
+  if (value === 'summary' || value === 'body' || value === 'glucose' || value === 'health') {
+    return value;
+  }
+  return null;
+};
+
 const CREATE_ACTIONS = [
   {
     key: 'body',
-    title: 'Medicion corporal',
-    description: 'Peso, composicion, perimetros y observaciones del registro.',
+    title: 'Medición corporal',
+    description: 'Peso, composición, perímetros y observaciones del registro.',
     icon: 'analytics-outline',
   },
   {
     key: 'glucose',
     title: 'Glucosa',
-    description: 'Lectura con fecha, hora y contexto clinico.',
+    description: 'Lectura con fecha, hora y contexto clínico.',
     icon: 'water-outline',
   },
 ] satisfies {
@@ -158,21 +171,20 @@ export default function MeasurementsScreen() {
   );
   const wasFocusedRef = useRef(false);
   const params = useLocalSearchParams<{ initialTab?: string }>();
-  const resolveTabParam = (value: string | undefined): MeasurementsTab | null => {
-    if (value === 'summary' || value === 'body' || value === 'glucose' || value === 'health') {
-      return value;
-    }
-    return null;
-  };
   const [activeTab, setActiveTab] = useState<MeasurementsTab>(
     resolveTabParam(params.initialTab) ?? 'summary',
   );
   useEffect(() => {
     const nextTab = resolveTabParam(params.initialTab);
-    if (nextTab && nextTab !== activeTab) {
-      setActiveTab(nextTab);
+    if (!nextTab) {
+      return;
     }
-  }, [activeTab, params.initialTab]);
+    // Consumir el parámetro de navegación una sola vez y limpiarlo: así el efecto
+    // no se re-dispara al cambiar de pestaña el usuario (no revierte su navegación)
+    // ni re-monta <ConnectedHealthFeedbackDetail /> en bucle.
+    setActiveTab(nextTab);
+    router.setParams({ initialTab: undefined });
+  }, [params.initialTab]);
   const [measurements, setMeasurements] = useState<MeasurementHistoryItem[]>([]);
   const [pagination, setPagination] = useState<MeasurementPagination | null>(null);
   const [detailCache, setDetailCache] = useState<Record<string, MeasurementDetail>>(
@@ -192,6 +204,12 @@ export default function MeasurementsScreen() {
     null,
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [measurementSubmissionError, setMeasurementSubmissionError] = useState<
+    string | null
+  >(null);
+  const [glucoseSubmissionError, setGlucoseSubmissionError] = useState<
+    string | null
+  >(null);
   const [isCreateMenuVisible, setIsCreateMenuVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const {
@@ -309,6 +327,8 @@ export default function MeasurementsScreen() {
       setIsDetailLoading(false);
       setIsFormVisible(false);
       setEditingMeasurementId(null);
+      setMeasurementSubmissionError(null);
+      setGlucoseSubmissionError(null);
       setIsCreateMenuVisible(false);
       resetGlucoseUi();
       return;
@@ -448,6 +468,15 @@ export default function MeasurementsScreen() {
   const closeMeasurementForm = useCallback(() => {
     setIsFormVisible(false);
     setEditingMeasurementId(null);
+    setMeasurementSubmissionError(null);
+  }, []);
+
+  const clearMeasurementSubmissionError = useCallback(() => {
+    setMeasurementSubmissionError(null);
+  }, []);
+
+  const clearGlucoseSubmissionError = useCallback(() => {
+    setGlucoseSubmissionError(null);
   }, []);
 
   const isMeasurementEditable = useCallback(
@@ -517,7 +546,8 @@ export default function MeasurementsScreen() {
       } catch (detailError) {
         const apiError = detailError as ApiError;
         closeMeasurementDetail();
-        Alert.alert('Error', apiError.message || 'No fue posible cargar el detalle.');
+        hapticError();
+        toast.error(apiError.message || 'No fue posible cargar el detalle.');
       } finally {
         setIsDetailLoading(false);
       }
@@ -531,8 +561,9 @@ export default function MeasurementsScreen() {
     }
 
     if (!isMeasurementEditable(selectedMeasurement)) {
+      hapticError();
       Alert.alert(
-        'Edicion no disponible',
+        'Edición no disponible',
         'Solo puedes editar mediciones registradas por ti desde la app.',
       );
       return;
@@ -546,6 +577,7 @@ export default function MeasurementsScreen() {
   const handleSubmitMeasurement = useCallback(
     async (payload: CreateOwnMeasurementPayload) => {
       setIsSubmitting(true);
+      setMeasurementSubmissionError(null);
 
       try {
         const savedMeasurement = editingMeasurementId
@@ -559,15 +591,19 @@ export default function MeasurementsScreen() {
           ...currentCache,
           [savedMeasurement.measurement.id]: savedMeasurement,
         }));
-        Alert.alert(
-          editingMeasurementId ? 'Medicion actualizada' : 'Medicion registrada',
+        hapticSuccess();
+        toast.success(
+          editingMeasurementId ? 'Medición actualizada' : 'Medición registrada',
           editingMeasurementId
             ? 'Tus cambios se guardaron correctamente.'
             : 'Tus medidas se actualizaron correctamente.',
         );
       } catch (saveError) {
         const apiError = saveError as ApiError;
-        Alert.alert('Error', apiError.message || 'No fue posible guardar la medicion.');
+        hapticError();
+        setMeasurementSubmissionError(
+          apiError.message || 'No fue posible guardar la medición.',
+        );
       } finally {
         setIsSubmitting(false);
       }
@@ -611,7 +647,8 @@ export default function MeasurementsScreen() {
             ? detailError.message
             : 'No fue posible cargar el detalle.';
 
-        Alert.alert('Error', message);
+        hapticError();
+        toast.error(message);
       }
     },
     [openGlucoseDetailRecord],
@@ -619,19 +656,22 @@ export default function MeasurementsScreen() {
 
   const handleSubmitGlucose = useCallback(
     async (payload: Parameters<typeof submitGlucoseRecord>[0]) => {
+      setGlucoseSubmissionError(null);
+
       try {
         const result = await submitGlucoseRecord(payload);
 
-        Alert.alert(
+        hapticSuccess();
+        toast.success(
           result.mode === 'updated' ? 'Glucosa actualizada' : 'Glucosa registrada',
           result.mode === 'updated'
-            ? 'Tu lectura se actualizo correctamente.'
-            : 'Tu lectura se guardo correctamente.',
+            ? 'Tu lectura se actualizó correctamente.'
+            : 'Tu lectura se guardó correctamente.',
         );
       } catch (saveError) {
         const apiError = saveError as ApiError;
-        Alert.alert(
-          'Error',
+        hapticError();
+        setGlucoseSubmissionError(
           apiError.message || 'No fue posible guardar la glucosa.',
         );
       }
@@ -639,17 +679,24 @@ export default function MeasurementsScreen() {
     [submitGlucoseRecord],
   );
 
+  const handleCloseGlucoseForm = useCallback(() => {
+    setGlucoseSubmissionError(null);
+    closeGlucoseForm();
+  }, [closeGlucoseForm]);
+
   const confirmDeleteGlucose = useCallback(async () => {
     try {
       const wasDeleted = await deleteSelectedGlucoseRecord();
 
       if (wasDeleted) {
-        Alert.alert('Registro eliminado', 'La lectura se elimino correctamente.');
+        hapticSuccess();
+        toast.success('Registro eliminado', 'La lectura se eliminó correctamente.');
       }
     } catch (deleteError) {
       const apiError = deleteError as ApiError;
+      hapticError();
       Alert.alert(
-        'Error',
+        'No se pudo eliminar',
         apiError.message || 'No fue posible eliminar la lectura.',
       );
     }
@@ -661,16 +708,17 @@ export default function MeasurementsScreen() {
     }
 
     if (hasAdditionalHealthMetrics(selectedGlucoseRecord)) {
+      hapticError();
       Alert.alert(
-        'Eliminacion no disponible',
-        'Este registro tambien incluye otras metricas clinicas y no puede eliminarse desde la app.',
+        'Eliminación no disponible',
+        'Este registro también incluye otras métricas clínicas y no puede eliminarse desde la app.',
       );
       return;
     }
 
     Alert.alert(
       'Eliminar registro',
-      'Esta accion eliminara tu lectura de glucosa.',
+      'Esta acción eliminará tu lectura de glucosa.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -708,7 +756,38 @@ export default function MeasurementsScreen() {
   ) : null;
 
   if (isLoading) {
-    return <LoadingSpinner fullScreen text="Cargando tus medidas..." />;
+    return (
+      <TabScreenWrapper>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={[styles.header, { paddingHorizontal: horizontalPadding }]}>
+            <View style={styles.headerCopy}>
+              <StatCardSkeleton />
+            </View>
+            <ProfileShortcutButton />
+          </View>
+          <View style={[styles.tabsWrap, { paddingHorizontal: horizontalPadding }]}>
+            <View style={styles.skeletonStatRow}>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </View>
+          </View>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingHorizontal: horizontalPadding, paddingBottom: contentInsetBottom },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <ChartSkeleton />
+            <ListItemSkeleton />
+            <ListItemSkeleton />
+            <ListItemSkeleton />
+          </ScrollView>
+        </SafeAreaView>
+      </TabScreenWrapper>
+    );
   }
 
   return (
@@ -718,12 +797,13 @@ export default function MeasurementsScreen() {
           <View style={styles.headerCopy}>
             <Text style={styles.title}>Medidas</Text>
             <Text style={styles.subtitle}>
-              Organiza tu seguimiento corporal y glucemico por tipo de registro.
+              Organiza tu seguimiento corporal y glucémico por tipo de registro.
             </Text>
             <Text style={styles.preferenceText}>
               Unidades: {MEASUREMENT_PREFERENCE_LABELS[measurementPreference]}
             </Text>
           </View>
+          <ProfileShortcutButton />
         </View>
 
         <View style={[styles.tabsWrap, { paddingHorizontal: horizontalPadding }]}>
@@ -772,7 +852,7 @@ export default function MeasurementsScreen() {
                   <View style={styles.overviewHeaderCopy}>
                     <Text style={styles.overviewEyebrow}>Corporal</Text>
                     <Text style={styles.overviewTitle}>
-                      Ultimo registro antropometrico
+                      Último registro antropométrico
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -833,14 +913,14 @@ export default function MeasurementsScreen() {
                         color={theme.colors.primary}
                       />
                       <Text style={styles.inlineActionText}>
-                        Registrar nueva medicion corporal
+                        Registrar nueva medición corporal
                       </Text>
                     </TouchableOpacity>
                   </>
                 ) : (
                   <>
                     <Text style={styles.overviewEmptyText}>
-                      Aun no tienes mediciones corporales registradas.
+                      Aún no tienes mediciones corporales registradas.
                     </Text>
                     <TouchableOpacity
                       style={styles.inlineAction}
@@ -853,7 +933,7 @@ export default function MeasurementsScreen() {
                         color={theme.colors.primary}
                       />
                       <Text style={styles.inlineActionText}>
-                        Registrar mi primera medicion
+                        Registrar mi primera medición
                       </Text>
                     </TouchableOpacity>
                   </>
@@ -932,7 +1012,7 @@ export default function MeasurementsScreen() {
                 </View>
 
                 {isLoadingLatestGlucose && !summaryGlucoseRecord ? (
-                  <Text style={styles.loadingLabel}>Cargando ultima lectura...</Text>
+                  <Text style={styles.loadingLabel}>Cargando última lectura...</Text>
                 ) : summaryGlucoseRecord ? (
                   <>
                     <Text style={styles.glucoseSummaryValue}>
@@ -945,8 +1025,8 @@ export default function MeasurementsScreen() {
                     </Text>
                     <Text style={styles.overviewHint}>
                       {summaryGlucoseIsMixed
-                        ? 'Este registro incluye otras metricas clinicas y ya esta visible para tu nutriologo.'
-                        : 'Tu lectura mas reciente ya esta lista para seguimiento nutricional.'}
+                        ? 'Este registro incluye otras métricas clínicas y ya está visible para tu nutriólogo.'
+                        : 'Tu lectura más reciente ya está lista para seguimiento nutricional.'}
                     </Text>
                     <TouchableOpacity
                       style={styles.inlineAction}
@@ -967,7 +1047,7 @@ export default function MeasurementsScreen() {
                   <>
                     <Text style={styles.overviewEmptyText}>
                       {glucoseLatestError ??
-                        'Aun no tienes glucosas registradas en tu seguimiento.'}
+                        'Aún no tienes glucosas registradas en tu seguimiento.'}
                     </Text>
                     <TouchableOpacity
                       style={styles.inlineAction}
@@ -1003,14 +1083,14 @@ export default function MeasurementsScreen() {
                     color={theme.colors.iconMuted}
                   />
                   <Text style={styles.emptyTitle}>
-                    Todavia no tienes mediciones registradas
+                    Todavía no tienes mediciones registradas
                   </Text>
                   <Text style={styles.emptyText}>
                     Captura tu primer registro para empezar a ver peso,
-                    composicion y perimetros.
+                    composición y perímetros.
                   </Text>
                   <Button
-                    title="Registrar mi primera medicion"
+                    title="Registrar mi primera medición"
                     onPress={openCreateMeasurementForm}
                     icon={<Ionicons name="add-outline" size={18} color="#ffffff" />}
                   />
@@ -1054,7 +1134,7 @@ export default function MeasurementsScreen() {
                                   size={12}
                                   color={theme.colors.primary}
                                 />
-                                <Text style={styles.metricActionText}>Ver grafica</Text>
+                                <Text style={styles.metricActionText}>Ver gráfica</Text>
                               </View>
                             ) : null}
                           </View>
@@ -1129,7 +1209,7 @@ export default function MeasurementsScreen() {
                   </View>
 
                   <Text style={styles.lastUpdate}>
-                    Ultima actualizacion:{' '}
+                    Última actualización:{' '}
                     {formatMeasurementDate(
                       getMeasurementDisplayDate(latestMeasurement),
                       'long',
@@ -1142,7 +1222,7 @@ export default function MeasurementsScreen() {
                         <View style={styles.sectionHeaderContent}>
                           <Text style={styles.sectionTitle}>Indicadores calculados</Text>
                           <Text style={styles.sectionDescription}>
-                            Resumen derivado del registro mas reciente.
+                            Resumen derivado del registro más reciente.
                           </Text>
                         </View>
                         <TouchableOpacity
@@ -1177,7 +1257,7 @@ export default function MeasurementsScreen() {
                                       color={theme.colors.primary}
                                     />
                                     <Text style={styles.metricActionText}>
-                                      Ver grafica
+                                      Ver gráfica
                                     </Text>
                                   </View>
                                 ) : null}
@@ -1231,9 +1311,9 @@ export default function MeasurementsScreen() {
                   ) : null}
 
                   <Card style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>Perimetros corporales</Text>
+                    <Text style={styles.sectionTitle}>Perímetros corporales</Text>
                     <Text style={styles.sectionDescription}>
-                      Se muestran unicamente las medidas disponibles del ultimo registro.
+                      Se muestran únicamente las medidas disponibles del último registro.
                     </Text>
                     <View style={styles.perimeterGrid}>
                       {perimeterCards.map((field) => {
@@ -1266,7 +1346,7 @@ export default function MeasurementsScreen() {
                                   size={12}
                                   color={theme.colors.primary}
                                 />
-                                <Text style={styles.metricActionText}>Ver grafica</Text>
+                                <Text style={styles.metricActionText}>Ver gráfica</Text>
                               </View>
                             </View>
                             <Text style={styles.perimeterLabel}>{field.label}</Text>
@@ -1406,7 +1486,7 @@ export default function MeasurementsScreen() {
                       </View>
                     ) : null}
                   </View>
-                  <Text style={styles.glucoseHeroEyebrow}>Ultimo registro</Text>
+                  <Text style={styles.glucoseHeroEyebrow}>Último registro</Text>
                   <Text style={styles.glucoseHeroValue}>
                     {formatMeasurementNumber(summaryGlucoseRecord.glucose_mg_dl, 0)}
                     <Text style={styles.glucoseHeroUnit}> mg/dL</Text>
@@ -1435,11 +1515,11 @@ export default function MeasurementsScreen() {
                     color={theme.colors.iconMuted}
                   />
                   <Text style={styles.emptyTitle}>
-                    Todavia no tienes glucosas registradas
+                    Todavía no tienes glucosas registradas
                   </Text>
                   <Text style={styles.emptyText}>
                     Guarda tu primera lectura para compartir el seguimiento con tu
-                    nutriologo.
+                    nutriólogo.
                   </Text>
                   <Button
                     title="Registrar mi primera glucosa"
@@ -1504,7 +1584,7 @@ export default function MeasurementsScreen() {
                             {mixedRecord ? (
                               <View style={styles.historyBadge}>
                                 <Text style={styles.historyBadgeText}>
-                                  Incluye otras metricas clinicas
+                                  Incluye otras métricas clínicas
                                 </Text>
                               </View>
                             ) : null}
@@ -1514,7 +1594,7 @@ export default function MeasurementsScreen() {
                     </View>
                   ) : (
                     <Text style={styles.historyEmpty}>
-                      Cuando registres lecturas, aqui aparecera el historial completo.
+                      Cuando registres lecturas, aquí aparecerá el historial completo.
                     </Text>
                   )}
 
@@ -1560,6 +1640,8 @@ export default function MeasurementsScreen() {
           isSubmitting={isSubmitting}
           initialMeasurement={editingMeasurement}
           defaultHeightCm={defaultHeightCm}
+          submissionError={measurementSubmissionError}
+          onClearSubmissionError={clearMeasurementSubmissionError}
           onClose={closeMeasurementForm}
           onSubmit={handleSubmitMeasurement}
         />
@@ -1578,7 +1660,9 @@ export default function MeasurementsScreen() {
           visible={isFocused && isGlucoseFormVisible}
           isSubmitting={isSubmittingGlucose}
           initialRecord={editingGlucoseRecord}
-          onClose={closeGlucoseForm}
+          submissionError={glucoseSubmissionError}
+          onClearSubmissionError={clearGlucoseSubmissionError}
+          onClose={handleCloseGlucoseForm}
           onSubmit={handleSubmitGlucose}
         />
       </SafeAreaView>
@@ -1594,12 +1678,15 @@ const createStyles = (theme: AppTheme) =>
     },
     header: {
       flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.md,
       paddingTop: spacing.md,
       paddingBottom: spacing.sm,
       backgroundColor: theme.colors.background,
     },
     headerCopy: {
       flex: 1,
+      minWidth: 0,
     },
     title: {
       fontSize: fontSize['2xl'],
@@ -1618,6 +1705,10 @@ const createStyles = (theme: AppTheme) =>
     },
     tabsWrap: {
       paddingBottom: spacing.md,
+    },
+    skeletonStatRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
     },
     scrollView: {
       flex: 1,

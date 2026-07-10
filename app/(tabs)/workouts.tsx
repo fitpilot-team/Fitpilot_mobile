@@ -3,7 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Platform,
   RefreshControl,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -19,9 +21,13 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   Button,
   Card,
-  LoadingSpinner,
+  ChartSkeleton,
+  ProfileShortcutButton,
   SegmentedControl,
+  Skeleton,
+  StatCardSkeleton,
   TabScreenWrapper,
+  WorkoutCardSkeleton,
 } from '../../src/components/common';
 import { AnalyticsRangeSelector } from '../../src/components/workout-analytics/AnalyticsRangeSelector';
 import { ExerciseHighlightCard } from '../../src/components/workout-analytics/ExerciseHighlightCard';
@@ -29,6 +35,7 @@ import { RepRangeEditorModal } from '../../src/components/workout-analytics/RepR
 import { RepRangeVolumeChart } from '../../src/components/workout-analytics/RepRangeVolumeChart';
 import { WorkoutAnalyticsComparisonGroup } from '../../src/components/workout-analytics/WorkoutAnalyticsComparisonGroup';
 import { WorkoutAnalyticsContextNavigator } from '../../src/components/workout-analytics/WorkoutAnalyticsContextNavigator';
+import { DayTypeProgressSection } from '../../src/components/workout-analytics/DayTypeProgressSection';
 import { WorkoutAnalyticsContextPickerModal } from '../../src/components/workout-analytics/WorkoutAnalyticsContextPickerModal';
 import { WorkoutAnalyticsDailySessionComparisonChart } from '../../src/components/workout-analytics/WorkoutAnalyticsDailySessionComparisonChart';
 import { WorkoutAnalyticsHero, type WorkoutAnalyticsHeroMetric } from '../../src/components/workout-analytics/WorkoutAnalyticsHero';
@@ -37,6 +44,7 @@ import { WorkoutAnalyticsPillSelector } from '../../src/components/workout-analy
 import { WorkoutAnalyticsSnapshotCard } from '../../src/components/workout-analytics/WorkoutAnalyticsSnapshotCard';
 import { DEFAULT_WORKOUT_ANALYTICS_RANGE } from '../../src/constants/workoutAnalytics';
 import { borderRadius, fontSize, spacing } from '../../src/constants/colors';
+import { useAuthStore } from '../../src/store/authStore';
 import {
   getWorkoutMacrocycleDetail,
   getWorkoutAnalyticsHistory,
@@ -114,7 +122,7 @@ const TAB_OPTIONS = [
 const EXERCISE_SORT_OPTIONS = [
   { value: 'recent', label: 'Recientes' },
   { value: 'progress', label: 'Mayor progreso' },
-  { value: 'frequency', label: 'Mas frecuentes' },
+  { value: 'frequency', label: 'Más frecuentes' },
 ] as const;
 
 const HISTORY_STATUS_OPTIONS = [
@@ -335,7 +343,7 @@ const getTabSubtitle = (activeTab: WorkoutAnalyticsTab) => {
     return 'Cambia el contexto y revisa la progresion de cada movimiento sin depender del resumen principal.';
   }
 
-  return 'Cambia el alcance del analisis para revisar tu progreso por ventana, microciclo, bloque o programa.';
+  return 'Cambia el alcance del análisis para revisar tu progreso por ventana, microciclo, bloque o programa.';
 };
 
 const buildOverviewEmptyState = (
@@ -348,7 +356,7 @@ const buildOverviewEmptyState = (
       title: 'Sin contexto programatico disponible',
       description:
         emptyMessage ??
-        'Aun no hay un programa activo o el cliente no tiene un contexto programatico resoluble.',
+        'Aún no hay un programa activo o el cliente no tiene un contexto programático resoluble.',
     };
   }
 
@@ -357,7 +365,7 @@ const buildOverviewEmptyState = (
     title: 'Sin datos suficientes',
     description:
       emptyMessage ??
-      'Todavia no hay suficientes sesiones en la ventana seleccionada para construir analytics utiles.',
+      'Todavía no hay suficientes sesiones en la ventana seleccionada para construir analytics útiles.',
   };
 };
 
@@ -463,17 +471,21 @@ const EmptyStateCard = ({
 const ExerciseCard = ({
   exercise,
   selectedRepBucketLabel,
-  onPress,
+  onOpenDetail,
 }: {
   exercise: ExerciseTrendSummary;
   selectedRepBucketLabel?: string | null;
-  onPress: () => void;
+  onOpenDetail: (exerciseId: string) => void;
 }) => {
+  const handlePress = useCallback(() => {
+    onOpenDetail(exercise.exercise_id);
+  }, [exercise.exercise_id, onOpenDetail]);
+
   return (
     <ExerciseHighlightCard
       exercise={exercise}
       selectedRepBucketLabel={selectedRepBucketLabel}
-      onPress={onPress}
+      onPress={handlePress}
     />
   );
 
@@ -487,11 +499,11 @@ const ExerciseCard = ({
           <Text style={styles.exerciseMeta}>
             {exercise.last_performed_on
               ? selectedRepBucketLabel
-                ? `Ultima sesion con ${selectedRepBucketLabel} reps · ${formatLocalDate(exercise.last_performed_on, {
+                ? `Última sesión con ${selectedRepBucketLabel} reps · ${formatLocalDate(exercise.last_performed_on, {
                     day: 'numeric',
                     month: 'short',
                   })}`
-                : `Ultima sesion ${formatLocalDate(exercise.last_performed_on, {
+                : `Última sesión ${formatLocalDate(exercise.last_performed_on, {
                     day: 'numeric',
                     month: 'short',
                   })}`
@@ -583,7 +595,7 @@ const HistoryCard = ({
       text:
         workout.duration_minutes != null
           ? formatDuration(Math.max(1, Math.round(workout.duration_minutes)))
-          : 'Sin duracion',
+          : 'Sin duración',
     },
     {
       id: 'exercises',
@@ -695,6 +707,7 @@ export default function WorkoutsScreen() {
   const contentInsetBottom = useBottomTabBarContentInset();
   const isFocused = useIsFocused();
   const isTablet = isTabletLayout(width, height);
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   const [range, setRange] = useState<WorkoutAnalyticsRange>(DEFAULT_WORKOUT_ANALYTICS_RANGE);
   const [analyticsScopeKind, setAnalyticsScopeKind] = useState<WorkoutAnalyticsScopeKind>('range');
   const [modules, setModules] = useState<WorkoutAnalyticsModules | null>(null);
@@ -804,6 +817,7 @@ export default function WorkoutsScreen() {
           macrocycleId: requestScopeParams.macrocycleId,
           mesocycleId: requestScopeParams.mesocycleId,
           microcycleId: requestScopeParams.microcycleId,
+          cacheUserId: userId,
         });
         setModules(nextModules);
         setError(null);
@@ -829,7 +843,7 @@ export default function WorkoutsScreen() {
         setIsRefreshing(false);
       }
     },
-    [analyticsScopeKind, isContextBootstrapped, range, selectedContext, selectedRepBucketId],
+    [analyticsScopeKind, isContextBootstrapped, range, selectedContext, selectedRepBucketId, userId],
   );
 
   const loadHistoricalCatalog = useCallback(
@@ -863,7 +877,7 @@ export default function WorkoutsScreen() {
         setContextCatalogError(null);
       } catch (loadError) {
         const apiError = loadError as ApiError;
-        setContextCatalogError(apiError.message || 'No fue posible cargar el historico del programa.');
+        setContextCatalogError(apiError.message || 'No fue posible cargar el histórico del programa.');
       } finally {
         setIsContextCatalogLoaded(true);
         setIsContextCatalogLoading(false);
@@ -1130,7 +1144,7 @@ export default function WorkoutsScreen() {
     const latestWorkout = recentSessions[0];
     if (latestWorkout) {
       return {
-        label: 'Ultimo registro',
+        label: 'Último registro',
         hint: `${latestWorkout.training_day_name} - ${formatLocalDate(latestWorkout.performed_on_date, {
           day: 'numeric',
           month: 'short',
@@ -1334,7 +1348,74 @@ export default function WorkoutsScreen() {
     ) : null;
 
   if (isLoading && !modules) {
-    return <LoadingSpinner fullScreen text="Cargando tus entrenamientos..." />;
+    return (
+      <TabScreenWrapper>
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <ScrollView
+            style={styles.list}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: contentInsetBottom + spacing.lg },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View
+              style={[
+                styles.sectionShell,
+                { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+              ]}
+            >
+              <View style={styles.pageHeader}>
+                <View style={styles.screenIntroRow}>
+                  <View style={styles.screenIntro}>
+                    <Skeleton width={120} height={16} />
+                    <Skeleton width={160} height={32} />
+                    <Skeleton width="82%" height={18} />
+                  </View>
+                  <ProfileShortcutButton />
+                </View>
+              </View>
+            </View>
+            <View
+              style={[
+                styles.sectionShell,
+                { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+              ]}
+            >
+              <View style={styles.skeletonStatRow}>
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+                <StatCardSkeleton />
+              </View>
+            </View>
+            <View
+              style={[
+                styles.sectionShell,
+                { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+              ]}
+            >
+              <ChartSkeleton />
+            </View>
+            <View
+              style={[
+                styles.sectionShell,
+                { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+              ]}
+            >
+              <WorkoutCardSkeleton />
+            </View>
+            <View
+              style={[
+                styles.sectionShell,
+                { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+              ]}
+            >
+              <WorkoutCardSkeleton />
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </TabScreenWrapper>
+    );
   }
 
   if (!modules) {
@@ -1364,10 +1445,13 @@ export default function WorkoutsScreen() {
           isTablet ? styles.pageHeaderTablet : null,
         ]}
       >
-        <View style={styles.screenIntro}>
-          <Text style={styles.screenEyebrow}>Entrenamientos</Text>
-          <Text style={styles.screenTitle}>Progreso</Text>
-          <Text style={styles.screenSubtitle}>{activeTabSubtitle}</Text>
+        <View style={styles.screenIntroRow}>
+          <View style={styles.screenIntro}>
+            <Text style={styles.screenEyebrow}>Entrenamientos</Text>
+            <Text style={styles.screenTitle}>Progreso</Text>
+            <Text style={styles.screenSubtitle}>{activeTabSubtitle}</Text>
+          </View>
+          <ProfileShortcutButton />
         </View>
 
         <SegmentedControl
@@ -1406,7 +1490,7 @@ export default function WorkoutsScreen() {
 
                 {analyticsScopeKind === 'range' ? (
                   <View style={styles.utilityGroup}>
-                    <Text style={styles.utilityLabel}>Ventana de analisis</Text>
+                    <Text style={styles.utilityLabel}>Ventana de análisis</Text>
                     <AnalyticsRangeSelector value={range} onChange={setRange} />
                   </View>
                 ) : historicalContextNavigator ? (
@@ -1442,7 +1526,7 @@ export default function WorkoutsScreen() {
 
                 {analyticsScopeKind === 'range' ? (
                   <View style={styles.utilityGroup}>
-                    <Text style={styles.utilityLabel}>Ventana de analisis</Text>
+                    <Text style={styles.utilityLabel}>Ventana de análisis</Text>
                     <AnalyticsRangeSelector value={range} onChange={setRange} />
                   </View>
                 ) : historicalContextNavigator ? (
@@ -1479,8 +1563,8 @@ export default function WorkoutsScreen() {
               <Text style={styles.tabContextTitle}>Sesiones registradas</Text>
               <Text style={styles.tabContextSubtitle}>
                 {analyticsScopeKind === 'range' && selectedRepBucketLabel
-                  ? `Revisa sesiones con sets en ${selectedRepBucketLabel} y filtralas por estado cuando haga falta.`
-                  : 'Revisa los registros dentro del mismo contexto activo y filtralos por estado cuando haga falta.'}
+                  ? `Revisa sesiones con sets en ${selectedRepBucketLabel} y fíltralas por estado cuando haga falta.`
+                  : 'Revisa los registros dentro del mismo contexto activo y fíltralos por estado cuando haga falta.'}
               </Text>
             </Card>
 
@@ -1497,7 +1581,7 @@ export default function WorkoutsScreen() {
 
                 {analyticsScopeKind === 'range' ? (
                   <View style={styles.utilityGroup}>
-                    <Text style={styles.utilityLabel}>Ventana de analisis</Text>
+                    <Text style={styles.utilityLabel}>Ventana de análisis</Text>
                     <AnalyticsRangeSelector value={range} onChange={setRange} />
                   </View>
                 ) : historicalContextNavigator ? (
@@ -1553,6 +1637,9 @@ export default function WorkoutsScreen() {
           <FlatList
             data={overviewSections}
             keyExtractor={(item, index) => `${item.kind}-${index}`}
+            windowSize={7}
+            initialNumToRender={10}
+            removeClippedSubviews={Platform.OS === 'android'}
             style={styles.list}
             contentContainerStyle={[
               styles.listContent,
@@ -1659,7 +1746,7 @@ export default function WorkoutsScreen() {
                             key={exercise.exercise_id}
                             exercise={exercise}
                             selectedRepBucketLabel={selectedRepBucketLabel}
-                            onPress={() => openExerciseDetail(exercise.exercise_id)}
+                            onOpenDetail={openExerciseDetail}
                           />
                         ))}
                       </View>
@@ -1670,10 +1757,10 @@ export default function WorkoutsScreen() {
                         description={
                           analyticsScopeKind === 'range'
                             ? selectedRepBucketLabel
-                              ? `Todavia no hay movimientos con sets en ${selectedRepBucketLabel} dentro de esta ventana.`
-                              : 'Completa mas sesiones o cambia la ventana temporal para recuperar progreso.'
+                              ? `Todavía no hay movimientos con sets en ${selectedRepBucketLabel} dentro de esta ventana.`
+                              : 'Completa más sesiones o cambia la ventana temporal para recuperar progreso.'
                             : modules.context.empty_message ??
-                              'Todavia no hay suficiente señal dentro de este contexto programatico.'
+                              'Todavía no hay suficiente señal dentro de este contexto programático.'
                         }
                       />
                     )}
@@ -1719,7 +1806,7 @@ export default function WorkoutsScreen() {
                       description={
                         selectedRepBucketLabel
                           ? `No hay sesiones con sets en ${selectedRepBucketLabel} dentro de esta ventana.`
-                          : 'Tu historial aparecera aqui en cuanto registres entrenamientos.'
+                          : 'Tu historial aparecerá aquí en cuanto registres entrenamientos.'
                       }
                     />
                   )}
@@ -1741,6 +1828,18 @@ export default function WorkoutsScreen() {
                 />
               </View>
             )}
+            ListFooterComponent={(
+              overviewSections.length ? (
+                <View
+                  style={[
+                    styles.sectionShell,
+                    { maxWidth: contentWidth, paddingHorizontal: horizontalPadding },
+                  ]}
+                >
+                  <DayTypeProgressSection />
+                </View>
+              ) : null
+            )}
           />
         ) : null}
 
@@ -1748,6 +1847,9 @@ export default function WorkoutsScreen() {
           <FlatList
             data={filteredExercises}
             keyExtractor={(item) => item.exercise_id}
+            windowSize={7}
+            initialNumToRender={10}
+            removeClippedSubviews={Platform.OS === 'android'}
             style={styles.list}
             contentContainerStyle={[
               styles.listContent,
@@ -1792,7 +1894,7 @@ export default function WorkoutsScreen() {
                 <ExerciseCard
                   exercise={item}
                   selectedRepBucketLabel={selectedRepBucketLabel}
-                  onPress={() => openExerciseDetail(item.exercise_id)}
+                  onOpenDetail={openExerciseDetail}
                 />
               </View>
             )}
@@ -1811,10 +1913,10 @@ export default function WorkoutsScreen() {
                     description={
                       analyticsScopeKind === 'range'
                         ? selectedRepBucketLabel
-                          ? `No hay ejercicios con sets en ${selectedRepBucketLabel}. Limpia el filtro o amplia la ventana.`
-                          : 'Prueba con una ventana mas amplia para recuperar progreso.'
+                          ? `No hay ejercicios con sets en ${selectedRepBucketLabel}. Limpia el filtro o amplía la ventana.`
+                          : 'Prueba con una ventana más amplia para recuperar progreso.'
                         : modules.context.empty_message ??
-                          'Todavia no hay suficiente actividad para construir esta lista en el contexto actual.'
+                          'Todavía no hay suficiente actividad para construir esta lista en el contexto actual.'
                     }
                     actionLabel={analyticsScopeKind === 'range' ? 'Ver todo' : undefined}
                     onActionPress={analyticsScopeKind === 'range' ? () => setRange('all') : undefined}
@@ -1823,7 +1925,7 @@ export default function WorkoutsScreen() {
                   <EmptyStateCard
                     icon="search-outline"
                     title="Sin coincidencias"
-                    description="Ajusta tu busqueda o cambia el criterio de orden."
+                    description="Ajusta tu búsqueda o cambia el criterio de orden."
                     actionLabel="Limpiar"
                     onActionPress={() => setExerciseSearchQuery('')}
                   />
@@ -1837,6 +1939,9 @@ export default function WorkoutsScreen() {
           <SectionList
             sections={historySections}
             keyExtractor={(item) => item.workout_log_id}
+            windowSize={7}
+            initialNumToRender={10}
+            removeClippedSubviews={Platform.OS === 'android'}
             style={styles.list}
             contentContainerStyle={[
               styles.listContent,
@@ -1927,9 +2032,9 @@ export default function WorkoutsScreen() {
                     description={
                       analyticsScopeKind === 'range'
                         ? selectedRepBucketLabel
-                          ? `No hay sesiones con sets en ${selectedRepBucketLabel}. Limpia el filtro o amplia la ventana temporal.`
-                          : 'Prueba otro estado o amplia la ventana temporal.'
-                        : 'Prueba otro estado o cambia el contexto historico.'
+                          ? `No hay sesiones con sets en ${selectedRepBucketLabel}. Limpia el filtro o amplía la ventana temporal.`
+                          : 'Prueba otro estado o amplía la ventana temporal.'
+                        : 'Prueba otro estado o cambia el contexto histórico.'
                     }
                     actionLabel="Ver todos"
                     onActionPress={() => setHistoryStatus('all')}
@@ -2007,7 +2112,15 @@ const createStyles = (theme: AppTheme) =>
       paddingTop: spacing.lg,
     },
     screenIntro: {
+      flex: 1,
+      minWidth: 0,
       gap: spacing.xs,
+    },
+    screenIntroRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: spacing.md,
     },
     screenEyebrow: {
       fontSize: fontSize.xs,
@@ -2152,6 +2265,10 @@ const createStyles = (theme: AppTheme) =>
     sectionShell: {
       width: '100%',
       alignSelf: 'center',
+    },
+    skeletonStatRow: {
+      flexDirection: 'row',
+      gap: spacing.md,
     },
     sectionBlock: {
       gap: spacing.md,

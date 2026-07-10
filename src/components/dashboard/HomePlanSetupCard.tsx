@@ -18,7 +18,7 @@ const PENDING_PLAN_CHIPS = [
   },
   {
     key: 'nutrition',
-    label: 'Nutricion pendiente',
+    label: 'Nutrición pendiente',
     icon: 'restaurant-outline' as const,
   },
 ];
@@ -36,8 +36,8 @@ export const HomePlanSetupCard: React.FC = () => {
         <View style={styles.headerCopy}>
           <Text style={styles.title}>Completa tus planes</Text>
           <Text style={styles.description}>
-            Cuando tengas profesionales o planes asignados, veras aqui tu
-            entrenamiento y nutricion activos.
+            Cuando tengas profesionales o planes asignados, verás aquí tu
+            entrenamiento y nutrición activos.
           </Text>
         </View>
       </View>
@@ -54,7 +54,7 @@ export const HomePlanSetupCard: React.FC = () => {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Buscar profesionales"
-        onPress={() => router.push('/(tabs)/search')}
+        onPress={() => router.push('/professionals')}
         style={({ pressed }) => [
           styles.ctaButton,
           pressed ? styles.ctaButtonPressed : null,

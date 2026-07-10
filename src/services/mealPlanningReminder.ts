@@ -136,8 +136,8 @@ export const scheduleMealPlanningReminder = async (
 
   const notificationId = await Notifications.scheduleNotificationAsync({
     content: {
-      title: 'Planifica tus menus',
-      body: 'Elige tus comidas de la semana y genera tu lista del super.',
+      title: 'Planifica tus menús',
+      body: 'Elige tus comidas de la semana y genera tu lista del súper.',
       sound: true,
       data: {
         feature: 'meal-planning',

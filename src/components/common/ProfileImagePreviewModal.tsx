@@ -135,13 +135,13 @@ export const ProfileImagePreviewModal: React.FC<ProfileImagePreviewModalProps> =
 
   const emptyTitle = hasImageError
     ? 'No pudimos cargar esta foto.'
-    : 'Aun no tienes foto de perfil.';
+    : 'Aún no tienes foto de perfil.';
   const emptyText = hasImageError
     ? 'Puedes cerrar esta vista o elegir otra imagen.'
     : 'Agrega una foto para que tu perfil se vea mas personal.';
   const emptyActionLabel = hasImageError ? 'Elegir otra foto' : 'Elegir una foto';
   const subtitle = canEditImage
-    ? 'Puedes actualizarla desde aqui.'
+    ? 'Puedes actualizarla desde aquí.'
     : 'Vista previa de tu foto actual.';
   const headerGlowColors = theme.isDark
     ? (['rgba(103,182,223,0.18)', 'rgba(103,182,223,0.05)', 'rgba(0,0,0,0)'] as const)

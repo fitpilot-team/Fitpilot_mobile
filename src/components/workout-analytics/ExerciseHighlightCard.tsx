@@ -33,7 +33,7 @@ const buildLastSessionCopy = (lastPerformedOn?: string | null) => {
     return 'Sin fecha reciente';
   }
 
-  return `Ultima sesion${META_SEPARATOR}${formatLocalDate(lastPerformedOn, {
+  return `Última sesión${META_SEPARATOR}${formatLocalDate(lastPerformedOn, {
     day: 'numeric',
     month: 'short',
   })}`;
@@ -103,7 +103,7 @@ const buildPrimaryMetricContext = (
   return parts.join(META_SEPARATOR);
 };
 
-export const ExerciseHighlightCard: React.FC<ExerciseHighlightCardProps> = ({
+const ExerciseHighlightCardComponent: React.FC<ExerciseHighlightCardProps> = ({
   exercise,
   selectedRepBucketLabel,
   onPress,
@@ -124,7 +124,7 @@ export const ExerciseHighlightCard: React.FC<ExerciseHighlightCardProps> = ({
           exercise.total_calories_burned != null && exercise.total_calories_burned > 0
             ? {
                 id: 'calories',
-                label: 'Calorias',
+                label: 'Calorías',
                 value: formatCalories(exercise.total_calories_burned),
               }
             : null,
@@ -212,6 +212,8 @@ export const ExerciseHighlightCard: React.FC<ExerciseHighlightCardProps> = ({
     </TouchableOpacity>
   );
 };
+
+export const ExerciseHighlightCard = React.memo(ExerciseHighlightCardComponent);
 
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({

@@ -98,23 +98,27 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
     error,
     needsPermissionCta,
     sync,
-    syncIfStale,
-  } = useConnectedHealthFeedback({ days: 7, autoSync: true });
+    refreshOnFocus,
+  } = useConnectedHealthFeedback({
+    days: 7,
+    autoSync: true,
+    foregroundSyncMaxAgeMs: 20 * 60_000,
+  });
 
   useFocusEffect(
     useCallback(() => {
-      void syncIfStale();
-    }, [syncIfStale]),
+      void refreshOnFocus();
+    }, [refreshOnFocus]),
   );
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        void syncIfStale();
+        void refreshOnFocus();
       }
     });
     return () => subscription.remove();
-  }, [syncIfStale]);
+  }, [refreshOnFocus]);
 
   const metricsByKey = new Map<ConnectedHealthMetricKey, ConnectedHealthMetricCard>(
     feedback.metrics.map((m) => [m.key, m]),
@@ -179,7 +183,7 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
             <Text style={styles.eyebrow}>Salud conectada</Text>
             {!isCompact ? (
               <Text style={styles.title} numberOfLines={1}>
-                Preparacion de hoy
+                Preparación de hoy
               </Text>
             ) : null}
           </View>
@@ -203,7 +207,7 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
           <View style={styles.bodyCompact}>
             <Text style={styles.readinessInline} numberOfLines={1}>
               <Text style={styles.readinessInlineScore}>
-                Preparacion {readinessScoreLabel}
+                Preparación {readinessScoreLabel}
               </Text>
               <Text style={styles.readinessInlineDivider}>  -  </Text>
               <Text style={styles.readinessInlineTitle}>
@@ -263,9 +267,9 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
           <View style={styles.compactEmptyCopy}>
             <Text style={styles.compactEmptyTitle}>Sin datos recientes</Text>
             <Text style={styles.compactEmptyMessage} numberOfLines={1}>
-              {needsPermissionCta
-                ? 'Revisa permisos para activar energia y recuperacion.'
-                : 'Sincroniza sueno, kcal, pasos y recuperacion.'}
+                {needsPermissionCta
+                ? 'Revisa permisos para activar energía y recuperación.'
+                : 'Sincroniza sueño, kcal, pasos y recuperación.'}
             </Text>
           </View>
           <ConnectedHealthInlineAction
@@ -277,8 +281,8 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
           title="Sin datos recientes"
           message={
             needsPermissionCta
-              ? 'Revisa permisos para activar el feedback de energia y recuperacion.'
-              : 'Sincroniza salud conectada para ver sueno, kcal, pasos y recuperacion.'
+              ? 'Revisa permisos para activar el feedback de energía y recuperación.'
+              : 'Sincroniza salud conectada para ver sueño, kcal, pasos y recuperación.'
           }
           action={needsPermissionCta ? settingsAction : syncAction}
         />

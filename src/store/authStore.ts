@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import * as SecureStore from 'expo-secure-store';
 import { getCurrentUser } from '../services/account';
 import {
   clearSessionTokens,
@@ -9,6 +10,7 @@ import {
   setSessionTokens,
   setUnauthorizedHandler,
 } from '../services/api';
+import { clearFitpilotPersistentCaches } from '../services/persistentCache';
 import { useCareTeamStore } from './careTeamStore';
 import { useWorkoutStore } from './workoutStore';
 import type { ApiError, LoginCredentials, LoginResponse, LoginResult, User } from '../types';
@@ -28,9 +30,50 @@ interface AuthState {
   clearError: () => void;
 }
 
+const CACHED_USER_KEY = 'fitpilot_cached_user';
+
+const persistCachedUser = async (user: User): Promise<void> => {
+  try {
+    await SecureStore.setItemAsync(CACHED_USER_KEY, JSON.stringify(user));
+  } catch {
+    // La cache de perfil es solo un respaldo offline; nunca debe romper el login.
+  }
+};
+
+const readCachedUser = async (): Promise<User | null> => {
+  try {
+    const storedValue = await SecureStore.getItemAsync(CACHED_USER_KEY);
+    if (!storedValue) {
+      return null;
+    }
+    const parsed = JSON.parse(storedValue) as User;
+    return parsed && parsed.role === 'client' ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const clearCachedUser = async (): Promise<void> => {
+  try {
+    await SecureStore.deleteItemAsync(CACHED_USER_KEY);
+  } catch {
+    // Ignorar: si no se puede borrar, readCachedUser la descartara al validar.
+  }
+};
+
+// Solo un rechazo explicito de autenticacion debe destruir la sesion.
+// Errores de red/timeout (status undefined) o de servidor (5xx) no implican
+// que los tokens sean invalidos.
+const isAuthRejectionError = (error: unknown): boolean => {
+  const status = (error as ApiError | undefined)?.status;
+  return status === 401 || status === 403;
+};
+
 export const useAuthStore = create<AuthState>((set, get) => {
   const clearAuthenticatedState = async (error: string | null = null) => {
     await clearSessionTokens();
+    await clearCachedUser();
+    await clearFitpilotPersistentCaches();
     useCareTeamStore.getState().reset();
     useWorkoutStore.getState().reset();
     set({
@@ -45,7 +88,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
   const ensureClientUser = async (user: User) => {
     if (user.role !== 'client') {
       await clearAuthenticatedState(
-        'Esta aplicacion es solo para clientes. Los profesionales deben usar la aplicacion web.',
+        'Esta aplicación es solo para clientes. Los profesionales deben usar la aplicación web.',
       );
       return null;
     }
@@ -59,14 +102,14 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     if (status === 401) {
       return (
-        'Correo o contrasena incorrectos. Verifica tus datos e intenta de nuevo.\n\n' +
-        'Si aun no tienes cuenta, puedes crearla desde la app.'
+        'Correo o contraseña incorrectos. Verifica tus datos e intenta de nuevo.\n\n' +
+        'Si aún no tienes cuenta, puedes crearla desde la app.'
       );
     }
 
     if (status === 404) {
       return (
-        'No se encontro una cuenta con ese correo.\n\n' +
+        'No se encontró una cuenta con ese correo.\n\n' +
         'Crea una cuenta nueva para comenzar tu onboarding.'
       );
     }
@@ -75,10 +118,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
       rawMessage.toLowerCase().includes('network') ||
       rawMessage.toLowerCase().includes('timeout')
     ) {
-      return 'No se pudo conectar con el servidor. Verifica tu conexion a internet e intenta de nuevo.';
+      return 'No se pudo conectar con el servidor. Verifica tu conexión a internet e intenta de nuevo.';
     }
 
-    return rawMessage || 'Error al iniciar sesion. Intenta de nuevo mas tarde.';
+    return rawMessage || 'Error al iniciar sesión. Intenta de nuevo más tarde.';
   };
 
   const authStore: AuthState = {
@@ -115,6 +158,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
           console.log('[Auth] init: user loaded', user.email);
         }
 
+        await persistCachedUser(user);
+
         set({
           user,
           isAuthenticated: true,
@@ -126,7 +171,39 @@ export const useAuthStore = create<AuthState>((set, get) => {
           console.warn('[Auth] init error', error);
         }
 
-        await clearAuthenticatedState();
+        if (isAuthRejectionError(error)) {
+          // El backend rechazo la sesion (y el refresh ya fallo): logout real.
+          await clearAuthenticatedState();
+          return;
+        }
+
+        // Error de red/servidor con tokens presentes: NO destruir la sesion.
+        // Arrancamos con el perfil cacheado para que la app funcione offline;
+        // la proxima peticion con red revalida contra el backend.
+        const cachedUser = await readCachedUser();
+        if (cachedUser) {
+          if (__DEV__) {
+            console.log('[Auth] init: offline, usando perfil cacheado', cachedUser.email);
+          }
+
+          set({
+            user: cachedUser,
+            isAuthenticated: true,
+            isInitialized: true,
+            error: null,
+          });
+          return;
+        }
+
+        // Sin perfil cacheado: conservar tokens y mostrar login con aviso,
+        // para que un reintento con red recupere la sesion sin recredenciales.
+        set({
+          user: null,
+          isAuthenticated: false,
+          isInitialized: true,
+          error:
+            'No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.',
+        });
       }
     },
 
@@ -161,6 +238,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
         if (!user) {
           return { status: 'failure' };
         }
+
+        await persistCachedUser(user);
 
         set({
           user,
@@ -214,6 +293,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
           return { status: 'failure' };
         }
 
+        await persistCachedUser(user);
+
         set({
           user,
           isAuthenticated: true,
@@ -231,7 +312,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
         }
 
         await clearAuthenticatedState(
-          apiError.message || 'No fue posible iniciar sesion despues del registro.',
+          apiError.message || 'No fue posible iniciar sesión después del registro.',
         );
 
         return { status: 'failure' };
@@ -264,6 +345,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
         if (!user) {
           return null;
         }
+
+        await persistCachedUser(user);
 
         set({
           user,
@@ -307,6 +390,8 @@ export const useAuthStore = create<AuthState>((set, get) => {
         if (!user) {
           return;
         }
+
+        await persistCachedUser(user);
 
         set({
           user,

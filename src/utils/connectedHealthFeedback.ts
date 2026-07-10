@@ -252,7 +252,7 @@ const buildReadiness = (
       status: 'unknown' as ConnectedHealthReadinessStatus,
       score: null,
       title: 'Sin lectura reciente',
-      message: 'Conecta o sincroniza tus datos para estimar energia y recuperacion.',
+      message: 'Conecta o sincroniza tus datos para estimar energía y recuperación.',
     };
   }
 
@@ -304,8 +304,8 @@ const buildReadiness = (
     return {
       status: 'good' as ConnectedHealthReadinessStatus,
       score,
-      title: 'Buena preparacion',
-      message: 'Tus senales recientes favorecen un dia productivo de entrenamiento.',
+      title: 'Buena preparación',
+      message: 'Tus señales recientes favorecen un día productivo de entrenamiento.',
     };
   }
 
@@ -313,16 +313,16 @@ const buildReadiness = (
     return {
       status: 'watch' as ConnectedHealthReadinessStatus,
       score,
-      title: 'Preparacion moderada',
-      message: 'Cuida intensidad, hidratacion y descanso entre bloques exigentes.',
+      title: 'Preparación moderada',
+      message: 'Cuida intensidad, hidratación y descanso entre bloques exigentes.',
     };
   }
 
   return {
     status: 'low' as ConnectedHealthReadinessStatus,
     score,
-    title: 'Recuperacion limitada',
-    message: 'Prioriza recuperacion y ajusta cargas si te sientes fatigado.',
+    title: 'Recuperación limitada',
+    message: 'Prioriza recuperación y ajusta cargas si te sientes fatigado.',
   };
 };
 
@@ -345,8 +345,8 @@ const buildInsights = (
   if (latest.sleep_minutes != null && latest.sleep_minutes < 360) {
     insights.push({
       id: 'sleep-short',
-      title: 'Sueno corto',
-      message: 'Conviene bajar friccion hoy: calentamiento gradual y pausas completas.',
+      title: 'Sueño corto',
+      message: 'Conviene bajar fricción hoy: calentamiento gradual y pausas completas.',
       tone: 'warning',
       source: sourceLabel,
       metricKeys: ['sleep_minutes'],
@@ -355,7 +355,7 @@ const buildInsights = (
     insights.push({
       id: 'sleep-consistent',
       title: 'Descanso consistente',
-      message: 'Mantener este promedio ayuda a sostener energia y adherencia.',
+      message: 'Mantener este promedio ayuda a sostener energía y adherencia.',
       tone: 'positive',
       source: sourceLabel,
       metricKeys: ['sleep_minutes'],
@@ -370,7 +370,7 @@ const buildInsights = (
     insights.push({
       id: 'energy-high',
       title: 'Gasto elevado',
-      message: 'Tu gasto activo viene alto; revisa hambre, hidratacion y recuperacion.',
+      message: 'Tu gasto activo viene alto; revisa hambre, hidratación y recuperación.',
       tone: 'warning',
       source: sourceLabel,
       metricKeys: ['active_energy_kcal'],
@@ -381,7 +381,7 @@ const buildInsights = (
     insights.push({
       id: 'steps-low',
       title: 'Movimiento bajo',
-      message: 'Un bloque ligero de caminata puede sumar energia sin interferir con tu plan.',
+      message: 'Un bloque ligero de caminata puede sumar energía sin interferir con tu plan.',
       tone: 'neutral',
       source: sourceLabel,
       metricKeys: ['steps'],
@@ -392,7 +392,7 @@ const buildInsights = (
     insights.push({
       id: 'hrv-low',
       title: 'HRV por debajo de tu promedio',
-      message: 'Usalo como senal de contexto para moderar volumen si notas fatiga.',
+      message: 'Úsalo como señal de contexto para moderar volumen si notas fatiga.',
       tone: 'warning',
       source: sourceLabel,
       metricKeys: ['hrv_ms'],
@@ -406,8 +406,8 @@ const buildInsights = (
   ) {
     insights.push({
       id: 'resting-hr-high',
-      title: 'FC reposo mas alta',
-      message: 'Observa como te sientes antes de forzar intensidad o cardio extra.',
+      title: 'FC reposo más alta',
+      message: 'Observa cómo te sientes antes de forzar intensidad o cardio extra.',
       tone: 'warning',
       source: sourceLabel,
       metricKeys: ['resting_hr_bpm'],
@@ -417,7 +417,7 @@ const buildInsights = (
   if (!insights.length) {
     insights.push({
       id: 'steady-context',
-      title: 'Senales estables',
+      title: 'Señales estables',
       message: 'No hay alertas fuertes en los datos recientes disponibles.',
       tone: 'positive',
       source: sourceLabel,
@@ -443,19 +443,25 @@ const buildMetrics = (
   const hrvAvg = average(summaries, (summary) => summary.hrv_ms);
   const restingHrAvg = average(summaries, (summary) => summary.resting_hr_bpm);
 
-  return [
+  // En Android (Health Connect) casi nunca hay "kcal activas"; usamos "kcal
+  // totales" como respaldo para no mostrar la tarjeta de energía vacía.
+  const energyFromActive = latest?.active_energy_kcal != null;
+  const energyValue = latest?.active_energy_kcal ?? latest?.total_energy_kcal ?? null;
+  const energyAvg = energyFromActive ? activeEnergyAvg : totalEnergyAvg;
+
+  const metrics: ConnectedHealthMetricCard[] = [
     {
       key: 'recovery',
-      label: 'Recuperacion',
+      label: 'Recuperación',
       value: formatScore(latest?.recovery_score),
-      helper: latest?.recovery_score == null ? 'Estimacion por senales' : 'Score conectado',
+      helper: latest?.recovery_score == null ? 'Estimación por señales' : 'Score conectado',
       trendLabel: null,
       icon: 'pulse-outline',
       tone: readinessTone,
     },
     {
       key: 'sleep',
-      label: 'Sueno',
+      label: 'Sueño',
       value: formatDuration(latest?.sleep_minutes),
       helper: formatAverageHelper(avgLabel, sleepAvg, formatDuration),
       trendLabel: formatTrend(latest?.sleep_minutes, sleepAvg, formatDuration),
@@ -464,10 +470,10 @@ const buildMetrics = (
     },
     {
       key: 'active_energy',
-      label: 'Kcal activas',
-      value: formatKcal(latest?.active_energy_kcal),
-      helper: formatAverageHelper(avgLabel, activeEnergyAvg, formatKcal),
-      trendLabel: formatTrend(latest?.active_energy_kcal, activeEnergyAvg, formatKcal),
+      label: energyFromActive ? 'Kcal activas' : 'Kcal totales',
+      value: formatKcal(energyValue),
+      helper: formatAverageHelper(avgLabel, energyAvg, formatKcal),
+      trendLabel: formatTrend(energyValue, energyAvg, formatKcal),
       icon: 'flame-outline',
       tone: 'neutral',
     },
@@ -524,6 +530,9 @@ const buildMetrics = (
           : 'neutral',
     },
   ];
+
+  // Evita duplicar "Kcal totales" cuando la tarjeta de energía ya usa ese valor.
+  return energyFromActive ? metrics : metrics.filter((metric) => metric.key !== 'total_energy');
 };
 
 export const buildConnectedHealthFeedback = (
@@ -568,6 +577,29 @@ export const shouldAutoSyncConnectedHealth = (
   }
 
   return getFreshness(latestSyncAt, nowMs).isStale;
+};
+
+// Igual que shouldAutoSyncConnectedHealth pero con un umbral de antigüedad
+// configurable (en ms), para permitir re-sincronizar el dispositivo al enfocar
+// la pantalla mucho antes del umbral de 6 h.
+export const isConnectedHealthSyncOlderThan = (
+  summary: ConnectedHealthSummaryResponse | null,
+  maxAgeMs: number,
+  nowMs = Date.now(),
+): boolean => {
+  const hasData = (summary?.summaries ?? []).some(hasMetricValue);
+  const latestSyncAt = getLatestSyncAt(summary);
+
+  if (!hasData || !latestSyncAt) {
+    return true;
+  }
+
+  const parsedMs = Date.parse(latestSyncAt);
+  if (Number.isNaN(parsedMs)) {
+    return true;
+  }
+
+  return nowMs - parsedMs >= maxAgeMs;
 };
 
 export const CONNECTED_HEALTH_AUTO_SYNC_STALE_MS = STALE_SYNC_THRESHOLD_MS;

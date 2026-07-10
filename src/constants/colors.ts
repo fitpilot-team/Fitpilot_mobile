@@ -1,4 +1,6 @@
 // Colores de marca del logo FitPilot
+import { getScaledFontSize } from '../utils/responsive';
+
 export const brandColors = {
   navy: '#182f50',      // Azul oscuro (alas, texto "FitPilot")
   sky: '#67b6df',       // Azul claro (letra P)
@@ -109,3 +111,10 @@ export const fontSize = {
   '2xl': 24,
   '3xl': 30,
 };
+
+export function scaledFontSize(
+  token: keyof typeof fontSize,
+  width?: number,
+): number {
+  return getScaledFontSize(fontSize[token], width);
+}

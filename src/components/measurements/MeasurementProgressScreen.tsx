@@ -43,9 +43,9 @@ const CHART_HEIGHT = 220;
 const CHART_PADDING_X = 24;
 const CHART_PADDING_Y = 20;
 const RANGE_OPTIONS: { key: RangePreset; label: string }[] = [
-  { key: '7d', label: '7 dias' },
-  { key: '30d', label: '30 dias' },
-  { key: '90d', label: '90 dias' },
+  { key: '7d', label: '7 días' },
+  { key: '30d', label: '30 días' },
+  { key: '90d', label: '90 días' },
   { key: 'all', label: 'Todo' },
 ];
 
@@ -256,7 +256,7 @@ export const MeasurementProgressScreen: React.FC<MeasurementProgressScreenProps>
           <Ionicons name="analytics-outline" size={40} color={theme.colors.iconMuted} />
           <Text style={styles.centerTitle}>Medida no disponible</Text>
           <Text style={styles.centerText}>
-            Esta grafica no esta configurada todavia.
+            Esta gráfica no está configurada todavía.
           </Text>
         </View>
       </SafeAreaView>
@@ -334,7 +334,7 @@ export const MeasurementProgressScreen: React.FC<MeasurementProgressScreenProps>
             <Card style={styles.sectionCard}>
               <View style={styles.kpiRow}>
                 <View style={styles.kpiBlock}>
-                  <Text style={styles.kpiLabel}>Ultimo valor</Text>
+                  <Text style={styles.kpiLabel}>Último valor</Text>
                   <Text style={styles.kpiValue}>
                     {latestRecord ? formatMeasurementNumber(latestRecord.value, metricConfig.decimals ?? 1) : '--'}
                     {displayUnit ? <Text style={styles.kpiUnit}> {displayUnit}</Text> : null}
@@ -416,7 +416,7 @@ export const MeasurementProgressScreen: React.FC<MeasurementProgressScreenProps>
             <Card style={styles.sectionCard}>
               <Text style={styles.sectionTitle}>Historial reciente</Text>
               <Text style={styles.sectionDescription}>
-                Ultimos registros dentro del rango seleccionado.
+                Últimos registros dentro del rango seleccionado.
               </Text>
               <View style={styles.historyList}>
                 {recentRecords.map((record) => (

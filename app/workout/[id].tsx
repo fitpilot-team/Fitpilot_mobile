@@ -372,7 +372,7 @@ export default function WorkoutSessionScreen() {
   }, [closeWorkout, isHistoricalEditMode, isLoading, isSavingSet, navigateToOrigin]);
 
   const handleFinishLiveWorkout = useCallback(() => {
-    Alert.alert('Finalizar entrenamiento', 'Estas seguro de que quieres finalizar el entrenamiento?', [
+    Alert.alert('Finalizar entrenamiento', '¿Estás seguro de que quieres finalizar el entrenamiento?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Finalizar',
@@ -411,7 +411,7 @@ export default function WorkoutSessionScreen() {
       return;
     }
 
-    Alert.alert('Salir del entrenamiento', 'Quieres guardar tu progreso y salir, o abandonar el entrenamiento?', [
+    Alert.alert('Salir del entrenamiento', '¿Quieres guardar tu progreso y salir, o abandonar el entrenamiento?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Guardar y salir', onPress: navigateToOrigin },
       {
@@ -438,13 +438,13 @@ export default function WorkoutSessionScreen() {
   const modeBanner = isReviewMode
     ? {
         title: 'Ver registro',
-        subtitle: 'Este entrenamiento esta cerrado. Reabrelo solo si necesitas corregir series.',
+        subtitle: 'Este entrenamiento está cerrado. Reábrelo solo si necesitas corregir series.',
         buttonLabel: 'Editar registro',
       }
     : isHistoricalEditMode
       ? {
-          title: 'Edicion historica',
-          subtitle: 'Los cambios se guardan en este log y se cerrara al salir.',
+          title: 'Edición histórica',
+          subtitle: 'Los cambios se guardan en este log y se cerrará al salir.',
           buttonLabel: null,
         }
       : null;

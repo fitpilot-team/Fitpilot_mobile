@@ -53,7 +53,7 @@ type ReminderPersistOptions = {
 
 const WEEK_RANGE_OPTIONS: { key: WeekPlanRange; label: string }[] = [
   { key: 'current', label: 'Esta semana' },
-  { key: 'next', label: 'Proxima semana' },
+  { key: 'next', label: 'Próxima semana' },
 ];
 
 const REMINDER_CALENDAR_DAYS: {
@@ -64,10 +64,10 @@ const REMINDER_CALENDAR_DAYS: {
   { weekday: 1, shortLabel: 'Dom', label: 'Domingo' },
   { weekday: 2, shortLabel: 'Lun', label: 'Lunes' },
   { weekday: 3, shortLabel: 'Mar', label: 'Martes' },
-  { weekday: 4, shortLabel: 'Mie', label: 'Miercoles' },
+  { weekday: 4, shortLabel: 'Mié', label: 'Miércoles' },
   { weekday: 5, shortLabel: 'Jue', label: 'Jueves' },
   { weekday: 6, shortLabel: 'Vie', label: 'Viernes' },
-  { weekday: 7, shortLabel: 'Sab', label: 'Sabado' },
+  { weekday: 7, shortLabel: 'Sáb', label: 'Sábado' },
 ];
 
 const REMINDER_HOUR_OPTIONS: { key: ReminderHourOptionKey; label: string }[] = [
@@ -80,10 +80,10 @@ const REMINDER_WEEKDAY_LABELS: Record<MealPlanningReminderWeekday, string> = {
   1: 'Domingo',
   2: 'Lunes',
   3: 'Martes',
-  4: 'Miercoles',
+  4: 'Miércoles',
   5: 'Jueves',
   6: 'Viernes',
-  7: 'Sabado',
+  7: 'Sábado',
 };
 
 const hasSelectedMenuId = (value: number | null | undefined): value is number =>
@@ -111,8 +111,8 @@ const getSelectedMenuForDate = (
 const getMenuOptionLabel = (menu: ClientDietMenu, options: ClientDietMenu[]) => {
   const selectedMenuIndex = options.findIndex((option) => option.menuId === menu.menuId);
   return selectedMenuIndex >= 0
-    ? `Opcion ${selectedMenuIndex + 1}`
-    : 'Seleccion confirmada';
+    ? `Opción ${selectedMenuIndex + 1}`
+    : 'Selección confirmada';
 };
 
 const mergeOptionsByDate = (
@@ -178,7 +178,7 @@ export default function WeeklyPlanScreen() {
     [numericClientId],
   );
 
-  const selectedWeekLabel = selectedWeek === 'current' ? 'Esta semana' : 'Proxima semana';
+  const selectedWeekLabel = selectedWeek === 'current' ? 'Esta semana' : 'Próxima semana';
 
   const loadWeek = useCallback(async () => {
     const requestId = loadRequestIdRef.current + 1;
@@ -189,7 +189,7 @@ export default function WeeklyPlanScreen() {
     if (!clientIdString || numericClientId === null) {
       setPrimaryByDate({});
       setOptionsByDate({});
-      setLoadError('Inicia sesion para planificar tus menus.');
+      setLoadError('Inicia sesión para planificar tus menús.');
       setIsLoading(false);
       return;
     }
@@ -366,7 +366,7 @@ export default function WeeklyPlanScreen() {
 
   const handleOpenSelector = useCallback((date: string) => {
     if (!optionsByDate[date] || optionsByDate[date].length === 0) {
-      Alert.alert('Sin menus', 'No hay menus disponibles para este dia.');
+      Alert.alert('Sin menús', 'No hay menús disponibles para este día.');
       return;
     }
     setSelectorState({ date });
@@ -477,7 +477,7 @@ export default function WeeklyPlanScreen() {
       const message =
         error instanceof Error
           ? error.message
-          : 'No se pudo generar la lista del super.';
+          : 'No se pudo generar la lista del súper.';
       Alert.alert('Error', message);
     } finally {
       setIsGenerating(false);
@@ -508,7 +508,7 @@ export default function WeeklyPlanScreen() {
 
   const footer = (
     <Button
-      title={allDaysSelected ? 'Generar lista del super' : `Faltan ${remainingDays} dias`}
+      title={allDaysSelected ? 'Generar lista del súper' : `Faltan ${remainingDays} días`}
       onPress={handleGenerateList}
       isLoading={isGenerating}
       disabled={!allDaysSelected || isGenerating || isLoading}
@@ -537,7 +537,7 @@ export default function WeeklyPlanScreen() {
             <View style={styles.summaryTitleWrap}>
               <Text style={styles.summaryTitle}>{selectedWeekLabel}</Text>
               <Text style={styles.summarySubtitle}>
-                Elige tus 7 menus para generar una lista exacta.
+                Elige tus 7 menús para generar una lista exacta.
               </Text>
             </View>
             <View
@@ -562,7 +562,7 @@ export default function WeeklyPlanScreen() {
           <View style={styles.summaryStats}>
             <View style={styles.summaryStat}>
               <Text style={styles.summaryStatValue}>{selectedCount}/7</Text>
-              <Text style={styles.summaryStatLabel}>Dias</Text>
+              <Text style={styles.summaryStatLabel}>Días</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryStat}>
@@ -752,7 +752,7 @@ export default function WeeklyPlanScreen() {
                       </>
                     ) : (
                       <Text style={styles.menuPlaceholder}>
-                        {options.length === 0 ? 'Sin menus disponibles' : 'Sin seleccion'}
+                        {options.length === 0 ? 'Sin menús disponibles' : 'Sin selección'}
                       </Text>
                     )}
                   </View>
@@ -784,7 +784,7 @@ export default function WeeklyPlanScreen() {
             : ''
         }
         menus={selectorDay?.options ?? []}
-        getMenuLabel={(_menu, index) => `Opcion ${index + 1}`}
+        getMenuLabel={(_menu, index) => `Opción ${index + 1}`}
         visibleMenuId={selectorDay?.persistedMenuId ?? null}
         persistedMenuId={selectorDay?.persistedMenuId ?? null}
         suggestedMenuId={null}

@@ -46,6 +46,9 @@ export interface ProgramTimelineCardSessionState {
   recommendation: 'focused' | 'overdue';
   sourceMode: MicrocycleMode;
   scheduledDateKey: string;
+  locked: boolean;
+  actionableDateKey: string | null;
+  actionableDateLabel: string | null;
 }
 
 export interface ProgramTimelineCardEmptyState {
@@ -75,6 +78,8 @@ export interface ProgramTimelineView {
   workoutPosition: number | null;
   workoutTotal: number | null;
   allCompleted: boolean;
+  actionableSession: ProgramTimelineSession | null;
+  actionableDateKey: string | null;
 }
 
 export interface ProgramTimelineActualAdherenceMetrics {
@@ -144,7 +149,7 @@ const buildEmptyCardState = (
         reason,
         dateKey,
         dateLabel,
-        title: 'Dia de descanso',
+        title: 'Día de descanso',
         subtitle: dateLabel
           ? `No tienes sesiones programadas para ${dateLabel}.`
           : 'No tienes sesiones programadas para esta fecha.',
@@ -168,8 +173,8 @@ const buildEmptyCardState = (
         dateLabel,
         title: 'Sin entrenamiento pendiente',
         subtitle: dateLabel
-          ? `Las sesiones de ${dateLabel} ya estan completadas.`
-          : 'Las sesiones de esta fecha ya estan completadas.',
+          ? `Las sesiones de ${dateLabel} ya están completadas.`
+          : 'Las sesiones de esta fecha ya están completadas.',
       };
     case 'no-executed':
       return {
@@ -189,7 +194,7 @@ const buildEmptyCardState = (
         dateKey,
         dateLabel,
         title: 'No tienes un programa activo',
-        subtitle: 'Cuando exista una programacion vigente, aparecera aqui.',
+        subtitle: 'Cuando exista una programación vigente, aparecerá aquí.',
       };
   }
 };
@@ -295,6 +300,38 @@ const findOverdueSession = (sessions: ProgramTimelineSession[], todayDateKey: st
       session.actual_status !== 'completed',
   ) ?? null;
 
+// Una sesión "requiere inicio en frío" cuando su acción es "empezar" (no está
+// completada, ni abandonada, ni en progreso, ni tiene un workout_log_id).
+const requiresFreshStart = (session: ProgramTimelineSession): boolean =>
+  getSessionActionLabel(session) === 'empezar';
+
+// Frente de cola global: primera sesión no completada en orden de fecha.
+export const findActionableSession = (
+  sessions: ProgramTimelineSession[],
+): ProgramTimelineSession | null =>
+  sessions.find((session) => session.actual_status !== 'completed') ?? null;
+
+// Una sesión es iniciable si no requiere inicio en frío (se puede continuar/ver
+// registro) o si es el frente de cola. Identidad estable por training_day_id.
+export const isSessionActionable = (
+  session: ProgramTimelineSession,
+  actionableSession: ProgramTimelineSession | null,
+): boolean =>
+  !requiresFreshStart(session) ||
+  (actionableSession != null && session.training_day_id === actionableSession.training_day_id);
+
+// Foco por defecto al recargar datos: saltar a un atraso estricto (past-due) para
+// conservar el nudge; si no hay atraso, respetar el default del backend.
+export const getProgramTimelineDefaultFocusDateKey = (
+  model: ProgramTimelineModel,
+): string | null => {
+  if (!model.initialFocusedDateKey) {
+    return null;
+  }
+  const overdueSession = findOverdueSession(model.orderedPlannedSessions, getTodayDateKey());
+  return overdueSession ? overdueSession.scheduled_date_key : model.initialFocusedDateKey;
+};
+
 const buildSessionCardState = ({
   session,
   dateKey,
@@ -302,6 +339,7 @@ const buildSessionCardState = ({
   recommendation,
   daySessions,
   showSessionPicker,
+  actionableSession = null,
 }: {
   session: ProgramTimelineSession;
   dateKey: string;
@@ -309,25 +347,43 @@ const buildSessionCardState = ({
   recommendation: 'focused' | 'overdue';
   daySessions: ProgramTimelineSession[];
   showSessionPicker: boolean;
-}): ProgramTimelineCardSessionState => ({
-  kind: 'session',
-  dateKey,
-  dateLabel: formatLocalDate(dateKey, {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-  }),
-  trainingDay: session.training_day,
-  session,
-  sessions: daySessions,
-  hasMultipleSessions: showSessionPicker && daySessions.length > 1,
-  position: session.position,
-  total: session.total_sessions,
-  actionLabel: getSessionActionLabel(session),
-  recommendation,
-  sourceMode: mode,
-  scheduledDateKey: session.scheduled_date_key,
-});
+  actionableSession?: ProgramTimelineSession | null;
+}): ProgramTimelineCardSessionState => {
+  const locked =
+    requiresFreshStart(session) &&
+    actionableSession != null &&
+    session.training_day_id !== actionableSession.training_day_id;
+  const actionableDateKey = locked && actionableSession ? actionableSession.scheduled_date_key : null;
+
+  return {
+    kind: 'session',
+    dateKey,
+    dateLabel: formatLocalDate(dateKey, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+    }),
+    trainingDay: session.training_day,
+    session,
+    sessions: daySessions,
+    hasMultipleSessions: showSessionPicker && daySessions.length > 1,
+    position: session.position,
+    total: session.total_sessions,
+    actionLabel: getSessionActionLabel(session),
+    recommendation,
+    sourceMode: mode,
+    scheduledDateKey: session.scheduled_date_key,
+    locked,
+    actionableDateKey,
+    actionableDateLabel: actionableDateKey
+      ? formatLocalDate(actionableDateKey, {
+          weekday: 'long',
+          month: 'short',
+          day: 'numeric',
+        })
+      : null,
+  };
+};
 
 export const buildProgramTimelineModel = (
   timeline: DashboardTimeline | null | undefined,
@@ -410,6 +466,8 @@ export const buildProgramTimelineView = (
       workoutPosition: null,
       workoutTotal: null,
       allCompleted: false,
+      actionableSession: null,
+      actionableDateKey: null,
     };
   }
 
@@ -456,6 +514,7 @@ export const buildProgramTimelineView = (
   let highlightedSession: ProgramTimelineSession | null = null;
   let highlightedTrainingDay: DashboardTrainingDaySummary | null = null;
   let workoutPosition: number | null = null;
+  let actionableSession: ProgramTimelineSession | null = null;
 
   if (mode === 'actual') {
     if (!focusedEntry || focusedEntry.sessions.length === 0) {
@@ -480,48 +539,42 @@ export const buildProgramTimelineView = (
       }
     }
   } else {
-    const overdueSession = findOverdueSession(model.orderedPlannedSessions, todayDateKey);
+    // La tarjeta sigue el día enfocado (muestra el plan real de esa fecha). La
+    // ejecutabilidad se controla aparte con el frente de cola (actionableSession).
+    actionableSession = findActionableSession(model.orderedPlannedSessions);
 
-    if (overdueSession) {
-      const overdueDaySessions =
-        overdueSession.scheduled_date_key === effectiveFocusedDateKey
-          ? getDayEntryForMode(model, 'planned', overdueSession.scheduled_date_key)?.sessions ?? [overdueSession]
-          : [overdueSession];
-
-      highlightedSession = overdueSession;
-      highlightedTrainingDay = overdueSession.training_day;
-      workoutPosition = overdueSession.position;
-      cardState = buildSessionCardState({
-        session: overdueSession,
-        dateKey: overdueSession.scheduled_date_key,
-        mode,
-        recommendation: 'overdue',
-        daySessions: overdueDaySessions,
-        showSessionPicker: overdueSession.scheduled_date_key === effectiveFocusedDateKey,
-      });
-    } else if (!focusedEntry) {
+    if (!focusedEntry) {
       cardState = buildEmptyCardState('no-scheduled', effectiveFocusedDateKey);
     } else if (focusedEntry.hasRestMarker && focusedEntry.sessions.length === 0) {
       cardState = buildEmptyCardState('rest', effectiveFocusedDateKey);
     } else if (focusedEntry.sessions.length === 0) {
       cardState = buildEmptyCardState('no-scheduled', effectiveFocusedDateKey);
     } else {
-      const pendingSessions = focusedEntry.sessions.filter((session) => session.actual_status !== 'completed');
-      const nextSession = pendingSessions[pendingSessions.length - 1] ?? null;
+      const pendingSessions = focusedEntry.sessions.filter(
+        (session) => session.actual_status !== 'completed',
+      );
+      // Primera pendiente para alinear con el orden de cola; si el día ya está
+      // completo, la última sesión permite mostrar "ver registro".
+      const displaySession =
+        pendingSessions[0] ?? focusedEntry.sessions[focusedEntry.sessions.length - 1] ?? null;
 
-      if (!nextSession) {
+      if (!displaySession) {
         cardState = buildEmptyCardState('no-pending', effectiveFocusedDateKey);
       } else {
-        highlightedSession = nextSession;
-        highlightedTrainingDay = nextSession.training_day;
-        workoutPosition = nextSession.position;
+        const isPastDuePending =
+          compareDateKeys(displaySession.scheduled_date_key, todayDateKey) < 0 &&
+          displaySession.actual_status !== 'completed';
+        highlightedSession = displaySession;
+        highlightedTrainingDay = displaySession.training_day;
+        workoutPosition = displaySession.position;
         cardState = buildSessionCardState({
-          session: nextSession,
+          session: displaySession,
           dateKey: effectiveFocusedDateKey,
           mode,
-          recommendation: 'focused',
+          recommendation: isPastDuePending ? 'overdue' : 'focused',
           daySessions: focusedEntry.sessions,
           showSessionPicker: true,
+          actionableSession,
         });
       }
     }
@@ -541,6 +594,8 @@ export const buildProgramTimelineView = (
     workoutPosition,
     workoutTotal: model.totalSessions,
     allCompleted: model.allCompleted,
+    actionableSession,
+    actionableDateKey: actionableSession?.scheduled_date_key ?? null,
   };
 };
 

@@ -131,7 +131,7 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
           style={StyleSheet.absoluteFill}
         />
         <Text style={[styles.title, compact ? styles.titleCompact : null, { color: textColor }]}>
-          Volumen de entrenamiento por sesion
+          Volumen de entrenamiento por sesión
         </Text>
         <View style={[styles.emptyState, compact ? styles.emptyStateCompact : null]}>
           <Text style={[styles.emptyText, { color: subtextColor }]}>Sin datos de volumen</Text>

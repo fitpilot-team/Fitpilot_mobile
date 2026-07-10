@@ -26,6 +26,7 @@ import {
   MicrocycleStats,
   ScienceTips,
   SessionPickerModal,
+  SplitOverviewCta,
   TodayWorkoutCard,
   UserHeader,
 } from '../../src/components/dashboard';
@@ -63,14 +64,18 @@ import {
   buildProgramTimelineModel,
   buildProgramTimelineView,
   getProgramTimelineCalendarDayLabel,
+  getProgramTimelineDefaultFocusDateKey,
   getProgramTimelineWeekLabel,
+  isSessionActionable,
   shiftProgramTimelineFocusByWeek,
+  type ProgramTimelineSession,
 } from '../../src/utils/programTimeline';
+import { toast } from '../../src/store/toastStore';
 
 const stripExistingClientContextPrefix = (value: string) =>
   value
     .trim()
-    .replace(/^tu\s+(plan|promedio semanal|nutricion):\s*/i, '')
+    .replace(/^tu\s+(plan|promedio semanal|nutrición|nutricion):\s*/i, '')
     .replace(/^promedio semanal:\s*/i, '')
     .trim();
 
@@ -84,7 +89,7 @@ const getClientContextPrefix = (
 
   return /kcal|promedio/i.test(contextLabel)
     ? 'Tu promedio semanal'
-    : 'Tu nutricion';
+    : 'Tu nutrición';
 };
 
 const formatClientContextLabel = (
@@ -97,7 +102,7 @@ const formatClientContextLabel = (
     return null;
   }
 
-  if (/^tu\s+(plan|promedio semanal|nutricion):/i.test(trimmedContext)) {
+  if (/^tu\s+(plan|promedio semanal|nutrición|nutricion):/i.test(trimmedContext)) {
     return trimmedContext;
   }
 
@@ -140,24 +145,22 @@ export default function HomeScreen() {
   const tabBarScroll = useBottomTabBarScroll();
   const contentInsetBottom = useBottomTabBarContentInset();
   const isFocused = useIsFocused();
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
   const {
     summaries: careTeamSummaries,
     errors: careTeamErrors,
     isLoading: isLoadingCareTeam,
     refreshCareTeam,
   } = useCareTeam(user?.id ?? null);
-  const {
-    dashboardBootstrap,
-    dashboardDataVersion,
-    workoutLogsVersion,
-    isLoading,
-    isStartingWorkout,
-    error,
-    loadDashboardData,
-    startWorkout,
-    clearError,
-  } = useWorkoutStore();
+  const dashboardBootstrap = useWorkoutStore((state) => state.dashboardBootstrap);
+  const dashboardDataVersion = useWorkoutStore((state) => state.dashboardDataVersion);
+  const workoutLogsVersion = useWorkoutStore((state) => state.workoutLogsVersion);
+  const isLoading = useWorkoutStore((state) => state.isLoading);
+  const isStartingWorkout = useWorkoutStore((state) => state.isStartingWorkout);
+  const error = useWorkoutStore((state) => state.error);
+  const loadDashboardData = useWorkoutStore((state) => state.loadDashboardData);
+  const startWorkout = useWorkoutStore((state) => state.startWorkout);
+  const clearError = useWorkoutStore((state) => state.clearError);
 
   const [refreshing, setRefreshing] = useState(false);
   const [currentWeekDietCaloriesAverage, setCurrentWeekDietCaloriesAverage] = useState<number | null>(null);
@@ -272,6 +275,14 @@ export default function HomeScreen() {
       return;
     }
 
+    void refreshCareTeam();
+  }, [isFocused, refreshCareTeam, user?.id]);
+
+  useEffect(() => {
+    if (!isFocused || !user?.id) {
+      return;
+    }
+
     if (
       dashboardDataVersion !== 0 &&
       lastLoadedWorkoutLogsVersionRef.current === workoutLogsVersion
@@ -325,14 +336,13 @@ export default function HomeScreen() {
   }, [dashboardDataVersion, showInitialLoadingState]);
 
   useEffect(() => {
+    const defaultFocusDateKey = getProgramTimelineDefaultFocusDateKey(programTimelineModel);
     setFocusedDateKey((currentDateKey) => (
-      currentDateKey === programTimelineModel.initialFocusedDateKey
-        ? currentDateKey
-        : programTimelineModel.initialFocusedDateKey
+      currentDateKey === defaultFocusDateKey ? currentDateKey : defaultFocusDateKey
     ));
     setIsSessionPickerVisible(false);
     setIsDatePickerVisible(false);
-  }, [dashboardDataVersion, programTimelineModel.initialFocusedDateKey]);
+  }, [dashboardDataVersion, programTimelineModel]);
 
   useEffect(() => {
     const loadMuscleVolume = async () => {
@@ -417,6 +427,44 @@ export default function HomeScreen() {
     [startWorkout],
   );
 
+  const handleGoToActionable = useCallback(() => {
+    const actionableDateKey = programTimelineView.actionableDateKey;
+    if (actionableDateKey) {
+      setFocusedDateKey(actionableDateKey);
+      setIsSessionPickerVisible(false);
+    }
+  }, [programTimelineView.actionableDateKey]);
+
+  // Puerta de entrada al inicio de una sesión: si no es el frente de cola,
+  // avisa y redirige al pendiente en vez de iniciarla.
+  const attemptOpenSession = useCallback(
+    async (session: MicrocycleSessionProgress) => {
+      const actionableSession = programTimelineView.actionableSession;
+      if (!isSessionActionable(session as ProgramTimelineSession, actionableSession)) {
+        const actionableDateKey = programTimelineView.actionableDateKey;
+        toast.info(
+          'Termina primero tu entrenamiento pendiente',
+          actionableDateKey
+            ? `Completa tu sesión del ${formatLocalDate(actionableDateKey, {
+                weekday: 'long',
+                month: 'short',
+                day: 'numeric',
+              })}`
+            : undefined,
+        );
+        handleGoToActionable();
+        return;
+      }
+      await openWorkoutSession(session);
+    },
+    [
+      handleGoToActionable,
+      openWorkoutSession,
+      programTimelineView.actionableDateKey,
+      programTimelineView.actionableSession,
+    ],
+  );
+
   const handleShiftWeek = useCallback(
     (direction: -1 | 1) => {
       const nextDateKey = shiftProgramTimelineFocusByWeek(
@@ -438,8 +486,8 @@ export default function HomeScreen() {
       return;
     }
 
-    await openWorkoutSession(programTimelineView.cardState.session);
-  }, [openWorkoutSession, programTimelineView.cardState]);
+    await attemptOpenSession(programTimelineView.cardState.session);
+  }, [attemptOpenSession, programTimelineView.cardState]);
 
   const handleOpenSessions = useCallback(() => {
     if ((programTimelineView.focusedDay?.sessions.length ?? 0) > 1) {
@@ -473,7 +521,7 @@ export default function HomeScreen() {
 
   const sessionPickerTitle = useMemo(() => {
     if (!programTimelineView.focusedDay) {
-      return 'Sesiones del dia';
+      return 'Sesiones del día';
     }
 
     return formatLocalDate(programTimelineView.focusedDay.dateKey, {
@@ -532,6 +580,15 @@ export default function HomeScreen() {
   const handleOpenMeasurements = useCallback(() => {
     router.push('/(tabs)/measurements');
   }, []);
+  const handleOpenProfile = useCallback(() => {
+    router.push('/profile');
+  }, []);
+  const handleOpenProfessionals = useCallback(() => {
+    router.push('/professionals');
+  }, []);
+  const handleOpenSplit = useCallback(() => {
+    router.push('/workouts/split');
+  }, []);
 
   if (!user) {
     return null;
@@ -567,6 +624,7 @@ export default function HomeScreen() {
               <UserHeader
                 user={user}
                 program={program}
+                onProfilePress={handleOpenProfile}
                 contentWidth={contentWidth}
                 horizontalPadding={horizontalPadding}
               />
@@ -590,10 +648,17 @@ export default function HomeScreen() {
               </View>
             </Animated.View>
 
+            {microcycleProgress?.microcycle_id ? (
+              <Animated.View entering={getEntryAnimation(120)}>
+                <SplitOverviewCta onPress={handleOpenSplit} horizontalPadding={horizontalPadding} />
+              </Animated.View>
+            ) : null}
+
             <Animated.View entering={getEntryAnimation(160)}>
               <TodayWorkoutCard
                 cardState={programTimelineView.cardState}
                 onStartPress={handleStartHighlightedSession}
+                onGoToActionable={handleGoToActionable}
                 onOpenSessions={handleOpenSessions}
                 isLoading={isStartingWorkout || (isLoading && !refreshing)}
                 muscleVolume={muscleVolume}
@@ -653,6 +718,9 @@ export default function HomeScreen() {
                 variant="summary"
                 emptyPresentation="combined-summary"
                 horizontalPadding={horizontalPadding}
+                actionLabel="Buscar"
+                actionAccessibilityLabel="Buscar profesionales"
+                onActionPress={handleOpenProfessionals}
               />
             </Animated.View>
 
@@ -682,7 +750,7 @@ export default function HomeScreen() {
           title={sessionPickerTitle}
           subtitle={
             programTimelineView.focusedDay
-              ? `${programTimelineView.focusedDay.sessions.length} sesion${programTimelineView.focusedDay.sessions.length > 1 ? 'es' : ''} disponible${programTimelineView.focusedDay.sessions.length > 1 ? 's' : ''}`
+              ? `${programTimelineView.focusedDay.sessions.length} sesión${programTimelineView.focusedDay.sessions.length > 1 ? 'es' : ''} disponible${programTimelineView.focusedDay.sessions.length > 1 ? 's' : ''}`
               : null
           }
           sessions={programTimelineView.focusedDay?.sessions ?? []}
@@ -691,7 +759,7 @@ export default function HomeScreen() {
           }}
           onSelectSession={async (session) => {
             setIsSessionPickerVisible(false);
-            await openWorkoutSession(session);
+            await attemptOpenSession(session);
           }}
         />
 

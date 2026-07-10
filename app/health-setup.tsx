@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../src/components/common';
 import { borderRadius, fontSize, spacing } from '../src/constants/colors';
 import { connectedHealthService } from '../src/services/connectedHealth';
@@ -21,18 +22,18 @@ import type { FitpilotHealthAvailability } from '../modules/fitpilot-health';
 const valueProps: { icon: keyof typeof Ionicons.glyphMap; title: string; copy: string }[] = [
   {
     icon: 'pulse-outline',
-    title: 'Recuperacion y descanso',
-    copy: 'Sueno, HRV y FC en reposo para ajustar tu carga.',
+    title: 'Recuperación y descanso',
+    copy: 'Sueño, HRV y FC en reposo para ajustar tu carga.',
   },
   {
     icon: 'flame-outline',
-    title: 'Energia real',
+    title: 'Energía real',
     copy: 'Pasos y kcal activas para afinar tus objetivos.',
   },
   {
     icon: 'bulb-outline',
     title: 'Recomendaciones',
-    copy: 'Tu entrenador recibe senales para mejores ajustes.',
+    copy: 'Tu entrenador recibe señales para mejores ajustes.',
   },
 ];
 
@@ -48,6 +49,7 @@ const getPlatformLabel = (platform?: string | null) => {
 
 export default function HealthSetupScreen() {
   const styles = useThemedStyles(createStyles);
+  const insets = useSafeAreaInsets();
   const { refreshUser } = useAuthStore();
   const [availability, setAvailability] = useState<FitpilotHealthAvailability | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,6 +57,7 @@ export default function HealthSetupScreen() {
   const [isSkipping, setIsSkipping] = useState(false);
   const [shareWithTrainer, setShareWithTrainer] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [permissionBlocked, setPermissionBlocked] = useState(false);
 
   const isAvailable = availability?.available ?? false;
   const isBusy = isConnecting || isSkipping;
@@ -82,8 +85,15 @@ export default function HealthSetupScreen() {
   const handleConnect = async () => {
     setIsConnecting(true);
     setError(null);
+    setPermissionBlocked(false);
     try {
-      await connectedHealthService.requestPermissions();
+      const status = await connectedHealthService.requestPermissions();
+      if (!status.granted.length) {
+        // Sin permisos otorgados no tiene sentido sincronizar ni marcar como
+        // completado: guiamos al usuario a concederlos en Health Connect.
+        setPermissionBlocked(true);
+        return;
+      }
       await connectedHealthService.sync(30);
       await connectedHealthService.setSharing(shareWithTrainer).catch(() => undefined);
       await connectedHealthService.setSetupStatus('completed');
@@ -137,8 +147,8 @@ export default function HealthSetupScreen() {
           </View>
           <Text style={styles.title}>Activa salud conectada</Text>
           <Text style={styles.subtitle}>
-            Conecta {getPlatformLabel(availability?.platform)} para que tus metricas de
-            recuperacion y energia trabajen por ti. Solo lectura, tu mandas.
+            Conecta {getPlatformLabel(availability?.platform)} para que tus métricas de
+            recuperación y energía trabajen por ti. Solo lectura, tú mandas.
           </Text>
         </View>
 
@@ -162,7 +172,8 @@ export default function HealthSetupScreen() {
               <View style={styles.consentText}>
                 <Text style={styles.consentTitle}>Compartir con mi entrenador</Text>
                 <Text style={styles.consentCopy}>
-                  Solo vera agregados diarios con fuente y frescura. Puedes cambiarlo cuando quieras.
+                  Tu entrenador verá un resumen diario de tu actividad, sueño y recuperación. Puedes
+                  desactivarlo cuando quieras.
                 </Text>
               </View>
               <Switch
@@ -183,13 +194,23 @@ export default function HealthSetupScreen() {
           <View style={styles.unavailableBox}>
             <Ionicons name="alert-circle-outline" size={22} color={styles.unavailableIcon.color} />
             <Text style={styles.unavailableText}>
-              {getPlatformLabel(availability?.platform)} no esta disponible en este dispositivo.
+              {getPlatformLabel(availability?.platform)} no está disponible en este dispositivo.
               {Platform.OS === 'android'
-                ? ' Instala Health Connect para activar tus metricas.'
+                ? ' Instala Health Connect para activar tus métricas.'
                 : ' Revisa los ajustes de salud para continuar.'}
             </Text>
           </View>
         )}
+
+        {permissionBlocked ? (
+          <View style={styles.unavailableBox}>
+            <Ionicons name="alert-circle-outline" size={22} color={styles.unavailableIcon.color} />
+            <Text style={styles.unavailableText}>
+              No se activó ningún permiso. Abre {getPlatformLabel(availability?.platform)}, concede
+              los permisos de FitPilot y vuelve a intentar la conexión.
+            </Text>
+          </View>
+        ) : null}
 
         {error ? (
           <View style={styles.errorBox}>
@@ -198,16 +219,41 @@ export default function HealthSetupScreen() {
         ) : null}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View
+        style={[
+          styles.footer,
+          { paddingBottom: Math.max(insets.bottom + spacing.md, spacing.lg) },
+        ]}
+      >
         {isAvailable ? (
-          <Button
-            title="Conectar y activar"
-            onPress={handleConnect}
-            isLoading={isConnecting}
-            disabled={isBusy}
-            fullWidth
-            icon={<Ionicons name="link-outline" size={18} color="#ffffff" />}
-          />
+          <>
+            <Button
+              title="Conectar y activar"
+              onPress={handleConnect}
+              isLoading={isConnecting}
+              disabled={isBusy}
+              fullWidth
+              icon={<Ionicons name="link-outline" size={18} color="#ffffff" />}
+            />
+            {permissionBlocked ? (
+              <Button
+                title={Platform.OS === 'android' ? 'Abrir Health Connect' : 'Abrir ajustes'}
+                onPress={() => {
+                  void connectedHealthService.openSettings();
+                }}
+                variant="secondary"
+                disabled={isConnecting}
+                fullWidth
+                icon={
+                  <Ionicons
+                    name="settings-outline"
+                    size={18}
+                    color={styles.propIconGlyph.color}
+                  />
+                }
+              />
+            ) : null}
+          </>
         ) : (
           <Button
             title={Platform.OS === 'android' ? 'Abrir Health Connect' : 'Abrir ajustes'}
@@ -399,16 +445,19 @@ const createStyles = (theme: AppTheme) =>
     footer: {
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
-      paddingBottom: Platform.OS === 'ios' ? spacing.xl : spacing.lg,
       gap: spacing.sm,
       borderTopWidth: 1,
       borderTopColor: theme.colors.border,
       backgroundColor: theme.colors.surface,
     },
     skipButton: {
-      minHeight: 44,
+      minHeight: 46,
       alignItems: 'center',
       justifyContent: 'center',
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
     skipText: {
       fontSize: fontSize.base,

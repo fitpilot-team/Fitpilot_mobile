@@ -407,7 +407,7 @@ const RecipeCard: React.FC<{
   );
 };
 
-export const DietMealCard: React.FC<DietMealCardProps> = ({
+const DietMealCardComponent: React.FC<DietMealCardProps> = ({
   meal,
   onRecipeIngredientPress,
   onStandaloneFoodPress,
@@ -521,6 +521,8 @@ export const DietMealCard: React.FC<DietMealCardProps> = ({
     </Card>
   );
 };
+
+export const DietMealCard = React.memo(DietMealCardComponent);
 
 function createStyles(theme: AppTheme) {
   return StyleSheet.create({

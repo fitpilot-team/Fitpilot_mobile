@@ -99,8 +99,8 @@ export const BASE_MEASUREMENT_FIELDS: MeasurementFieldConfig<MeasurementNumericF
 
 export const BIOIMPEDANCE_SECTIONS: MeasurementFieldSection<MeasurementNumericFormKey>[] = [
   {
-    title: 'Composicion corporal',
-    description: 'Datos que suele entregar una bascula de bioimpedancia.',
+    title: 'Composición corporal',
+    description: 'Datos que suele entregar una báscula de bioimpedancia.',
     fields: [
       {
         key: 'body_fat_pct',
@@ -134,7 +134,7 @@ export const BIOIMPEDANCE_SECTIONS: MeasurementFieldSection<MeasurementNumericFo
       },
       {
         key: 'bone_mass_kg',
-        label: 'Masa osea',
+        label: 'Masa ósea',
         placeholder: '3.2',
         unit: 'kg',
       },
@@ -196,11 +196,11 @@ export const PERIMETER_SECTIONS: MeasurementFieldSection<MeasurementNumericFormK
   },
   {
     title: 'Cabeza y miembro superior',
-    description: 'Perimetros del tren superior y perimetro cefalico.',
+    description: 'Perímetros del tren superior y perímetro cefálico.',
     fields: [
       {
         key: 'cephalic_cm',
-        label: 'Cefalico',
+        label: 'Cefálico',
         placeholder: '56.2',
         unit: 'cm',
         icon: 'radio-button-on-outline',
@@ -276,7 +276,7 @@ export const PERIMETER_SECTIONS: MeasurementFieldSection<MeasurementNumericFormK
   },
   {
     title: 'Miembro inferior',
-    description: 'Perimetros del tren inferior.',
+    description: 'Perímetros del tren inferior.',
     fields: [
       {
         key: 'hip_cm',
@@ -480,7 +480,7 @@ export const DETAIL_MEASUREMENT_SECTIONS: MeasurementFieldSection<MeasurementHis
   },
   {
     title: 'Bioimpedancia',
-    description: 'Composicion corporal disponible para este registro.',
+    description: 'Composición corporal disponible para este registro.',
     fields: BIOIMPEDANCE_SECTIONS.flatMap((section) => section.fields),
   },
   ...PERIMETER_SECTIONS,
@@ -539,11 +539,11 @@ export const CALCULATION_METADATA: Record<
     order: 1,
     group: 'main',
     showInPrimarySummary: true,
-    shortDescription: 'Relacion entre tu peso y estatura.',
+    shortDescription: 'Relación entre tu peso y estatura.',
   },
   waist_hip_ratio: {
     label: 'Indice cintura-cadera',
-    patientLabel: 'Relacion cintura-cadera',
+    patientLabel: 'Relación cintura-cadera',
     order: 2,
     group: 'main',
     showInPrimarySummary: true,
@@ -551,7 +551,7 @@ export const CALCULATION_METADATA: Record<
   },
   waist_height_ratio: {
     label: 'Indice cintura-estatura',
-    patientLabel: 'Relacion cintura-estatura',
+    patientLabel: 'Relación cintura-estatura',
     order: 3,
     group: 'main',
     showInPrimarySummary: true,
