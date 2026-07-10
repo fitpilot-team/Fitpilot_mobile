@@ -11,6 +11,7 @@ import { AppToast, ErrorBoundary, OfflineBanner, StartupBrandIntro } from '../sr
 import { buildNavigationTheme, useAppTheme, useThemedStyles } from '../src/theme';
 import { useConnectivityMonitor } from '../src/hooks/useConnectivityMonitor';
 import { useSystemNavigationBarTheme } from '../src/hooks/useSystemNavigationBarTheme';
+import { useNotificationListeners } from '../src/services/notificationListeners';
 
 // Configurar Reanimated logger para suprimir mensajes de strict mode
 configureReanimatedLogger({
@@ -27,6 +28,7 @@ export default function RootLayout() {
   const [isNativeSplashHidden, setIsNativeSplashHidden] = useState(false);
   const isReady = isInitialized && isHydrated;
 
+  useNotificationListeners();
   useConnectivityMonitor();
   useSystemNavigationBarTheme(theme, isReady && !showStartupIntro);
 
