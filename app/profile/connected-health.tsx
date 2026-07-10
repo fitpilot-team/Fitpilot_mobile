@@ -217,7 +217,8 @@ export default function ConnectedHealthScreen() {
     setIsSyncing(true);
     setError(null);
     try {
-      await connectedHealthService.sync(30);
+      // Botón explícito: pide permisos (iOS) antes de sincronizar si aún no se concedieron.
+      await connectedHealthService.sync(30, { ensureAuthorization: true });
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo sincronizar.');
