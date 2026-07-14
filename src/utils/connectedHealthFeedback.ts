@@ -6,11 +6,19 @@ import type {
 import type {
   ConnectedHealthFeedbackModel,
   ConnectedHealthFeedbackRange,
+  ConnectedHealthHistoryModel,
+  ConnectedHealthHistorySeries,
+  ConnectedHealthHistoryValueFormat,
   ConnectedHealthInsight,
   ConnectedHealthInsightTone,
   ConnectedHealthMetricCard,
   ConnectedHealthReadinessStatus,
 } from '../types/connectedHealthFeedback';
+import {
+  addDaysToDateKey,
+  getCalendarDayDiff,
+  toLocalDateKey,
+} from './date';
 
 const STALE_SYNC_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 
@@ -117,6 +125,51 @@ const formatMs = (value: number | null | undefined) =>
 
 const formatScore = (value: number | null | undefined) =>
   value == null ? '--' : `${numberFormatter.format(Math.round(value))}/100`;
+
+export const formatConnectedHealthHistoryValue = (
+  format: ConnectedHealthHistoryValueFormat,
+  value: number | null | undefined,
+) => {
+  switch (format) {
+    case 'score':
+      return formatScore(value);
+    case 'duration':
+      return formatDuration(value);
+    case 'kcal':
+      return formatKcal(value);
+    case 'count':
+      return formatCount(value);
+    case 'distance':
+      return formatDistance(value);
+    case 'milliseconds':
+      return formatMs(value);
+    case 'bpm':
+      return formatBpm(value);
+    default:
+      return '--';
+  }
+};
+
+export const formatConnectedHealthHistoryChange = (
+  format: ConnectedHealthHistoryValueFormat,
+  value: number | null,
+) => {
+  if (value == null) {
+    return 'Sin comparativo';
+  }
+
+  if (Math.abs(value) < 0.005) {
+    return 'Sin cambio';
+  }
+
+  const prefix = value > 0 ? '+' : '-';
+  const absoluteValue = Math.abs(value);
+  if (format === 'score') {
+    return `${prefix}${numberFormatter.format(Math.round(absoluteValue))} pts`;
+  }
+
+  return `${prefix}${formatConnectedHealthHistoryValue(format, absoluteValue)}`;
+};
 
 const formatAverageHelper = (
   label: string,
@@ -533,6 +586,157 @@ const buildMetrics = (
 
   // Evita duplicar "Kcal totales" cuando la tarjeta de energía ya usa ese valor.
   return energyFromActive ? metrics : metrics.filter((metric) => metric.key !== 'total_energy');
+};
+
+type ConnectedHealthHistoryMetricDefinition = Pick<
+  ConnectedHealthHistorySeries,
+  'key' | 'label' | 'icon' | 'chartKind' | 'valueFormat'
+> & {
+  select: (summary: ConnectedHealthDailySummary) => number | null;
+};
+
+const CONNECTED_HEALTH_HISTORY_METRICS: ConnectedHealthHistoryMetricDefinition[] = [
+  {
+    key: 'recovery',
+    label: 'Recuperación',
+    icon: 'pulse-outline',
+    chartKind: 'line',
+    valueFormat: 'score',
+    select: (summary) => summary.recovery_score,
+  },
+  {
+    key: 'sleep',
+    label: 'Sueño',
+    icon: 'moon-outline',
+    chartKind: 'bar',
+    valueFormat: 'duration',
+    select: (summary) => summary.sleep_minutes,
+  },
+  {
+    key: 'active_energy',
+    label: 'Kcal activas',
+    icon: 'flame-outline',
+    chartKind: 'bar',
+    valueFormat: 'kcal',
+    select: (summary) => summary.active_energy_kcal,
+  },
+  {
+    key: 'total_energy',
+    label: 'Kcal totales',
+    icon: 'speedometer-outline',
+    chartKind: 'bar',
+    valueFormat: 'kcal',
+    select: (summary) => summary.total_energy_kcal,
+  },
+  {
+    key: 'steps',
+    label: 'Pasos',
+    icon: 'walk-outline',
+    chartKind: 'bar',
+    valueFormat: 'count',
+    select: (summary) => summary.steps,
+  },
+  {
+    key: 'distance',
+    label: 'Distancia',
+    icon: 'map-outline',
+    chartKind: 'bar',
+    valueFormat: 'distance',
+    select: (summary) => summary.distance_m,
+  },
+  {
+    key: 'hrv',
+    label: 'HRV',
+    icon: 'analytics-outline',
+    chartKind: 'line',
+    valueFormat: 'milliseconds',
+    select: (summary) => summary.hrv_ms,
+  },
+  {
+    key: 'resting_hr',
+    label: 'FC reposo',
+    icon: 'heart-outline',
+    chartKind: 'line',
+    valueFormat: 'bpm',
+    select: (summary) => summary.resting_hr_bpm,
+  },
+];
+
+const getHistoryDateKeys = (
+  summary: ConnectedHealthSummaryResponse,
+  range: ConnectedHealthFeedbackRange,
+) => {
+  const startDate = toLocalDateKey(summary.range.start_date);
+  const endDate = toLocalDateKey(summary.range.end_date);
+
+  if (startDate && endDate) {
+    const dayCount = getCalendarDayDiff(startDate, endDate) + 1;
+    if (dayCount > 0 && dayCount <= 366) {
+      return Array.from({ length: dayCount }, (_, index) =>
+        addDaysToDateKey(startDate, index),
+      )
+        .filter((date): date is string => Boolean(date))
+        .slice(-range);
+    }
+  }
+
+  return Array.from(
+    new Set(
+      summary.summaries
+        .map((dailySummary) => toLocalDateKey(dailySummary.date))
+        .filter((date): date is string => Boolean(date)),
+    ),
+  )
+    .sort((left, right) => left.localeCompare(right))
+    .slice(-range);
+};
+
+export const buildConnectedHealthHistory = (
+  summary: ConnectedHealthSummaryResponse | null,
+  range: ConnectedHealthFeedbackRange,
+): ConnectedHealthHistoryModel => {
+  if (!summary) {
+    return { range, series: [] };
+  }
+
+  const dateKeys = getHistoryDateKeys(summary, range);
+  const summariesByDate = new Map<string, ConnectedHealthDailySummary>();
+  summary.summaries.forEach((dailySummary) => {
+    const dateKey = toLocalDateKey(dailySummary.date);
+    if (dateKey) {
+      summariesByDate.set(dateKey, dailySummary);
+    }
+  });
+
+  const series = CONNECTED_HEALTH_HISTORY_METRICS.flatMap((metric) => {
+    const points = dateKeys.map((date) => {
+      const dailySummary = summariesByDate.get(date);
+      const rawValue = dailySummary ? metric.select(dailySummary) : null;
+      const value = rawValue != null && Number.isFinite(rawValue) ? rawValue : null;
+      return { date, value };
+    });
+    const values = points.filter(
+      (point): point is { date: string; value: number } => point.value != null,
+    );
+
+    if (values.length === 0) {
+      return [];
+    }
+
+    const latest = values[values.length - 1] ?? null;
+    const first = values[0] ?? null;
+    const averageValue = values.reduce((total, point) => total + point.value, 0) / values.length;
+
+    return [{
+      ...metric,
+      points,
+      latest,
+      average: averageValue,
+      change: first && latest && values.length > 1 ? latest.value - first.value : null,
+    }];
+  });
+
+  return { range, series };
 };
 
 export const buildConnectedHealthFeedback = (

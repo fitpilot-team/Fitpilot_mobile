@@ -19,6 +19,7 @@ import {
   ConnectedHealthInsightList,
   ConnectedHealthMetricTile,
 } from './ConnectedHealthFeedbackParts';
+import { ConnectedHealthHistoryCard } from './ConnectedHealthHistoryCard';
 
 type RangeKey = '7' | '14' | '30';
 
@@ -38,6 +39,7 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
   const range = toRange(rangeKey);
   const {
     feedback,
+    history,
     availability,
     isLoading,
     isRefreshing,
@@ -179,6 +181,8 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
               ))}
             </View>
           </Card>
+
+          <ConnectedHealthHistoryCard history={history} isRefreshing={isRefreshing} />
 
           <Card style={styles.sectionCard} padding="md">
             <View style={styles.sectionHeader}>

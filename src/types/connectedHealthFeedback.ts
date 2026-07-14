@@ -39,6 +39,44 @@ export type ConnectedHealthMetricCard = {
   tone: ConnectedHealthInsightTone;
 };
 
+export type ConnectedHealthHistoryChartKind = 'bar' | 'line';
+
+export type ConnectedHealthHistoryValueFormat =
+  | 'score'
+  | 'duration'
+  | 'kcal'
+  | 'count'
+  | 'distance'
+  | 'milliseconds'
+  | 'bpm';
+
+export type ConnectedHealthHistoryPoint = {
+  date: string;
+  value: number | null;
+};
+
+export type ConnectedHealthHistoryValuePoint = {
+  date: string;
+  value: number;
+};
+
+export type ConnectedHealthHistorySeries = {
+  key: ConnectedHealthMetricKey;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  chartKind: ConnectedHealthHistoryChartKind;
+  valueFormat: ConnectedHealthHistoryValueFormat;
+  points: ConnectedHealthHistoryPoint[];
+  latest: ConnectedHealthHistoryValuePoint | null;
+  average: number | null;
+  change: number | null;
+};
+
+export type ConnectedHealthHistoryModel = {
+  range: ConnectedHealthFeedbackRange;
+  series: ConnectedHealthHistorySeries[];
+};
+
 export type ConnectedHealthFeedbackModel = {
   range: ConnectedHealthFeedbackRange;
   hasData: boolean;

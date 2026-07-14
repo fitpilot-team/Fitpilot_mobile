@@ -12,6 +12,7 @@ import type {
   ConnectedHealthFeedbackRange,
 } from '../types/connectedHealthFeedback';
 import {
+  buildConnectedHealthHistory,
   buildConnectedHealthFeedback,
   isConnectedHealthSyncOlderThan,
   shouldAutoSyncConnectedHealth,
@@ -43,8 +44,8 @@ const getErrorMessage = (error: unknown, fallback: string) =>
 // autorización (p.ej. tras reinstalar la dev build, que resetea los permisos, o antes
 // de que el usuario responda la hoja de permisos). No es un fallo real de sincronización:
 // no debe mostrarse como error alarmante, sobre todo si el resumen del backend ya tiene
-// datos. connectedHealthService.sync ya pide permisos antes de consultar en iOS, así que
-// esto solo cubre casos residuales.
+// datos. Los syncs explícitos piden permisos antes de consultar en iOS; los syncs de
+// fondo no presentan la hoja y pueden encontrar este estado tras una reinstalación.
 const isAuthorizationPendingError = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : '';
   return /not[\s_]?determined/i.test(message);
@@ -358,7 +359,8 @@ export function useConnectedHealthFeedback({
     const isThrottled = checkedAtMs - lastSyncAttemptRef.current < autoSyncThrottleMs;
 
     if (isAvailable && isStale && !isThrottled) {
-      await sync();
+      // Foco/AppState no es una acción explícita: sincroniza sin presentar permisos.
+      await performSync({ ensureAuthorization: false });
     } else {
       await refresh();
     }
@@ -367,8 +369,8 @@ export function useConnectedHealthFeedback({
     availability?.available,
     enabled,
     foregroundSyncMaxAgeMs,
+    performSync,
     refresh,
-    sync,
   ]);
 
   useEffect(() => {
@@ -385,6 +387,10 @@ export function useConnectedHealthFeedback({
     () => buildConnectedHealthFeedback(summary, days, nowMs),
     [days, nowMs, summary],
   );
+  const history = useMemo(
+    () => buildConnectedHealthHistory(summary, days),
+    [days, summary],
+  );
 
   const hasGrantedPermissions = (permissions?.granted.length ?? 0) > 0;
   const needsPermissionCta =
@@ -397,6 +403,7 @@ export function useConnectedHealthFeedback({
     permissions,
     summary,
     feedback,
+    history,
     isLoading,
     isRefreshing,
     isSyncing,
