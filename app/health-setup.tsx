@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../src/components/common';
 import { borderRadius, fontSize, spacing } from '../src/constants/colors';
 import { connectedHealthService } from '../src/services/connectedHealth';
+import { markConnectedHealthSetupHandledForInstallation } from '../src/services/connectedHealthInstallation';
 import { useAuthStore } from '../src/store/authStore';
 import { useThemedStyles, type AppTheme } from '../src/theme';
 import type { FitpilotHealthAvailability } from '../modules/fitpilot-health';
@@ -50,7 +51,7 @@ const getPlatformLabel = (platform?: string | null) => {
 export default function HealthSetupScreen() {
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
-  const { refreshUser } = useAuthStore();
+  const { refreshUser, user } = useAuthStore();
   const [availability, setAvailability] = useState<FitpilotHealthAvailability | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -78,9 +79,14 @@ export default function HealthSetupScreen() {
   }, [load]);
 
   const finish = useCallback(async () => {
+    if (!user?.id) {
+      throw new Error('No fue posible identificar tu cuenta. Inicia sesión de nuevo.');
+    }
+
+    await markConnectedHealthSetupHandledForInstallation(user.id);
     await refreshUser();
     router.replace('/(tabs)');
-  }, [refreshUser]);
+  }, [refreshUser, user?.id]);
 
   const handleConnect = async () => {
     setIsConnecting(true);
