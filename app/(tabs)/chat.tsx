@@ -17,9 +17,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
@@ -31,8 +33,6 @@ import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
-  useAudioPlayer,
-  useAudioPlayerStatus,
   useAudioRecorder,
   useAudioRecorderState,
 } from 'expo-audio';
@@ -40,6 +40,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { io, type Socket } from 'socket.io-client';
+import { AudioMessagePlayer } from '../../src/components/chat/AudioMessagePlayer';
+import { ChatComposer } from '../../src/components/chat/ChatComposer';
 import { ListItemSkeleton, TabScreenWrapper } from '../../src/components/common';
 import {
   borderRadius,
@@ -77,10 +79,10 @@ import { hapticError, hapticImpactLight, hapticSuccess } from '../../src/utils/h
 const MAX_FILES_PER_MESSAGE = 4;
 const MAX_AUDIO_SECONDS = 300;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-const RECORDING_WAVE_BARS = [0.42, 0.76, 0.36, 0.92, 0.58, 1, 0.48, 0.84, 0.52, 0.88, 0.34, 0.72];
-const CHAT_BACKGROUND_GRADIENT = ['#08111f', '#050b14', '#0d1624'] as const;
 const CHAT_COMPOSER_PADDING = 12;
 const ANDROID_NAV_BAR_FALLBACK_INSET = 16;
+const NEW_MESSAGE_BOTTOM_THRESHOLD = 96;
+const MESSAGE_HIGHLIGHT_DURATION_MS = 1400;
 
 type PendingChatFile = ChatUploadFile & {
   id: string;
@@ -220,6 +222,41 @@ const formatMessageTime = (value: string) => {
   });
 };
 
+const getLocalDateKey = (value: string | Date) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+};
+
+const formatMessageDateLabel = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const dateKey = getLocalDateKey(date);
+
+  if (dateKey === getLocalDateKey(today)) {
+    return 'Hoy';
+  }
+
+  if (dateKey === getLocalDateKey(yesterday)) {
+    return 'Ayer';
+  }
+
+  return date.toLocaleDateString('es-MX', {
+    day: 'numeric',
+    month: 'long',
+    year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric',
+  });
+};
+
 const formatScheduleLabel = (value?: string | null, duration?: number | null) => {
   if (!value) {
     return null;
@@ -240,25 +277,6 @@ const formatScheduleLabel = (value?: string | null, duration?: number | null) =>
 
   return `${label}${duration ? ` · ${duration} min` : ''}`;
 };
-
-const formatDuration = (milliseconds: number) => {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-};
-
-const getAudioDisplayName = (name?: string | null) => {
-  const trimmedName = name?.trim();
-  if (!trimmedName || /^nota-voz-\d+/i.test(trimmedName)) {
-    return 'Nota de voz';
-  }
-
-  return trimmedName;
-};
-
-const getPendingFileDisplayName = (file: PendingChatFile) =>
-  file.type.startsWith('audio/') ? 'Nota de voz' : file.name;
 
 const sortConversations = (items: ChatConversation[]) =>
   [...items].sort((left, right) => {
@@ -334,72 +352,18 @@ const toProfessionalOption = (
   };
 };
 
-const AudioAttachmentPlayer = ({
-  attachment,
-  onDownload,
-}: {
-  attachment: ChatAttachment;
-  onDownload: (attachment: ChatAttachment) => void;
-}) => {
-  const styles = useThemedStyles(createStyles);
-  const { theme } = useAppTheme();
-  const player = useAudioPlayer(attachment.url ? { uri: attachment.url } : null);
-  const status = useAudioPlayerStatus(player);
-  const isPlaying = status.playing;
-  const durationLabel = attachment.duration_seconds
-    ? formatDuration(attachment.duration_seconds * 1000)
-    : null;
-
-  return (
-    <View style={styles.audioAttachment}>
-      <TouchableOpacity
-        style={styles.audioPlayback}
-        activeOpacity={0.75}
-        onPress={() => {
-          if (!attachment.url) {
-            return;
-          }
-
-          if (isPlaying) {
-            player.pause();
-          } else {
-            player.play();
-          }
-        }}
-      >
-        <View style={styles.audioPlaybackIcon}>
-          <Ionicons
-            name={isPlaying ? 'pause' : 'play'}
-            size={12}
-            color={theme.colors.primary}
-          />
-        </View>
-        <View style={styles.audioAttachmentCopy}>
-          <Text style={styles.audioAttachmentText} numberOfLines={1}>
-            {getAudioDisplayName(attachment.file_name)}
-          </Text>
-          {durationLabel ? (
-            <Text style={styles.audioAttachmentMeta}>{durationLabel}</Text>
-          ) : null}
-        </View>
-      </TouchableOpacity>
-      <TouchableOpacity
-        activeOpacity={0.75}
-        onPress={() => onDownload(attachment)}
-        style={styles.attachmentDownloadButton}
-      >
-        <Ionicons name="download-outline" size={17} color={theme.colors.primary} />
-      </TouchableOpacity>
-    </View>
-  );
-};
-
 const AttachmentPreview = ({
   attachment,
+  isMine,
+  activeAudioAttachmentId,
+  onAudioActiveChange,
   onPreview,
   onDownload,
 }: {
   attachment: ChatAttachment;
+  isMine: boolean;
+  activeAudioAttachmentId: number | null;
+  onAudioActiveChange: (attachmentId: number | null) => void;
   onPreview: (attachment: ChatAttachment) => void;
   onDownload: (attachment: ChatAttachment) => void;
 }) => {
@@ -418,7 +382,15 @@ const AttachmentPreview = ({
   }
 
   if (attachment.type === 'AUDIO') {
-    return <AudioAttachmentPlayer attachment={attachment} onDownload={onDownload} />;
+    return (
+      <AudioMessagePlayer
+        attachment={attachment}
+        isMine={isMine}
+        isActive={activeAudioAttachmentId === attachment.id}
+        onActiveChange={onAudioActiveChange}
+        onDownload={onDownload}
+      />
+    );
   }
 
   const icon = attachment.type === 'PDF' ? 'document-text' : 'link';
@@ -478,6 +450,9 @@ const MessageBubble = React.memo(function MessageBubble({
   onReferencePress,
   onPreviewAttachment,
   onDownloadAttachment,
+  activeAudioAttachmentId,
+  onAudioActiveChange,
+  isHighlighted,
 }: {
   message: LocalChatMessage;
   isMine: boolean;
@@ -488,10 +463,22 @@ const MessageBubble = React.memo(function MessageBubble({
   onReferencePress: (messageId: number) => void;
   onPreviewAttachment: (attachment: ChatAttachment) => void;
   onDownloadAttachment: (attachment: ChatAttachment) => void;
+  activeAudioAttachmentId: number | null;
+  onAudioActiveChange: (attachmentId: number | null) => void;
+  isHighlighted: boolean;
 }) {
+  const { width } = useWindowDimensions();
+  const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const isPendingSend = message.localStatus === 'sending';
   const isFailedSend = message.localStatus === 'failed';
+  const hasAudioAttachment = message.attachments.some(
+    (attachment) => attachment.type === 'AUDIO',
+  );
+  const audioBubbleWidth = Math.min(
+    280,
+    Math.max(0, (width - spacing.md * 2) * 0.84),
+  );
   const showActions = () => {
     const buttons = [
       {
@@ -523,9 +510,11 @@ const MessageBubble = React.memo(function MessageBubble({
       <View
         style={[
           styles.messageBubble,
+          hasAudioAttachment ? { width: audioBubbleWidth } : null,
           isMine ? styles.messageBubbleMine : null,
           isPendingSend ? styles.messageBubbleSending : null,
           isFailedSend ? styles.messageBubbleFailed : null,
+          isHighlighted ? styles.messageBubbleHighlighted : null,
         ]}
       >
         {message.reply_to ? (
@@ -579,6 +568,9 @@ const MessageBubble = React.memo(function MessageBubble({
               <AttachmentPreview
                 key={attachment.id}
                 attachment={attachment}
+                isMine={isMine}
+                activeAudioAttachmentId={activeAudioAttachmentId}
+                onAudioActiveChange={onAudioActiveChange}
                 onPreview={onPreviewAttachment}
                 onDownload={onDownloadAttachment}
               />
@@ -621,9 +613,9 @@ const MessageBubble = React.memo(function MessageBubble({
                 size={15}
                 color={
                   isFailedSend
-                    ? '#fca5a5'
+                    ? theme.colors.error
                     : message.delivery_status === 'READ'
-                      ? '#087f7a'
+                      ? theme.colors.success
                       : 'rgba(8,17,31,0.52)'
                 }
               />
@@ -638,7 +630,7 @@ const MessageBubble = React.memo(function MessageBubble({
             accessibilityRole="button"
             accessibilityLabel="Reintentar envío"
           >
-            <Ionicons name="refresh" size={13} color="#fca5a5" />
+            <Ionicons name="refresh" size={13} color={theme.colors.error} />
             <Text style={styles.messageRetryText}>No se envió · Reintentar</Text>
           </TouchableOpacity>
         ) : null}
@@ -682,6 +674,12 @@ export default function ChatScreen() {
   const careTeam = useCareTeam(user?.id ?? null);
   const scrollRef = useRef<ScrollView | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const messageOffsetsRef = useRef(new Map<number, number>());
+  const highlightedMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const isNearBottomRef = useRef(true);
+  const previousMessageCountRef = useRef(0);
   const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
   const isRecordingRef = useRef(false);
@@ -704,6 +702,13 @@ export default function ChatScreen() {
   const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
   const [pendingFiles, setPendingFiles] = useState<PendingChatFile[]>([]);
   const [previewAttachment, setPreviewAttachment] = useState<ChatAttachment | null>(null);
+  const [activeAudioAttachmentId, setActiveAudioAttachmentId] = useState<number | null>(
+    null,
+  );
+  const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(
+    null,
+  );
+  const [pendingNewMessageCount, setPendingNewMessageCount] = useState(0);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
@@ -732,6 +737,21 @@ export default function ChatScreen() {
       !activeConversation.contact_request_scheduled_appointment_id,
   );
   const isThreadOpen = Boolean(activeConversation);
+  const chatBackgroundGradient = useMemo(
+    () =>
+      theme.isDark
+        ? (['#08111f', '#050b14', '#0d1624'] as const)
+        : ([
+            theme.colors.background,
+            theme.colors.surfaceAlt,
+            theme.colors.background,
+          ] as const),
+    [
+      theme.colors.background,
+      theme.colors.surfaceAlt,
+      theme.isDark,
+    ],
+  );
 
   useEffect(() => {
     if (isFocused) {
@@ -909,10 +929,12 @@ export default function ChatScreen() {
     );
   }, [appendPendingFiles]);
 
-  const stopRecording = useCallback(async () => {
+  const finishRecording = useCallback(async (discard: boolean) => {
     if (!isRecordingRef.current) {
       return;
     }
+
+    isRecordingRef.current = false;
 
     if (recordingTimerRef.current) {
       clearTimeout(recordingTimerRef.current);
@@ -927,7 +949,7 @@ export default function ChatScreen() {
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
       const uri = recorder.uri ?? recorderState.url;
 
-      if (uri) {
+      if (uri && !discard) {
         appendPendingFiles([
           {
             id: makeLocalId(),
@@ -939,12 +961,33 @@ export default function ChatScreen() {
         ]);
       }
     } catch {
+      isRecordingRef.current = recorderState.isRecording;
       hapticError();
-      toast.error('No se pudo guardar la nota de voz.');
+      toast.error(
+        discard
+          ? 'No se pudo cancelar la grabación.'
+          : 'No se pudo guardar la nota de voz.',
+      );
     } finally {
       recordingStartedAtRef.current = null;
     }
-  }, [appendPendingFiles, recorder, recorderState.durationMillis, recorderState.url]);
+  }, [
+    appendPendingFiles,
+    recorder,
+    recorderState.durationMillis,
+    recorderState.isRecording,
+    recorderState.url,
+  ]);
+
+  const stopRecording = useCallback(
+    () => finishRecording(false),
+    [finishRecording],
+  );
+
+  const cancelRecording = useCallback(
+    () => finishRecording(true),
+    [finishRecording],
+  );
 
   const startRecording = useCallback(async () => {
     if (pendingFiles.length >= MAX_FILES_PER_MESSAGE) {
@@ -965,6 +1008,7 @@ export default function ChatScreen() {
       await recorder.prepareToRecordAsync();
       recorder.record();
       recordingStartedAtRef.current = Date.now();
+      isRecordingRef.current = true;
       recordingTimerRef.current = setTimeout(() => {
         void stopRecording();
       }, MAX_AUDIO_SECONDS * 1000);
@@ -975,14 +1019,6 @@ export default function ChatScreen() {
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
     }
   }, [pendingFiles.length, recorder, stopRecording]);
-
-  const handleRecordPress = useCallback(() => {
-    if (recorderState.isRecording) {
-      void stopRecording();
-    } else {
-      void startRecording();
-    }
-  }, [recorderState.isRecording, startRecording, stopRecording]);
 
   const startConversation = useCallback(
     async (professionalId?: number) => {
@@ -1019,19 +1055,59 @@ export default function ChatScreen() {
 
   const scrollToMessage = useCallback(
     (messageId: number) => {
-      const index = messages.findIndex((message) => message.id === messageId);
-      if (index < 0) {
+      if (!messages.some((message) => message.id === messageId)) {
         hapticError();
         toast.error('Mensaje no disponible', 'Ese mensaje no está cargado en este historial.');
         return;
       }
 
+      const messageOffset = messageOffsetsRef.current.get(messageId);
+      if (messageOffset == null) {
+        hapticError();
+        toast.info('Mensaje no disponible', 'Espera un momento mientras termina de mostrarse.');
+        return;
+      }
+
       scrollRef.current?.scrollTo({
-        y: Math.max(0, index * 96),
+        y: Math.max(0, messageOffset - spacing.lg),
         animated: true,
       });
+
+      setHighlightedMessageId(messageId);
+      if (highlightedMessageTimerRef.current) {
+        clearTimeout(highlightedMessageTimerRef.current);
+      }
+      highlightedMessageTimerRef.current = setTimeout(() => {
+        setHighlightedMessageId(null);
+        highlightedMessageTimerRef.current = null;
+      }, MESSAGE_HIGHLIGHT_DURATION_MS);
     },
     [messages],
+  );
+
+  const scrollToLatestMessages = useCallback(() => {
+    isNearBottomRef.current = true;
+    setPendingNewMessageCount(0);
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+  }, []);
+
+  const handleMessagesScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      const distanceFromBottom =
+        contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      const isNearBottom = distanceFromBottom <= NEW_MESSAGE_BOTTOM_THRESHOLD;
+
+      isNearBottomRef.current = isNearBottom;
+      if (isNearBottom) {
+        setPendingNewMessageCount((currentCount) =>
+          currentCount === 0 ? currentCount : 0,
+        );
+      }
+    },
+    [],
   );
 
   const handleDeleteMessage = useCallback(
@@ -1470,12 +1546,37 @@ export default function ChatScreen() {
   }, [activeConversationId, currentUserId, loadConversations, upsertConversation]);
 
   useEffect(() => {
-    if (messages.length) {
+    const previousCount = previousMessageCountRef.current;
+    const addedMessageCount = Math.max(0, messages.length - previousCount);
+    const latestMessage = messages[messages.length - 1];
+    const shouldScrollToEnd =
+      addedMessageCount > 0 &&
+      (previousCount === 0 ||
+        isNearBottomRef.current ||
+        latestMessage?.sender_id === currentUserId);
+
+    previousMessageCountRef.current = messages.length;
+
+    if (shouldScrollToEnd) {
+      setPendingNewMessageCount(0);
       requestAnimationFrame(() => {
         scrollRef.current?.scrollToEnd({ animated: true });
       });
+    } else if (addedMessageCount > 0) {
+      setPendingNewMessageCount(
+        (currentCount) => currentCount + addedMessageCount,
+      );
     }
-  }, [messages.length]);
+  }, [currentUserId, messages]);
+
+  useEffect(() => {
+    messageOffsetsRef.current.clear();
+    previousMessageCountRef.current = 0;
+    isNearBottomRef.current = true;
+    setPendingNewMessageCount(0);
+    setHighlightedMessageId(null);
+    setActiveAudioAttachmentId(null);
+  }, [activeConversationId]);
 
   useEffect(() => {
     isRecordingRef.current = recorderState.isRecording;
@@ -1485,6 +1586,9 @@ export default function ChatScreen() {
     () => () => {
       if (recordingTimerRef.current) {
         clearTimeout(recordingTimerRef.current);
+      }
+      if (highlightedMessageTimerRef.current) {
+        clearTimeout(highlightedMessageTimerRef.current);
       }
     },
     [],
@@ -1577,8 +1681,8 @@ export default function ChatScreen() {
     return (
       <TabScreenWrapper>
         {previewModal}
-        <LinearGradient colors={CHAT_BACKGROUND_GRADIENT} style={styles.stage}>
-          <StatusBar style="light" />
+        <LinearGradient colors={chatBackgroundGradient} style={styles.stage}>
+          <StatusBar style={theme.statusBarStyle} />
           <SafeAreaView style={styles.safeAreaTransparent} edges={['top', 'left', 'right']}>
             <KeyboardAvoidingView
               style={styles.threadShell}
@@ -1590,7 +1694,11 @@ export default function ChatScreen() {
                   onPress={closeThread}
                   style={styles.threadIconButton}
                 >
-                  <Ionicons name="arrow-back" size={21} color="#f8fafc" />
+                  <Ionicons
+                    name="arrow-back"
+                    size={21}
+                    color={theme.colors.icon}
+                  />
                 </TouchableOpacity>
                 <ConversationAvatar conversation={activeConversation} variant="thread" />
                 <View style={styles.threadTitleBlock}>
@@ -1612,6 +1720,8 @@ export default function ChatScreen() {
                 contentContainerStyle={styles.messagesContent}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
+                onScroll={handleMessagesScroll}
+                scrollEventThrottle={16}
                 refreshControl={
                   <RefreshControl
                     refreshing={isRefreshing}
@@ -1625,20 +1735,50 @@ export default function ChatScreen() {
                     <ActivityIndicator size="small" color={theme.colors.primary} />
                   </View>
                 ) : messages.length ? (
-                  messages.map((message) => (
-                    <MessageBubble
-                      key={message.id}
-                      message={message}
-                      isMine={message.sender_id === currentUserId}
-                      senderLabel={getSenderLabel}
-                      onReply={setReplyToMessage}
-                      onDelete={handleDeleteMessage}
-                      onRetry={handleRetryMessage}
-                      onReferencePress={scrollToMessage}
-                      onPreviewAttachment={setPreviewAttachment}
-                      onDownloadAttachment={handleDownloadAttachment}
-                    />
-                  ))
+                  messages.map((message, index) => {
+                    const previousMessage = messages[index - 1];
+                    const showDateSeparator =
+                      index === 0 ||
+                      getLocalDateKey(previousMessage.created_at) !==
+                        getLocalDateKey(message.created_at);
+
+                    return (
+                      <React.Fragment key={message.id}>
+                        {showDateSeparator ? (
+                          <View style={styles.dateSeparator}>
+                            <View style={styles.dateSeparatorLine} />
+                            <Text style={styles.dateSeparatorText}>
+                              {formatMessageDateLabel(message.created_at)}
+                            </Text>
+                            <View style={styles.dateSeparatorLine} />
+                          </View>
+                        ) : null}
+                        <View
+                          onLayout={(event) => {
+                            messageOffsetsRef.current.set(
+                              message.id,
+                              event.nativeEvent.layout.y,
+                            );
+                          }}
+                        >
+                          <MessageBubble
+                            message={message}
+                            isMine={message.sender_id === currentUserId}
+                            senderLabel={getSenderLabel}
+                            onReply={setReplyToMessage}
+                            onDelete={handleDeleteMessage}
+                            onRetry={handleRetryMessage}
+                            onReferencePress={scrollToMessage}
+                            onPreviewAttachment={setPreviewAttachment}
+                            onDownloadAttachment={handleDownloadAttachment}
+                            activeAudioAttachmentId={activeAudioAttachmentId}
+                            onAudioActiveChange={setActiveAudioAttachmentId}
+                            isHighlighted={highlightedMessageId === message.id}
+                          />
+                        </View>
+                      </React.Fragment>
+                    );
+                  })
                 ) : (
                   <View style={styles.emptyThread}>
                     <Text style={styles.emptyTitle}>Nuevo chat</Text>
@@ -1648,6 +1788,33 @@ export default function ChatScreen() {
                   </View>
                 )}
               </ScrollView>
+
+              {pendingNewMessageCount > 0 ? (
+                <View style={styles.newMessagesBar}>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={`${pendingNewMessageCount} ${
+                      pendingNewMessageCount === 1
+                        ? 'mensaje nuevo'
+                        : 'mensajes nuevos'
+                    }`}
+                    activeOpacity={0.78}
+                    onPress={scrollToLatestMessages}
+                    style={styles.newMessagesButton}
+                  >
+                    <Ionicons
+                      name="arrow-down"
+                      size={16}
+                      color="#08111f"
+                    />
+                    <Text style={styles.newMessagesButtonText}>
+                      {pendingNewMessageCount === 1
+                        ? '1 mensaje nuevo'
+                        : `${pendingNewMessageCount} mensajes nuevos`}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               {replyToMessage ? (
                 <View style={styles.replyComposer}>
@@ -1661,65 +1828,13 @@ export default function ChatScreen() {
                     </Text>
                   </View>
                   <TouchableOpacity hitSlop={8} onPress={() => setReplyToMessage(null)}>
-                    <Ionicons name="close" size={18} color="#94a3b8" />
+                    <Ionicons
+                      name="close"
+                      size={18}
+                      color={theme.colors.iconMuted}
+                    />
                   </TouchableOpacity>
                 </View>
-              ) : null}
-
-              {pendingFiles.length ? (
-                <ScrollView
-                  horizontal
-                  style={styles.pendingFilesScroller}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.pendingFiles}
-                >
-                  {pendingFiles.map((file) => {
-                    const isAudio = file.type.startsWith('audio/');
-
-                    return (
-                      <View
-                        key={file.id}
-                        style={[
-                          styles.pendingFileChip,
-                          isAudio ? styles.pendingAudioFileChip : null,
-                        ]}
-                      >
-                        <View style={styles.pendingFileIcon}>
-                          <Ionicons
-                            name={
-                              file.type.startsWith('image/')
-                                ? 'image'
-                                : isAudio
-                                  ? 'mic-outline'
-                                  : 'document-text'
-                            }
-                            size={isAudio ? 13 : 14}
-                            color={theme.colors.primary}
-                          />
-                        </View>
-                        <Text style={styles.pendingFileText} numberOfLines={1}>
-                          {getPendingFileDisplayName(file)}
-                        </Text>
-                        {file.durationMillis ? (
-                          <Text style={styles.pendingFileMeta}>
-                            {formatDuration(file.durationMillis)}
-                          </Text>
-                        ) : null}
-                        <TouchableOpacity
-                          hitSlop={8}
-                          style={styles.pendingFileRemoveButton}
-                          onPress={() =>
-                            setPendingFiles((currentFiles) =>
-                              currentFiles.filter((item) => item.id !== file.id),
-                            )
-                          }
-                        >
-                          <Ionicons name="close" size={13} color="#94a3b8" />
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
               ) : null}
 
               {canConfirmScheduleProposal && pendingProposalLabel ? (
@@ -1758,109 +1873,41 @@ export default function ChatScreen() {
                 </View>
               ) : null}
 
-              {recorderState.isRecording ? (
-                <View style={styles.recordingWaveCard}>
-                  <View style={styles.recordingDot} />
-                  <View style={styles.recordingWaveBars}>
-                    {RECORDING_WAVE_BARS.map((bar, index) => {
-                      const pulse = 0.62 + Math.sin(index + recordingDuration / 220) * 0.28;
-                      const height = 8 + recordingLevel * 34 * Math.max(0.25, bar + pulse);
-                      return (
-                        <View
-                          key={index}
-                          style={[
-                            styles.recordingWaveBar,
-                            { height: Math.min(38, height) },
-                          ]}
-                        />
-                      );
-                    })}
-                  </View>
-                  <Text style={styles.recordingWaveTime}>
-                    {formatDuration(recordingDuration)}
-                  </Text>
-                </View>
-              ) : null}
-
-              <View style={[styles.composer, { paddingBottom: composerBottomPadding }]}>
-                <TouchableOpacity
-                  style={styles.iconButton}
-                  activeOpacity={0.75}
-                  disabled={isInputDisabled}
-                  onPress={handlePickImage}
-                  accessibilityRole="button"
-                  accessibilityLabel="Adjuntar imagen"
-                >
-                  <Ionicons
-                    name="image-outline"
-                    size={21}
-                    color={isInputDisabled ? '#64748b' : '#f8fafc'}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.iconButton}
-                  activeOpacity={0.75}
-                  disabled={isInputDisabled}
-                  onPress={handlePickDocument}
-                  accessibilityRole="button"
-                  accessibilityLabel="Adjuntar archivo"
-                >
-                  <Ionicons
-                    name="attach"
-                    size={21}
-                    color={isInputDisabled ? '#64748b' : '#f8fafc'}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.iconButton,
-                    recorderState.isRecording ? styles.recordingButton : null,
-                  ]}
-                  activeOpacity={0.75}
-                  disabled={isInputDisabled && !recorderState.isRecording}
-                  onPress={handleRecordPress}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    recorderState.isRecording ? 'Detener grabación' : 'Grabar nota de voz'
-                  }
-                >
-                  <Ionicons
-                    name={recorderState.isRecording ? 'stop' : 'mic-outline'}
-                    size={21}
-                    color={recorderState.isRecording ? '#08111f' : '#f8fafc'}
-                  />
-                </TouchableOpacity>
-                <View style={styles.inputShell}>
-                  <TextInput
-                    value={recorderState.isRecording ? formatDuration(recordingDuration) : draft}
-                    editable={!isInputDisabled && !recorderState.isRecording}
-                    onChangeText={setDraft}
-                    placeholder="Mensaje"
-                    placeholderTextColor="#94a3b8"
-                    style={styles.input}
-                    multiline
-                    maxLength={4000}
-                  />
-                </View>
-                <TouchableOpacity
-                  style={[styles.sendButton, canSend ? styles.sendButtonEnabled : null]}
-                  activeOpacity={0.75}
-                  disabled={!canSend}
-                  onPress={handleSend}
-                  accessibilityRole="button"
-                  accessibilityLabel="Enviar mensaje"
-                >
-                  {isSending ? (
-                    <ActivityIndicator size="small" color="#08111f" />
-                  ) : (
-                    <Ionicons
-                      name="send"
-                      size={18}
-                      color={canSend ? '#08111f' : '#64748b'}
-                    />
-                  )}
-                </TouchableOpacity>
-              </View>
+              <ChatComposer
+                draft={draft}
+                pendingFiles={pendingFiles}
+                disabled={isInputDisabled}
+                canSend={canSend}
+                isSending={isSending}
+                isRecording={recorderState.isRecording}
+                recordingDuration={recordingDuration}
+                recordingLevel={recordingLevel}
+                bottomPadding={composerBottomPadding}
+                onChangeDraft={setDraft}
+                onPickImage={() => {
+                  void handlePickImage();
+                }}
+                onPickDocument={() => {
+                  void handlePickDocument();
+                }}
+                onRemoveFile={(fileId) =>
+                  setPendingFiles((currentFiles) =>
+                    currentFiles.filter((item) => item.id !== fileId),
+                  )
+                }
+                onStartRecording={() => {
+                  void startRecording();
+                }}
+                onStopRecording={() => {
+                  void stopRecording();
+                }}
+                onCancelRecording={() => {
+                  void cancelRecording();
+                }}
+                onSend={() => {
+                  void handleSend();
+                }}
+              />
             </KeyboardAvoidingView>
           </SafeAreaView>
         </LinearGradient>
@@ -1871,8 +1918,8 @@ export default function ChatScreen() {
   return (
     <TabScreenWrapper>
       {previewModal}
-      <LinearGradient colors={CHAT_BACKGROUND_GRADIENT} style={styles.stage}>
-        <StatusBar style="light" />
+      <LinearGradient colors={chatBackgroundGradient} style={styles.stage}>
+        <StatusBar style={theme.statusBarStyle} />
         <SafeAreaView style={styles.safeAreaTransparent} edges={['top', 'left', 'right']}>
           <ScrollView
             contentContainerStyle={[
@@ -1958,7 +2005,7 @@ export default function ChatScreen() {
                       <Ionicons
                         name="chatbubble-ellipses-outline"
                         size={18}
-                        color="#94a3b8"
+                        color={theme.colors.iconMuted}
                       />
                     </TouchableOpacity>
                   ))
@@ -1970,7 +2017,11 @@ export default function ChatScreen() {
             !visibleConversations.length &&
             !startableProfessionalOptions.length ? (
               <View style={styles.emptyState}>
-                <Ionicons name="chatbubbles-outline" size={34} color="#94a3b8" />
+                <Ionicons
+                  name="chatbubbles-outline"
+                  size={34}
+                  color={theme.colors.iconMuted}
+                />
                 <Text style={styles.emptyTitle}>Sin conversaciones</Text>
                 <Text style={styles.emptyCopy}>
                   Abre un chat con tu profesional asignado.
@@ -2000,8 +2051,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: 'rgba(255,255,255,0.08)',
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.border,
       paddingHorizontal: 10,
       paddingVertical: 12,
     },
@@ -2017,13 +2068,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       minWidth: 0,
     },
     threadTitle: {
-      color: '#f8fafc',
+      color: theme.colors.textPrimary,
       fontSize: 17,
       fontWeight: '800',
     },
     threadSubtitle: {
       marginTop: 2,
-      color: '#94a3b8',
+      color: theme.colors.textMuted,
       fontSize: 13,
       fontWeight: '600',
     },
@@ -2047,7 +2098,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     title: {
       marginTop: 2,
-      color: '#f8fafc',
+      color: theme.colors.textPrimary,
       fontSize: 30,
       fontWeight: '900',
     },
@@ -2057,9 +2108,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1,
-      borderColor: 'rgba(96,165,250,0.26)',
+      borderColor: theme.colors.primaryBorder,
       borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(96,165,250,0.12)',
+      backgroundColor: theme.colors.primarySoft,
     },
     loadingState: {
       minHeight: 220,
@@ -2075,9 +2126,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       alignItems: 'center',
       gap: 12,
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.09)',
+      borderColor: theme.colors.border,
       borderRadius: borderRadius.lg,
-      backgroundColor: 'rgba(255,255,255,0.055)',
+      backgroundColor: theme.colors.surface,
       padding: 14,
     },
     avatar: {
@@ -2087,22 +2138,22 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       justifyContent: 'center',
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: 'rgba(96,165,250,0.32)',
+      borderColor: theme.colors.primaryBorder,
       borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(96,165,250,0.15)',
+      backgroundColor: theme.colors.primarySoft,
     },
     threadAvatar: {
       width: 48,
       height: 48,
-      borderColor: 'rgba(255,255,255,0.18)',
-      backgroundColor: 'rgba(96,165,250,0.18)',
+      borderColor: theme.colors.primaryBorder,
+      backgroundColor: theme.colors.primarySoft,
     },
     avatarImage: {
       width: '100%',
       height: '100%',
     },
     avatarText: {
-      color: '#f8fafc',
+      color: theme.colors.textPrimary,
       fontSize: fontSize.base,
       fontWeight: '900',
       textTransform: 'uppercase',
@@ -2121,13 +2172,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     conversationName: {
       flex: 1,
-      color: '#f8fafc',
+      color: theme.colors.textPrimary,
       fontSize: fontSize.base,
       fontWeight: '800',
     },
     conversationPreview: {
       marginTop: 4,
-      color: '#94a3b8',
+      color: theme.colors.textMuted,
       fontSize: fontSize.sm,
       lineHeight: 18,
     },
@@ -2154,6 +2205,23 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       padding: spacing.md,
       paddingBottom: spacing.lg,
     },
+    dateSeparator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginVertical: spacing.xs,
+    },
+    dateSeparatorLine: {
+      height: StyleSheet.hairlineWidth,
+      flex: 1,
+      backgroundColor: theme.colors.border,
+    },
+    dateSeparatorText: {
+      color: theme.colors.textMuted,
+      fontSize: 11,
+      fontWeight: '800',
+      textTransform: 'capitalize',
+    },
     messagesLoading: {
       flex: 1,
       alignItems: 'center',
@@ -2166,9 +2234,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       gap: spacing.sm,
       marginTop: spacing.xl,
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.09)',
+      borderColor: theme.colors.border,
       borderRadius: borderRadius.lg,
-      backgroundColor: 'rgba(255,255,255,0.045)',
+      backgroundColor: theme.colors.surface,
       padding: spacing.xl,
     },
     emptyThread: {
@@ -2179,13 +2247,13 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       paddingVertical: spacing.xl,
     },
     emptyTitle: {
-      color: '#f8fafc',
+      color: theme.colors.textPrimary,
       fontSize: fontSize.lg,
       fontWeight: '900',
       textAlign: 'center',
     },
     emptyCopy: {
-      color: '#94a3b8',
+      color: theme.colors.textMuted,
       fontSize: fontSize.sm,
       lineHeight: 20,
       textAlign: 'center',
@@ -2201,10 +2269,10 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       maxWidth: '84%',
       gap: spacing.xs,
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.1)',
+      borderColor: theme.colors.border,
       borderRadius: 20,
       borderBottomLeftRadius: borderRadius.sm,
-      backgroundColor: 'rgba(248,250,252,0.08)',
+      backgroundColor: theme.colors.surface,
       padding: 12,
     },
     messageBubbleMine: {
@@ -2217,11 +2285,19 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       opacity: 0.72,
     },
     messageBubbleFailed: {
-      borderColor: 'rgba(248,113,113,0.55)',
-      backgroundColor: 'rgba(127,29,29,0.3)',
+      borderColor: `${theme.colors.error}88`,
+      backgroundColor: `${theme.colors.error}18`,
+    },
+    messageBubbleHighlighted: {
+      borderColor: theme.colors.primary,
+      shadowColor: theme.colors.primary,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.34,
+      shadowRadius: 8,
+      elevation: 3,
     },
     messageBody: {
-      color: '#f8fafc',
+      color: theme.colors.textPrimary,
       fontSize: 15,
       lineHeight: 21,
     },
@@ -2229,10 +2305,10 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       color: '#08111f',
     },
     messageBodyFailed: {
-      color: '#fecaca',
+      color: theme.colors.error,
     },
     messageDeleted: {
-      color: '#94a3b8',
+      color: theme.colors.textMuted,
       fontSize: 15,
       fontStyle: 'italic',
       lineHeight: 21,
@@ -2241,7 +2317,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       borderLeftWidth: 3,
       borderLeftColor: theme.colors.primary,
       borderRadius: borderRadius.md,
-      backgroundColor: 'rgba(255,255,255,0.055)',
+      backgroundColor: theme.colors.surfaceAlt,
       paddingHorizontal: 10,
       paddingVertical: 8,
     },
@@ -2261,7 +2337,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     replyText: {
       marginTop: 2,
-      color: '#e2e8f0',
+      color: theme.colors.textSecondary,
       fontSize: fontSize.xs,
       fontWeight: '700',
     },
@@ -2279,7 +2355,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       alignSelf: 'flex-end',
     },
     messageTime: {
-      color: '#94a3b8',
+      color: theme.colors.textMuted,
       fontSize: 11,
       fontWeight: '800',
     },
@@ -2287,7 +2363,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       color: 'rgba(8,17,31,0.6)',
     },
     messageTimeFailed: {
-      color: 'rgba(254,202,202,0.78)',
+      color: theme.colors.error,
     },
     messageReceipt: {
       width: 17,
@@ -2303,7 +2379,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginTop: 2,
     },
     messageRetryText: {
-      color: '#fca5a5',
+      color: theme.colors.error,
       fontSize: 11,
       fontWeight: '800',
     },
@@ -2314,75 +2390,24 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       width: 220,
       height: 160,
       borderRadius: borderRadius.lg,
-      backgroundColor: 'rgba(255,255,255,0.08)',
+      backgroundColor: theme.colors.surfaceAlt,
     },
     fileAttachment: {
       maxWidth: 240,
-      minHeight: 38,
+      minHeight: 44,
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.xs,
       borderRadius: borderRadius.md,
-      backgroundColor: 'rgba(255,255,255,0.08)',
+      backgroundColor: theme.colors.surfaceAlt,
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.xs,
     },
     fileAttachmentText: {
       flex: 1,
-      color: '#f8fafc',
+      color: theme.colors.textPrimary,
       fontSize: fontSize.sm,
       fontWeight: '700',
-    },
-    audioAttachment: {
-      maxWidth: 210,
-      minHeight: 38,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      borderWidth: 1,
-      borderColor: 'rgba(96,165,250,0.2)',
-      borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(15,23,42,0.28)',
-      paddingHorizontal: 6,
-      paddingVertical: 5,
-    },
-    audioPlayback: {
-      minWidth: 0,
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 7,
-    },
-    audioPlaybackIcon: {
-      width: 24,
-      height: 24,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(96,165,250,0.16)',
-    },
-    audioAttachmentCopy: {
-      flex: 1,
-      minWidth: 0,
-    },
-    audioAttachmentText: {
-      color: '#f8fafc',
-      fontSize: 12,
-      fontWeight: '800',
-    },
-    audioAttachmentMeta: {
-      marginTop: 1,
-      color: '#94a3b8',
-      fontSize: 10,
-      fontWeight: '800',
-    },
-    attachmentDownloadButton: {
-      width: 26,
-      height: 26,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(96,165,250,0.14)',
     },
     previewModal: {
       flex: 1,
@@ -2424,60 +2449,25 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       flex: 1,
       backgroundColor: theme.colors.surface,
     },
-    pendingFilesScroller: {
-      height: 46,
-      flexGrow: 0,
-    },
-    pendingFiles: {
-      minHeight: 46,
+    newMessagesBar: {
       alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 12,
+      backgroundColor: 'transparent',
+      paddingVertical: spacing.xs,
     },
-    pendingFileChip: {
-      maxWidth: 190,
-      height: 30,
+    newMessagesButton: {
+      minHeight: 44,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      borderWidth: 1,
-      borderColor: 'rgba(148,163,184,0.2)',
-      borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(15,23,42,0.58)',
-      paddingLeft: 5,
-      paddingRight: 7,
-    },
-    pendingAudioFileChip: {
-      maxWidth: 160,
-      borderColor: 'rgba(96,165,250,0.24)',
-      backgroundColor: 'rgba(96,165,250,0.12)',
-    },
-    pendingFileIcon: {
-      width: 20,
-      height: 20,
-      alignItems: 'center',
       justifyContent: 'center',
+      gap: spacing.xs,
       borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(96,165,250,0.12)',
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: spacing.md,
     },
-    pendingFileText: {
-      minWidth: 0,
-      flexShrink: 1,
-      color: '#f8fafc',
-      fontSize: 11,
-      fontWeight: '800',
-    },
-    pendingFileMeta: {
-      color: '#93c5fd',
-      fontSize: 10,
+    newMessagesButtonText: {
+      color: '#08111f',
+      fontSize: fontSize.xs,
       fontWeight: '900',
-    },
-    pendingFileRemoveButton: {
-      width: 18,
-      height: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: borderRadius.full,
     },
     scheduleProposalCard: {
       minHeight: 76,
@@ -2505,14 +2495,14 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       minWidth: 0,
     },
     scheduleProposalTitle: {
-      color: '#ccfbf1',
+      color: theme.colors.success,
       fontSize: fontSize.xs,
       fontWeight: '900',
       textTransform: 'uppercase',
     },
     scheduleProposalText: {
       marginTop: 3,
-      color: '#f8fafc',
+      color: theme.colors.textPrimary,
       fontSize: fontSize.sm,
       fontWeight: '800',
     },
@@ -2537,8 +2527,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      borderTopWidth: 1,
-      borderTopColor: 'rgba(255,255,255,0.08)',
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.colors.border,
+      backgroundColor: theme.colors.background,
       paddingHorizontal: 12,
       paddingVertical: 10,
     },
@@ -2555,7 +2546,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     replyComposerText: {
       marginTop: 2,
-      color: '#f8fafc',
+      color: theme.colors.textPrimary,
       fontSize: fontSize.xs,
       fontWeight: '700',
     },
@@ -2568,103 +2559,8 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     },
     lockedNoticeText: {
       flex: 1,
-      color: '#94a3b8',
+      color: theme.colors.textMuted,
       fontSize: fontSize.xs,
       fontWeight: '700',
-    },
-    recordingWaveCard: {
-      minHeight: 54,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      marginHorizontal: 12,
-      marginBottom: spacing.sm,
-      borderWidth: 1,
-      borderColor: 'rgba(96,165,250,0.24)',
-      borderRadius: borderRadius.xl,
-      backgroundColor: 'rgba(96,165,250,0.13)',
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
-    },
-    recordingDot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      backgroundColor: theme.colors.error,
-    },
-    recordingWaveBars: {
-      minHeight: 40,
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 4,
-    },
-    recordingWaveBar: {
-      width: 5,
-      borderRadius: 99,
-      backgroundColor: theme.colors.primary,
-    },
-    recordingWaveTime: {
-      minWidth: 44,
-      color: theme.colors.primary,
-      fontSize: fontSize.sm,
-      fontWeight: '900',
-      textAlign: 'right',
-    },
-    composer: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      gap: 10,
-      borderTopWidth: 1,
-      borderTopColor: 'rgba(255,255,255,0.08)',
-      padding: 12,
-    },
-    iconButton: {
-      width: 42,
-      height: 42,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.12)',
-      borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(255,255,255,0.055)',
-    },
-    recordingButton: {
-      borderColor: 'rgba(248,113,113,0.48)',
-      backgroundColor: theme.colors.error,
-    },
-    inputShell: {
-      flex: 1,
-      minHeight: 42,
-      maxHeight: 112,
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.1)',
-      borderRadius: 21,
-      backgroundColor: 'rgba(255,255,255,0.055)',
-      paddingHorizontal: spacing.md,
-      paddingVertical: Platform.OS === 'ios' ? 10 : 0,
-    },
-    input: {
-      minHeight: 38,
-      maxHeight: 96,
-      color: '#f8fafc',
-      fontSize: fontSize.base,
-      padding: 0,
-      textAlignVertical: 'center',
-    },
-    sendButton: {
-      width: 42,
-      height: 42,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.1)',
-      borderRadius: borderRadius.full,
-      backgroundColor: 'rgba(255,255,255,0.055)',
-    },
-    sendButtonEnabled: {
-      borderColor: theme.colors.primary,
-      backgroundColor: theme.colors.primary,
     },
   });
