@@ -1,40 +1,31 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { borderRadius, nutritionTheme, colors, fontSize, spacing, shadows } from '../../constants/colors';
+import {
+  borderRadius,
+  colors,
+  fontSize,
+  nutritionTheme,
+  shadows,
+  spacing,
+} from '../../constants/colors';
 import type { ClientDietMenu } from '../../types';
 import { formatLocalDate } from '../../utils/date';
 import { useAppTheme } from '../../theme';
 
 interface DietHeroProps {
-  menu: ClientDietMenu;
+  menu: ClientDietMenu | null;
   menuLabel: string;
   assignedDate: string;
   isToday: boolean;
   isPreview?: boolean;
-  sourceSystemName?: string | null;
-  sourceCount?: number;
+  supportingText?: string | null;
+  canChangeMenu: boolean;
+  isLoadingMenuOptions?: boolean;
+  onChangeMenu: () => void;
+  onOpenWeeklyPlan: () => void;
 }
-
-const resolveSourceSystemShortLabel = (value: string | null | undefined) => {
-  const normalizedName = value?.trim().replace(/\s+/g, ' ') ?? '';
-
-  if (!normalizedName) {
-    return 'Sistema del plan';
-  }
-
-  if (
-    normalizedName.toUpperCase().includes('SMAE') ||
-    normalizedName.toLowerCase() === 'sistema mexicano de alimentos equivalentes'
-  ) {
-    return 'SMAE';
-  }
-
-  const acronymMatch = normalizedName.match(/\(([^()]{2,12})\)\s*$/);
-
-  return acronymMatch?.[1]?.trim() || normalizedName;
-};
 
 export const DietHero: React.FC<DietHeroProps> = ({
   menu,
@@ -42,49 +33,46 @@ export const DietHero: React.FC<DietHeroProps> = ({
   assignedDate,
   isToday,
   isPreview = false,
-  sourceSystemName,
-  sourceCount,
+  supportingText,
+  canChangeMenu,
+  isLoadingMenuOptions = false,
+  onChangeMenu,
+  onOpenWeeklyPlan,
 }) => {
   const { theme } = useAppTheme();
-  const dateLabel = formatLocalDate(assignedDate, {
+  const fallbackDateLabel = formatLocalDate(assignedDate, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
   });
-  const subtitle = menu.description || `Plan activo - ${dateLabel}`;
-  const badgeLabel = isPreview ? 'Previsualizando' : isToday ? 'Hoy' : 'Plan del día';
+  const subtitle = supportingText || menu?.description || fallbackDateLabel;
+  const badgeLabel = isPreview ? 'Vista previa' : isToday ? 'Hoy' : 'Plan del día';
   const badgeIcon = isPreview ? 'eye-outline' : isToday ? 'sparkles' : 'calendar-outline';
+  const totalCalories = menu?.totalCalories;
   const stats: {
     label: string;
     value: string | number;
     icon: React.ComponentProps<typeof Ionicons>['name'];
   }[] = [
-    { label: 'Comidas', value: menu.totalMeals, icon: 'restaurant-outline' },
+    { label: 'Comidas', value: menu?.totalMeals ?? 0, icon: 'restaurant-outline' },
     {
       label: 'Kcal',
-      value: menu.totalCalories !== null ? Math.round(menu.totalCalories) : 'ND',
+      value: typeof totalCalories === 'number' ? Math.round(totalCalories) : 'ND',
       icon: 'flame-outline',
     },
-    { label: 'Recetas', value: menu.totalRecipes, icon: 'book-outline' },
+    { label: 'Recetas', value: menu?.totalRecipes ?? 0, icon: 'book-outline' },
   ];
 
   const gradientColors = theme.isDark
-    ? (['rgba(20, 83, 45, 0.34)', 'rgba(21, 128, 61, 0.18)'] as const)
+    ? (['rgba(20, 83, 45, 0.32)', 'rgba(21, 128, 61, 0.15)'] as const)
     : (['#F7FEFB', '#ECFDF5'] as const);
   const accentColor = theme.isDark ? nutritionTheme.accentLight : nutritionTheme.accentStrong;
   const textPrimary = theme.isDark ? colors.white : theme.colors.textPrimary;
   const textSecondary = theme.isDark ? 'rgba(255,255,255,0.72)' : theme.colors.textMuted;
   const borderColor = theme.isDark ? 'rgba(110, 231, 183, 0.18)' : '#BBF7D0';
-  const chipBackground = theme.isDark ? 'rgba(255,255,255,0.08)' : colors.white;
+  const chipBackground = theme.isDark ? 'rgba(255,255,255,0.07)' : colors.white;
   const chipBorder = theme.isDark ? 'rgba(110, 231, 183, 0.14)' : '#D1FAE5';
-  const badgeBg = theme.isDark ? 'rgba(110, 231, 183, 0.12)' : '#D1FAE5';
-  const hasSourceSummary = sourceSystemName !== undefined || sourceCount !== undefined;
-  const sourceSystemLabel = resolveSourceSystemShortLabel(sourceSystemName);
-  const sourceCountLabel = sourceCount === undefined
-    ? null
-    : sourceCount > 0
-      ? `${sourceCount} fuente${sourceCount === 1 ? '' : 's'}`
-      : 'sin fuentes';
+  const badgeBackground = theme.isDark ? 'rgba(110, 231, 183, 0.12)' : '#D1FAE5';
 
   return (
     <LinearGradient
@@ -94,41 +82,23 @@ export const DietHero: React.FC<DietHeroProps> = ({
       style={[styles.container, { borderColor }]}
     >
       <View style={styles.headerRow}>
-        <View style={[styles.iconBubble, { borderColor: chipBorder, backgroundColor: badgeBg }]}>
+        <View style={[styles.iconBubble, { borderColor: chipBorder, backgroundColor: badgeBackground }]}>
           <Ionicons name="nutrition-outline" size={18} color={accentColor} />
         </View>
 
         <View style={styles.copy}>
           <View style={styles.titleRow}>
-            <View style={styles.titleCopy}>
-              <Text style={[styles.eyebrow, { color: accentColor }]}>Resumen del menú</Text>
-              <Text numberOfLines={1} style={[styles.title, { color: textPrimary }]}>{menuLabel}</Text>
-            </View>
-
-            <View style={[styles.badge, { backgroundColor: badgeBg, borderColor: chipBorder }]}>
+            <Text numberOfLines={1} style={[styles.title, { color: textPrimary }]}>
+              {menuLabel}
+            </Text>
+            <View style={[styles.badge, { backgroundColor: badgeBackground, borderColor: chipBorder }]}>
               <Ionicons name={badgeIcon} size={11} color={accentColor} />
               <Text style={[styles.badgeText, { color: accentColor }]}>{badgeLabel}</Text>
             </View>
           </View>
-
           <Text numberOfLines={1} style={[styles.subtitle, { color: textSecondary }]}>
             {subtitle}
           </Text>
-
-          {hasSourceSummary ? (
-            <View
-              style={[
-                styles.sourceSummaryRow,
-                { backgroundColor: chipBackground, borderColor: chipBorder },
-              ]}
-            >
-              <Ionicons name="library-outline" size={12} color={accentColor} />
-              <Text numberOfLines={1} style={[styles.sourceSummaryText, { color: textSecondary }]}>
-                Sistema: <Text style={[styles.sourceSummaryStrong, { color: textPrimary }]}>{sourceSystemLabel}</Text>
-                {sourceCountLabel ? ` - ${sourceCountLabel}` : ''}
-              </Text>
-            </View>
-          ) : null}
         </View>
       </View>
 
@@ -138,13 +108,66 @@ export const DietHero: React.FC<DietHeroProps> = ({
             key={stat.label}
             style={[styles.statChip, { backgroundColor: chipBackground, borderColor: chipBorder }]}
           >
-            <Ionicons name={stat.icon} size={13} color={accentColor} />
+            <Ionicons name={stat.icon} size={14} color={accentColor} />
             <View style={styles.statCopy}>
               <Text style={[styles.statValue, { color: textPrimary }]}>{stat.value}</Text>
-              <Text style={[styles.statLabel, { color: textSecondary }]}>{stat.label}</Text>
+              <Text numberOfLines={1} style={[styles.statLabel, { color: textSecondary }]}>
+                {stat.label}
+              </Text>
             </View>
           </View>
         ))}
+      </View>
+
+      <View style={styles.actionRow}>
+        <Pressable
+          onPress={onChangeMenu}
+          disabled={!canChangeMenu}
+          accessibilityRole="button"
+          accessibilityLabel="Cambiar menú visible"
+          accessibilityState={{ disabled: !canChangeMenu, busy: isLoadingMenuOptions }}
+          style={({ pressed }) => [
+            styles.actionButton,
+            { backgroundColor: chipBackground, borderColor: chipBorder },
+            !canChangeMenu ? styles.actionButtonDisabled : null,
+            pressed && canChangeMenu ? styles.actionButtonPressed : null,
+          ]}
+        >
+          {isLoadingMenuOptions ? (
+            <ActivityIndicator size="small" color={accentColor} />
+          ) : (
+            <Ionicons
+              name={canChangeMenu ? 'swap-horizontal-outline' : 'remove-outline'}
+              size={18}
+              color={canChangeMenu ? accentColor : theme.colors.iconMuted}
+            />
+          )}
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.actionText,
+              { color: canChangeMenu ? textPrimary : theme.colors.textMuted },
+            ]}
+          >
+            Cambiar menú
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={onOpenWeeklyPlan}
+          accessibilityRole="button"
+          accessibilityLabel="Abrir plan semanal y lista del súper"
+          style={({ pressed }) => [
+            styles.actionButton,
+            { backgroundColor: chipBackground, borderColor: chipBorder },
+            pressed ? styles.actionButtonPressed : null,
+          ]}
+        >
+          <Ionicons name="list-outline" size={18} color={accentColor} />
+          <Text numberOfLines={1} style={[styles.actionText, { color: textPrimary }]}>
+            Plan y súper
+          </Text>
+        </Pressable>
       </View>
     </LinearGradient>
   );
@@ -164,8 +187,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   iconBubble: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -174,22 +197,22 @@ const styles = StyleSheet.create({
   copy: {
     flex: 1,
     minWidth: 0,
-    gap: 3,
+    gap: 2,
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing.sm,
   },
-  titleCopy: {
+  title: {
     flex: 1,
     minWidth: 0,
+    fontSize: fontSize.base,
+    fontWeight: '900',
   },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+  subtitle: {
+    fontSize: fontSize.xs,
+    lineHeight: 16,
   },
   badge: {
     flexDirection: 'row',
@@ -203,37 +226,8 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  title: {
-    marginTop: 2,
-    fontSize: fontSize.base,
-    fontWeight: '900',
-  },
-  subtitle: {
-    fontSize: fontSize.sm,
-    lineHeight: 18,
-  },
-  sourceSummaryRow: {
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-    minHeight: 26,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: borderRadius.full,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  sourceSummaryText: {
-    flexShrink: 1,
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-  },
-  sourceSummaryStrong: {
     fontWeight: '800',
+    textTransform: 'uppercase',
   },
   statsRow: {
     flexDirection: 'row',
@@ -241,15 +235,15 @@ const styles = StyleSheet.create({
   },
   statChip: {
     flex: 1,
-    minHeight: 42,
     minWidth: 0,
+    minHeight: 38,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     borderRadius: borderRadius.md,
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 6,
   },
   statCopy: {
     flex: 1,
@@ -258,12 +252,41 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: fontSize.sm,
     fontWeight: '900',
-    lineHeight: 17,
+    lineHeight: 16,
   },
   statLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
     textTransform: 'uppercase',
+    lineHeight: 11,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  actionButton: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+  },
+  actionButtonDisabled: {
+    opacity: 0.58,
+  },
+  actionButtonPressed: {
+    opacity: 0.76,
+    transform: [{ scale: 0.99 }],
+  },
+  actionText: {
+    flexShrink: 1,
+    fontSize: fontSize.xs,
+    fontWeight: '800',
   },
 });
 

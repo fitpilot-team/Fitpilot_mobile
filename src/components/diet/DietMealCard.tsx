@@ -1,5 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, TouchableWithoutFeedback, View } from 'react-native';
+import {
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableWithoutFeedback,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -24,7 +32,12 @@ import { useAppTheme, useThemedStyles, type AppTheme } from '../../theme';
 
 interface DietMealCardProps {
   meal: ClientDietMeal;
-  onRecipeIngredientPress?: (recipe: ClientDietRecipeCard, ingredient: ClientDietIngredientRow) => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onRecipeIngredientPress?: (
+    recipe: ClientDietRecipeCard,
+    ingredient: ClientDietIngredientRow,
+  ) => void;
   onStandaloneFoodPress?: (food: ClientDietFoodRow) => void;
   onRecipePress?: (recipe: ClientDietRecipeCard) => void;
 }
@@ -35,19 +48,14 @@ type IngredientAccent = 'recipe' | 'food';
 const LIGHT_RECIPE_PLACEHOLDER_COLORS = ['#E8EFF7', '#D8E7F4', '#C5DCF0'] as const;
 const DARK_RECIPE_PLACEHOLDER_COLORS = ['#23344C', '#1B2A42', '#152338'] as const;
 const DARK_RECIPE_CARD_BACKGROUND = '#192841';
-const DARK_RECIPE_CARD_BORDER = 'rgba(103, 182, 223, 0.30)';
-const DARK_RECIPE_BADGE_BACKGROUND = '#58D6CF';
-const DARK_RECIPE_BADGE_TEXT = '#0F4F58';
+const DARK_RECIPE_CARD_BORDER = 'rgba(103, 182, 223, 0.26)';
 const DARK_RECIPE_TITLE = '#F8FAFC';
-const DARK_RECIPE_META = '#8FA2BC';
-const DARK_RECIPE_SUBTITLE = '#B8C7D9';
-const DARK_RECIPE_TOGGLE_BACKGROUND = 'rgba(12, 22, 38, 0.28)';
-const DARK_RECIPE_TOGGLE_ACCENT = '#4FD1C5';
+const DARK_RECIPE_META = '#9CAEC4';
+const DARK_RECIPE_ACCENT = '#4FD1C5';
 const DARK_RECIPE_INGREDIENT_ROW_BACKGROUND = 'rgba(255,255,255,0.04)';
-const DARK_RECIPE_INGREDIENT_ROW_BORDER = 'rgba(103, 182, 223, 0.18)';
+const DARK_RECIPE_INGREDIENT_ROW_BORDER = 'rgba(103, 182, 223, 0.16)';
 const DARK_RECIPE_INGREDIENT_CHIP_BACKGROUND = 'rgba(255,255,255,0.06)';
 const DARK_RECIPE_INGREDIENT_CHIP_BORDER = 'rgba(103, 182, 223, 0.14)';
-const DARK_RECIPE_INGREDIENT_CHIP_LABEL = '#8FA2BC';
 const DARK_RECIPE_INGREDIENT_CHIP_VALUE = '#F3F4F6';
 
 const formatCalories = (value: number | null) => {
@@ -58,30 +66,28 @@ const formatCalories = (value: number | null) => {
   return `${Math.round(value)} kcal`;
 };
 
-
-
 const PortionChip: React.FC<{
   label: string;
   value: string;
   isDarkRecipe: boolean;
   styles: DietMealCardStyles;
-  theme: AppTheme;
 }> = ({
   label,
   value,
   isDarkRecipe,
   styles,
-  theme,
 }) => {
   const chipRef = useRef<View>(null);
   const [tooltipVisible, setTooltipVisible] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [position, setPosition] = useState({ x: 0, y: 0, width: 0 });
 
-  if (!value || value === '--') return null;
+  if (!value || value === '--') {
+    return null;
+  }
 
   const handlePress = () => {
-    chipRef.current?.measureInWindow((x, y, width, height) => {
-      setPosition({ x, y, width, height });
+    chipRef.current?.measureInWindow((x, y, width) => {
+      setPosition({ x, y, width });
       setTooltipVisible(true);
     });
   };
@@ -91,10 +97,13 @@ const PortionChip: React.FC<{
       <View ref={chipRef} collapsable={false}>
         <Pressable
           onPress={handlePress}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`${label}: ${value}`}
           style={({ pressed }) => [
             styles.portionChip,
             isDarkRecipe ? styles.recipePortionChip : null,
-            pressed && styles.portionChipPressed,
+            pressed ? styles.portionChipPressed : null,
           ]}
         >
           <Text style={[styles.portionChipText, isDarkRecipe ? styles.recipePortionChipText : null]}>
@@ -116,7 +125,7 @@ const PortionChip: React.FC<{
                 styles.tooltipContent,
                 {
                   position: 'absolute',
-                  top: position.y - 72,
+                  top: Math.max(16, position.y - 72),
                   left: Math.max(16, position.x + position.width / 2 - 80),
                 },
               ]}
@@ -155,7 +164,6 @@ const PortionChips: React.FC<{
           value={item.value}
           isDarkRecipe={isDarkRecipe}
           styles={styles}
-          theme={theme}
         />
       ))}
     </View>
@@ -182,9 +190,10 @@ const IngredientRow: React.FC<{
     : theme.isDark
       ? theme.colors.border
       : foodGroupVisual.borderColor;
-  const isSwappableIngredient = (
-    Boolean(onPress) &&
-    Boolean(ingredient.exchangeGroupId && (ingredient.recipeIngredientId || ingredient.menuItemId))
+  const isSwappableIngredient = Boolean(
+    onPress &&
+    ingredient.exchangeGroupId &&
+    (ingredient.recipeIngredientId || ingredient.menuItemId),
   );
 
   const content = (
@@ -192,7 +201,7 @@ const IngredientRow: React.FC<{
       <View style={[styles.foodIcon, { backgroundColor: foodGroupVisual.backgroundColor }]}>
         <ExchangeGroupIcon
           groupName={ingredient.exchangeGroupName}
-          size={18}
+          size={17}
           strokeWidth={2}
           withContainer={false}
         />
@@ -201,16 +210,28 @@ const IngredientRow: React.FC<{
       <View style={styles.foodBody}>
         <View style={styles.foodHeader}>
           <View style={styles.foodText}>
-            <Text style={[styles.foodLabel, isDarkRecipe ? styles.recipeFoodLabel : null]}>
+            <Text
+              numberOfLines={2}
+              style={[styles.foodLabel, isDarkRecipe ? styles.recipeFoodLabel : null]}
+            >
               {ingredient.label}
             </Text>
             {ingredient.exchangeGroupName ? (
-              <Text style={[styles.foodSubtitle, isDarkRecipe ? styles.recipeFoodSubtitle : null]}>
+              <Text
+                numberOfLines={1}
+                style={[styles.foodSubtitle, isDarkRecipe ? styles.recipeFoodSubtitle : null]}
+              >
                 {ingredient.exchangeGroupName}
               </Text>
             ) : null}
             {ingredient.isClientSwap && ingredient.originalLabel ? (
-              <Text style={[styles.foodOriginalLabel, isDarkRecipe ? styles.recipeFoodOriginalLabel : null]}>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.foodOriginalLabel,
+                  isDarkRecipe ? styles.recipeFoodOriginalLabel : null,
+                ]}
+              >
                 Original: {ingredient.originalLabel}
               </Text>
             ) : null}
@@ -219,35 +240,26 @@ const IngredientRow: React.FC<{
           {isSwappableIngredient ? (
             <View
               style={[
-                styles.recipeSwapBadge,
-                ingredient.isClientSwap ? styles.recipeSwapBadgeActive : null,
+                styles.swapBadge,
+                ingredient.isClientSwap ? styles.swapBadgeActive : null,
               ]}
             >
               <Ionicons
                 name="swap-horizontal-outline"
-                size={15}
-                color={ingredient.isClientSwap ? colors.white : (isDarkRecipe ? DARK_RECIPE_TOGGLE_ACCENT : theme.colors.primary)}
+                size={16}
+                color={
+                  ingredient.isClientSwap
+                    ? colors.white
+                    : isDarkRecipe
+                      ? DARK_RECIPE_ACCENT
+                      : theme.colors.primary
+                }
               />
             </View>
           ) : null}
         </View>
 
         <PortionChips ingredient={ingredient} accent={accent} styles={styles} theme={theme} />
-
-        {isSwappableIngredient ? (
-          <View style={styles.recipeSwapHintRow}>
-            <Ionicons
-              name="sparkles-outline"
-              size={14}
-              color={isDarkRecipe ? DARK_RECIPE_TOGGLE_ACCENT : theme.colors.primary}
-            />
-            <Text style={[styles.recipeSwapHintText, isDarkRecipe ? styles.recipeSwapHintTextDark : null]}>
-              {ingredient.isClientSwap
-                ? 'Personalizado. Toca para cambiarlo de nuevo.'
-                : 'Toca para cambiar por un equivalente.'}
-            </Text>
-          </View>
-        ) : null}
       </View>
     </>
   );
@@ -256,7 +268,6 @@ const IngredientRow: React.FC<{
     styles.foodRow,
     isDarkRecipe ? styles.recipeFoodRow : null,
     accent === 'food' ? { borderColor } : null,
-    isSwappableIngredient ? styles.recipeFoodRowInteractive : null,
   ];
 
   if (isSwappableIngredient && onPress) {
@@ -265,9 +276,10 @@ const IngredientRow: React.FC<{
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`Cambiar ${accent === 'recipe' ? 'ingrediente' : 'alimento'} ${ingredient.label}`}
+        accessibilityHint="Abre la lista de equivalentes disponibles"
         style={({ pressed }) => [
           ...containerStyle,
-          pressed ? styles.recipeFoodRowPressed : null,
+          pressed ? styles.foodRowPressed : null,
         ]}
       >
         {content}
@@ -281,27 +293,14 @@ const IngredientRow: React.FC<{
 const SectionHeader: React.FC<{
   title: string;
   count: number;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
   styles: DietMealCardStyles;
-  theme: AppTheme;
 }> = ({
   title,
   count,
-  icon,
   styles,
-  theme,
 }) => (
   <View style={styles.sectionHeader}>
-    <View style={styles.sectionTitleRow}>
-      <View style={styles.sectionIcon}>
-        <Ionicons
-          name={icon}
-          size={15}
-          color={theme.isDark ? theme.colors.primary : brandColors.navy}
-        />
-      </View>
-      <Text style={styles.sectionTitle}>{title}</Text>
-    </View>
+    <Text style={styles.sectionTitle}>{title}</Text>
     <Text style={styles.sectionCount}>{count}</Text>
   </View>
 );
@@ -323,8 +322,10 @@ const RecipeCard: React.FC<{
   styles,
   theme,
 }) => {
-  const placeholderColors = theme.isDark ? DARK_RECIPE_PLACEHOLDER_COLORS : LIGHT_RECIPE_PLACEHOLDER_COLORS;
-  const toggleIconColor = theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : brandColors.navy;
+  const placeholderColors = theme.isDark
+    ? DARK_RECIPE_PLACEHOLDER_COLORS
+    : LIGHT_RECIPE_PLACEHOLDER_COLORS;
+  const accentColor = theme.isDark ? DARK_RECIPE_ACCENT : brandColors.navy;
 
   return (
     <View style={styles.recipeCard}>
@@ -332,7 +333,10 @@ const RecipeCard: React.FC<{
         onPress={onPress}
         accessibilityRole="button"
         accessibilityLabel={`Abrir receta ${recipe.title}`}
-        style={({ pressed }) => [pressed ? styles.recipeCardPressed : null]}
+        style={({ pressed }) => [
+          styles.recipeMain,
+          pressed ? styles.recipeCardPressed : null,
+        ]}
       >
         {recipe.imageUrl ? (
           <Image source={{ uri: recipe.imageUrl }} style={styles.recipeImage} resizeMode="cover" />
@@ -343,72 +347,64 @@ const RecipeCard: React.FC<{
             end={{ x: 1, y: 1 }}
             style={styles.recipePlaceholder}
           >
-            <Ionicons name="restaurant-outline" size={28} color={toggleIconColor} />
+            <Ionicons name="restaurant-outline" size={24} color={accentColor} />
           </LinearGradient>
         )}
 
-        <View style={styles.recipeContent}>
-          <View style={styles.recipeTopRow}>
-            <View style={styles.recipeBadge}>
-              <Text style={styles.recipeBadgeText}>Receta</Text>
-            </View>
-            <Text style={styles.recipeCount}>
-              {recipe.ingredientCount} ingrediente{recipe.ingredientCount === 1 ? '' : 's'}
-            </Text>
-          </View>
-
-          <Text style={styles.recipeTitle}>{recipe.title}</Text>
-          <Text style={styles.recipeSubtitle}>
-            Ingredientes y porciones de esta preparacion dentro de tu plan.
+        <View style={styles.recipeCopy}>
+          <Text numberOfLines={2} style={styles.recipeTitle}>
+            {recipe.title}
           </Text>
-
-          <View style={styles.recipeOpenRow}>
-            <Text style={styles.recipeOpenText}>Abrir receta completa</Text>
-            <Ionicons
-              name="arrow-forward-outline"
-              size={18}
-              color={theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : brandColors.navy}
-            />
-          </View>
+          <Text numberOfLines={1} style={styles.recipeCount}>
+            {recipe.ingredientCount} ingrediente{recipe.ingredientCount === 1 ? '' : 's'}
+          </Text>
         </View>
+
+        <Ionicons name="chevron-forward-outline" size={19} color={accentColor} />
       </Pressable>
 
-      <View style={styles.recipeActions}>
-        <Pressable
-          style={styles.recipeToggle}
-          onPress={onToggle}
-        >
-          <Text style={styles.recipeToggleText}>
-            {expanded ? 'Ocultar ingredientes' : 'Ver ingredientes'}
-          </Text>
-          <Ionicons
-            name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
-            size={18}
-            color={toggleIconColor}
-          />
-        </Pressable>
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityLabel={expanded ? 'Ocultar ingredientes' : 'Ver ingredientes'}
+        accessibilityState={{ expanded }}
+        style={({ pressed }) => [
+          styles.recipeToggle,
+          pressed ? styles.recipeTogglePressed : null,
+        ]}
+      >
+        <Text style={styles.recipeToggleText}>
+          {expanded ? 'Ocultar ingredientes' : 'Ver ingredientes'}
+        </Text>
+        <Ionicons
+          name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+          size={18}
+          color={accentColor}
+        />
+      </Pressable>
 
-        {expanded ? (
-          <View style={styles.recipeIngredients}>
-            {recipe.ingredients.map((ingredient) => (
-              <IngredientRow
-                key={ingredient.id}
-                ingredient={ingredient}
-                accent="recipe"
-                styles={styles}
-                theme={theme}
-                onPress={onIngredientPress ? () => onIngredientPress(ingredient) : undefined}
-              />
-            ))}
-          </View>
-        ) : null}
-      </View>
+      {expanded ? (
+        <View style={styles.recipeIngredients}>
+          {recipe.ingredients.map((ingredient) => (
+            <IngredientRow
+              key={ingredient.id}
+              ingredient={ingredient}
+              accent="recipe"
+              styles={styles}
+              theme={theme}
+              onPress={onIngredientPress ? () => onIngredientPress(ingredient) : undefined}
+            />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 };
 
 const DietMealCardComponent: React.FC<DietMealCardProps> = ({
   meal,
+  expanded,
+  onToggleExpanded,
   onRecipeIngredientPress,
   onStandaloneFoodPress,
   onRecipePress,
@@ -416,7 +412,7 @@ const DietMealCardComponent: React.FC<DietMealCardProps> = ({
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const caloriesLabel = formatCalories(meal.totalCalories);
-  const [expandedRecipeIds, setExpandedRecipeIds] = useState<Record<string, boolean>>({});
+  const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
 
   const recipeKey = useMemo(
     () => meal.recipes.map((recipe) => recipe.id).join('|'),
@@ -424,15 +420,14 @@ const DietMealCardComponent: React.FC<DietMealCardProps> = ({
   );
 
   useEffect(() => {
-    setExpandedRecipeIds({});
-  }, [meal.id, meal.totalEntries, recipeKey]);
+    setExpandedRecipeId(null);
+  }, [meal.id, recipeKey]);
 
-  const toggleRecipe = (recipeId: string) => {
-    setExpandedRecipeIds((currentState) => ({
-      ...currentState,
-      [recipeId]: !currentState[recipeId],
-    }));
-  };
+  useEffect(() => {
+    if (!expanded) {
+      setExpandedRecipeId(null);
+    }
+  }, [expanded]);
 
   const handleRecipePress = (recipe: ClientDietRecipeCard) => {
     if (onRecipePress) {
@@ -448,76 +443,99 @@ const DietMealCardComponent: React.FC<DietMealCardProps> = ({
     });
   };
 
+  const itemLabel = `${meal.totalEntries} ${meal.totalEntries === 1 ? 'elemento' : 'elementos'}`;
+
   return (
     <Card style={styles.card} padding="none">
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.mealName}>{meal.name}</Text>
-          <Text style={styles.mealCount}>
-            {meal.totalEntries} {meal.totalEntries === 1 ? 'item' : 'items'}
+      <Pressable
+        onPress={onToggleExpanded}
+        accessibilityRole="button"
+        accessibilityLabel={`${meal.name}, ${itemLabel}${caloriesLabel ? `, ${caloriesLabel}` : ''}`}
+        accessibilityState={{ expanded }}
+        style={({ pressed }) => [
+          styles.mealHeader,
+          pressed ? styles.mealHeaderPressed : null,
+        ]}
+      >
+        <View style={styles.mealHeaderCopy}>
+          <Text numberOfLines={1} style={styles.mealName}>
+            {meal.name}
           </Text>
+          <Text style={styles.mealCount}>{itemLabel}</Text>
         </View>
-        {caloriesLabel ? (
-          <View style={styles.calorieBadge}>
-            <Text style={styles.calorieBadgeText}>{caloriesLabel}</Text>
-          </View>
-        ) : null}
-      </View>
 
-      <View style={styles.content}>
-        {meal.recipes.length > 0 ? (
-          <View style={styles.sectionBlock}>
-            <SectionHeader
-              title="Recetas"
-              count={meal.recipes.length}
-              icon="restaurant-outline"
-              styles={styles}
-              theme={theme}
-            />
-            <View style={styles.sectionStack}>
-              {meal.recipes.map((recipe) => (
-                <RecipeCard
-                  key={recipe.id}
-                  recipe={recipe}
-                  onPress={() => handleRecipePress(recipe)}
-                  expanded={Boolean(expandedRecipeIds[recipe.id])}
-                  onToggle={() => toggleRecipe(recipe.id)}
-                  onIngredientPress={
-                    onRecipeIngredientPress
-                      ? (ingredient) => onRecipeIngredientPress(recipe, ingredient)
-                      : undefined
-                  }
-                  styles={styles}
-                  theme={theme}
-                />
-              ))}
+        <View style={styles.mealHeaderActions}>
+          {caloriesLabel ? (
+            <View style={styles.calorieBadge}>
+              <Text style={styles.calorieBadgeText}>{caloriesLabel}</Text>
             </View>
+          ) : null}
+          <View style={styles.mealChevron}>
+            <Ionicons
+              name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+              size={19}
+              color={theme.colors.primary}
+            />
           </View>
-        ) : null}
+        </View>
+      </Pressable>
 
-        {meal.standaloneFoods.length > 0 ? (
-          <View style={styles.sectionBlock}>
-            <SectionHeader
-              title="Alimentos sueltos"
-              count={meal.standaloneFoods.length}
-              icon="nutrition-outline"
-              styles={styles}
-              theme={theme}
-            />
-            <View style={styles.sectionStack}>
-              {meal.standaloneFoods.map((food) => (
-                <IngredientRow
-                  key={food.id}
-                  ingredient={food}
-                  styles={styles}
-                  theme={theme}
-                  onPress={onStandaloneFoodPress ? () => onStandaloneFoodPress(food) : undefined}
-                />
-              ))}
+      {expanded ? (
+        <View style={styles.content}>
+          {meal.recipes.length > 0 ? (
+            <View style={styles.sectionBlock}>
+              {meal.recipes.length > 1 ? (
+                <SectionHeader title="Recetas" count={meal.recipes.length} styles={styles} />
+              ) : null}
+              <View style={styles.sectionStack}>
+                {meal.recipes.map((recipe) => (
+                  <RecipeCard
+                    key={recipe.id}
+                    recipe={recipe}
+                    onPress={() => handleRecipePress(recipe)}
+                    expanded={expandedRecipeId === recipe.id}
+                    onToggle={() => {
+                      setExpandedRecipeId((currentId) => (
+                        currentId === recipe.id ? null : recipe.id
+                      ));
+                    }}
+                    onIngredientPress={
+                      onRecipeIngredientPress
+                        ? (ingredient) => onRecipeIngredientPress(recipe, ingredient)
+                        : undefined
+                    }
+                    styles={styles}
+                    theme={theme}
+                  />
+                ))}
+              </View>
             </View>
-          </View>
-        ) : null}
-      </View>
+          ) : null}
+
+          {meal.standaloneFoods.length > 0 ? (
+            <View style={styles.sectionBlock}>
+              {meal.recipes.length > 0 || meal.standaloneFoods.length > 1 ? (
+                <SectionHeader
+                  title="Alimentos"
+                  count={meal.standaloneFoods.length}
+                  styles={styles}
+                />
+              ) : null}
+              <View style={styles.sectionStack}>
+                {meal.standaloneFoods.map((food) => (
+                  <IngredientRow
+                    key={food.id}
+                    ingredient={food}
+                    styles={styles}
+                    theme={theme}
+                    onPress={onStandaloneFoodPress ? () => onStandaloneFoodPress(food) : undefined}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
     </Card>
   );
 };
@@ -529,27 +547,44 @@ function createStyles(theme: AppTheme) {
     card: {
       overflow: 'hidden',
     },
-    header: {
+    mealHeader: {
+      minHeight: 72,
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      paddingHorizontal: spacing.lg,
-      paddingTop: spacing.lg,
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    mealHeaderPressed: {
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    mealHeaderCopy: {
+      flex: 1,
+      minWidth: 0,
     },
     mealName: {
       color: theme.colors.textPrimary,
-      fontSize: fontSize.xl,
+      fontSize: fontSize.base,
       fontWeight: '800',
+      lineHeight: 21,
     },
     mealCount: {
-      marginTop: spacing.xs,
+      marginTop: 2,
       color: theme.colors.textMuted,
-      fontSize: fontSize.sm,
+      fontSize: fontSize.xs,
+      lineHeight: 16,
+    },
+    mealHeaderActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      flexShrink: 0,
     },
     calorieBadge: {
+      minHeight: 30,
+      justifyContent: 'center',
       borderRadius: borderRadius.full,
       paddingHorizontal: spacing.sm,
-      paddingVertical: 6,
       backgroundColor: theme.isDark ? theme.colors.primarySoft : `${brandColors.sky}25`,
     },
     calorieBadgeText: {
@@ -557,361 +592,271 @@ function createStyles(theme: AppTheme) {
       fontSize: fontSize.xs,
       fontWeight: '700',
     },
+    mealChevron: {
+      width: 36,
+      height: 36,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: borderRadius.full,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
     content: {
-      padding: spacing.lg,
-      gap: spacing.lg,
+      gap: spacing.md,
+      padding: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
     },
     sectionBlock: {
-      gap: spacing.md,
+      gap: spacing.sm,
+    },
+    sectionStack: {
+      gap: spacing.sm,
     },
     sectionHeader: {
+      minHeight: 24,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-    },
-    sectionTitleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-    },
-    sectionIcon: {
-      width: 28,
-      height: 28,
-      borderRadius: borderRadius.full,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.isDark ? theme.colors.primarySoft : `${brandColors.sky}20`,
+      paddingHorizontal: 2,
     },
     sectionTitle: {
-      color: theme.colors.textPrimary,
-      fontSize: fontSize.base,
+      color: theme.colors.textSecondary,
+      fontSize: 11,
       fontWeight: '800',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
     },
     sectionCount: {
       color: theme.colors.textMuted,
-      fontSize: fontSize.sm,
+      fontSize: fontSize.xs,
       fontWeight: '700',
     },
-    sectionStack: {
-      gap: spacing.md,
-    },
     recipeCard: {
-      borderRadius: borderRadius.lg,
-      backgroundColor: theme.isDark ? DARK_RECIPE_CARD_BACKGROUND : '#F5F8FC',
       overflow: 'hidden',
+      borderRadius: borderRadius.md,
       borderWidth: 1,
-      borderColor: theme.isDark ? DARK_RECIPE_CARD_BORDER : '#DDE8F2',
+      borderColor: theme.isDark ? DARK_RECIPE_CARD_BORDER : theme.colors.border,
+      backgroundColor: theme.isDark ? DARK_RECIPE_CARD_BACKGROUND : theme.colors.surface,
+    },
+    recipeMain: {
+      minHeight: 84,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingRight: spacing.sm,
     },
     recipeCardPressed: {
-      opacity: 0.94,
+      opacity: 0.78,
     },
     recipeImage: {
-      width: '100%',
-      height: 152,
+      width: 84,
+      height: 84,
+      alignSelf: 'stretch',
+      backgroundColor: theme.colors.surfaceAlt,
     },
     recipePlaceholder: {
-      width: '100%',
-      height: 152,
+      width: 84,
+      height: 84,
+      alignSelf: 'stretch',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    recipeContent: {
-      padding: spacing.md,
+    recipeCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 4,
     },
-    recipeActions: {
-      paddingHorizontal: spacing.md,
-      paddingBottom: spacing.md,
-    },
-    recipeTopRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: spacing.sm,
-    },
-    recipeBadge: {
-      alignSelf: 'flex-start',
-      borderRadius: borderRadius.full,
-      backgroundColor: theme.isDark ? DARK_RECIPE_BADGE_BACKGROUND : brandColors.navy,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 5,
-    },
-    recipeBadgeText: {
-      color: theme.isDark ? DARK_RECIPE_BADGE_TEXT : colors.white,
-      fontSize: fontSize.xs,
-      fontWeight: '700',
-      textTransform: 'uppercase',
-      letterSpacing: 0.4,
+    recipeTitle: {
+      color: theme.isDark ? DARK_RECIPE_TITLE : theme.colors.textPrimary,
+      fontSize: fontSize.sm,
+      fontWeight: '800',
+      lineHeight: 19,
     },
     recipeCount: {
       color: theme.isDark ? DARK_RECIPE_META : theme.colors.textMuted,
-      fontSize: fontSize.sm,
-      fontWeight: '700',
-    },
-    recipeTitle: {
-      marginTop: spacing.md,
-      color: theme.isDark ? DARK_RECIPE_TITLE : colors.gray[900],
-      fontSize: fontSize.lg,
-      fontWeight: '800',
-    },
-    recipeSubtitle: {
-      marginTop: spacing.xs,
-      color: theme.isDark ? DARK_RECIPE_SUBTITLE : theme.colors.textMuted,
-      fontSize: fontSize.sm,
-      lineHeight: 20,
-    },
-    recipeOpenRow: {
-      marginTop: spacing.md,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: spacing.sm,
-      borderRadius: borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.isDark ? DARK_RECIPE_CARD_BORDER : '#D8E7F4',
-      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : colors.white,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
-    },
-    recipeOpenText: {
-      color: theme.isDark ? DARK_RECIPE_TITLE : brandColors.navy,
-      fontSize: fontSize.sm,
-      fontWeight: '700',
+      fontSize: fontSize.xs,
+      lineHeight: 16,
     },
     recipeToggle: {
+      minHeight: 44,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      borderRadius: borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : '#D8E7F4',
-      backgroundColor: theme.isDark ? DARK_RECIPE_TOGGLE_BACKGROUND : colors.white,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? DARK_RECIPE_CARD_BORDER : theme.colors.border,
+      backgroundColor: theme.isDark ? 'rgba(12, 22, 38, 0.24)' : theme.colors.surfaceAlt,
+    },
+    recipeTogglePressed: {
+      opacity: 0.72,
     },
     recipeToggleText: {
-      color: theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : brandColors.navy,
-      fontSize: fontSize.sm,
-      fontWeight: '700',
+      color: theme.isDark ? DARK_RECIPE_ACCENT : brandColors.navy,
+      fontSize: fontSize.xs,
+      fontWeight: '800',
     },
     recipeIngredients: {
-      marginTop: spacing.md,
-      gap: spacing.sm,
+      gap: spacing.xs,
+      padding: spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? DARK_RECIPE_CARD_BORDER : theme.colors.border,
     },
     foodRow: {
+      minHeight: 58,
       flexDirection: 'row',
-      gap: spacing.md,
-      padding: spacing.md,
-      borderRadius: borderRadius.lg,
-      backgroundColor: theme.isDark ? theme.colors.surfaceAlt : '#FAFBFD',
+      alignItems: 'center',
+      gap: spacing.sm,
+      borderRadius: borderRadius.md,
       borderWidth: 1,
+      padding: spacing.sm,
+      backgroundColor: theme.colors.surface,
+      borderColor: theme.colors.border,
     },
     recipeFoodRow: {
-      backgroundColor: theme.isDark ? DARK_RECIPE_INGREDIENT_ROW_BACKGROUND : '#FAFBFD',
-      borderColor: theme.isDark ? DARK_RECIPE_INGREDIENT_ROW_BORDER : '#D8E7F4',
+      backgroundColor: DARK_RECIPE_INGREDIENT_ROW_BACKGROUND,
+      borderColor: DARK_RECIPE_INGREDIENT_ROW_BORDER,
     },
-    recipeFoodRowInteractive: {
-      borderColor: theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : theme.colors.primaryBorder,
-    },
-    recipeFoodRowPressed: {
-      opacity: 0.92,
+    foodRowPressed: {
+      opacity: 0.76,
       transform: [{ scale: 0.995 }],
     },
     foodIcon: {
-      width: 42,
-      height: 42,
+      width: 32,
+      height: 32,
       borderRadius: borderRadius.full,
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: 2,
+      flexShrink: 0,
     },
     foodBody: {
       flex: 1,
+      minWidth: 0,
+      gap: 5,
     },
     foodHeader: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      justifyContent: 'space-between',
+      gap: spacing.xs,
     },
     foodText: {
       flex: 1,
+      minWidth: 0,
     },
     foodLabel: {
       color: theme.colors.textPrimary,
-      fontSize: fontSize.base,
+      fontSize: fontSize.sm,
       fontWeight: '700',
+      lineHeight: 18,
     },
     recipeFoodLabel: {
       color: DARK_RECIPE_TITLE,
     },
     foodSubtitle: {
-      marginTop: 2,
+      marginTop: 1,
       color: theme.colors.textMuted,
-      fontSize: fontSize.sm,
+      fontSize: 11,
+      lineHeight: 15,
     },
     recipeFoodSubtitle: {
-      color: DARK_RECIPE_SUBTITLE,
+      color: DARK_RECIPE_META,
     },
     foodOriginalLabel: {
-      marginTop: spacing.xs,
-      color: theme.colors.textSecondary,
-      fontSize: fontSize.sm,
-      fontWeight: '600',
+      marginTop: 1,
+      color: theme.colors.primary,
+      fontSize: 10,
+      fontWeight: '700',
+      lineHeight: 14,
     },
     recipeFoodOriginalLabel: {
-      color: DARK_RECIPE_INGREDIENT_CHIP_VALUE,
+      color: DARK_RECIPE_ACCENT,
     },
-    recipeSwapBadge: {
-      width: 28,
-      height: 28,
+    swapBadge: {
+      width: 30,
+      height: 30,
       borderRadius: borderRadius.full,
       alignItems: 'center',
       justifyContent: 'center',
+      backgroundColor: theme.colors.primarySoft,
       borderWidth: 1,
-      borderColor: isDarkRecipeColor(theme),
-      backgroundColor: theme.isDark ? 'rgba(79, 209, 197, 0.12)' : theme.colors.primarySoft,
-      marginLeft: spacing.sm,
+      borderColor: theme.colors.primaryBorder,
     },
-    recipeSwapBadgeActive: {
-      borderColor: 'transparent',
-      backgroundColor: theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : theme.colors.primary,
+    swapBadgeActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
     },
     portionRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: spacing.sm,
-      marginTop: spacing.sm,
-    },
-    portionInfoItem: {
-      flex: 1,
-      minWidth: 132,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      borderRadius: borderRadius.md,
-      backgroundColor: theme.isDark ? theme.colors.surface : colors.white,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.colors.border : '#E5EDF5',
-      paddingHorizontal: spacing.sm,
-      paddingVertical: spacing.sm,
-    },
-    recipePortionInfoItem: {
-      backgroundColor: DARK_RECIPE_INGREDIENT_CHIP_BACKGROUND,
-      borderColor: DARK_RECIPE_INGREDIENT_CHIP_BORDER,
-    },
-    portionInfoLabel: {
-      color: theme.colors.textMuted,
-      fontSize: fontSize.xs,
-      fontWeight: '700',
-      textTransform: 'uppercase',
-      letterSpacing: 0.4,
-    },
-    recipePortionInfoLabel: {
-      color: DARK_RECIPE_INGREDIENT_CHIP_LABEL,
-    },
-    portionInfoValue: {
-      color: theme.colors.textPrimary,
-      fontSize: fontSize.sm,
-      fontWeight: '700',
-      flexShrink: 1,
-      marginLeft: spacing.sm,
-    },
-    portionInfoValueRight: {
-      textAlign: 'right',
-    },
-    recipePortionInfoValue: {
-      color: DARK_RECIPE_INGREDIENT_CHIP_VALUE,
+      gap: 5,
     },
     portionChip: {
-      paddingHorizontal: spacing.md,
-      paddingVertical: 6,
+      minHeight: 24,
+      justifyContent: 'center',
       borderRadius: borderRadius.full,
-      backgroundColor: theme.isDark ? theme.colors.surfaceAlt : colors.white,
       borderWidth: 1,
-      borderColor: theme.isDark ? theme.colors.border : '#E2E8F0',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.05,
-      shadowRadius: 3,
-      elevation: 2,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+      paddingHorizontal: 8,
     },
     recipePortionChip: {
-      backgroundColor: 'rgba(255, 255, 255, 0.08)',
-      borderColor: 'rgba(103, 182, 223, 0.2)',
+      borderColor: DARK_RECIPE_INGREDIENT_CHIP_BORDER,
+      backgroundColor: DARK_RECIPE_INGREDIENT_CHIP_BACKGROUND,
     },
     portionChipPressed: {
-      opacity: 0.8,
-      transform: [{ scale: 0.96 }],
+      opacity: 0.7,
     },
     portionChipText: {
-      fontSize: fontSize.xs,
-      fontWeight: '700',
       color: theme.colors.textPrimary,
+      fontSize: 11,
+      fontWeight: '700',
     },
     recipePortionChipText: {
       color: DARK_RECIPE_INGREDIENT_CHIP_VALUE,
     },
     tooltipOverlay: {
       flex: 1,
-      backgroundColor: 'transparent',
+      backgroundColor: 'rgba(0,0,0,0.08)',
     },
     tooltipContent: {
-      backgroundColor: theme.isDark ? '#1E293B' : '#FFFFFF',
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.md,
-      borderRadius: borderRadius.lg,
+      width: 160,
+      minHeight: 58,
       alignItems: 'center',
-      shadowColor: '#000',
+      justifyContent: 'center',
+      borderRadius: borderRadius.md,
+      padding: spacing.sm,
+      backgroundColor: theme.colors.card,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.15,
-      shadowRadius: 10,
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
       elevation: 8,
-      minWidth: 160,
-      maxWidth: 240,
     },
     tooltipLabel: {
-      fontSize: fontSize.xs,
-      fontWeight: '800',
+      color: theme.colors.textMuted,
+      fontSize: 10,
+      fontWeight: '600',
       textTransform: 'uppercase',
-      color: theme.isDark ? '#94A3B8' : '#64748B',
-      letterSpacing: 0.8,
-      marginBottom: 4,
     },
     tooltipValue: {
-      fontSize: fontSize.base,
-      fontWeight: '700',
+      marginTop: 3,
       color: theme.colors.textPrimary,
-      textAlign: 'center',
+      fontSize: fontSize.sm,
+      fontWeight: '800',
     },
     tooltipArrow: {
       position: 'absolute',
       bottom: -6,
-      left: '50%',
-      marginLeft: -6,
       width: 12,
       height: 12,
-      backgroundColor: theme.isDark ? '#1E293B' : '#FFFFFF',
+      backgroundColor: theme.colors.card,
+      borderRightWidth: 1,
+      borderBottomWidth: 1,
+      borderColor: theme.colors.border,
       transform: [{ rotate: '45deg' }],
-      zIndex: -1,
-    },
-    recipeSwapHintRow: {
-      marginTop: spacing.sm,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.xs,
-    },
-    recipeSwapHintText: {
-      flex: 1,
-      color: theme.colors.textSecondary,
-      fontSize: fontSize.xs,
-      fontWeight: '600',
-    },
-    recipeSwapHintTextDark: {
-      color: DARK_RECIPE_SUBTITLE,
     },
   });
 }
-
-const isDarkRecipeColor = (theme: AppTheme) =>
-  theme.isDark ? DARK_RECIPE_TOGGLE_ACCENT : theme.colors.primaryBorder;
 
 export default DietMealCard;

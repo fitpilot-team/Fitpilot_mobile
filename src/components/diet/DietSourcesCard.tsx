@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from '../common';
 import { borderRadius, fontSize, nutritionTheme, spacing } from '../../constants/colors';
@@ -94,31 +94,30 @@ export const DietSourcesCard: React.FC<DietSourcesCardProps> = ({
     () => resolveExchangeSystemLabels(exchangeSystemName),
     [exchangeSystemName],
   );
-  const displayedCitations = isExpanded
-    ? sortedCitations
-    : sortedCitations[0]
-      ? [sortedCitations[0]]
-      : [];
   const hasCitations = sortedCitations.length > 0;
-  const title = isExpanded ? labels.expandedLabel : labels.shortLabel;
+  const systemLabel = isExpanded ? labels.expandedLabel : labels.shortLabel;
 
   return (
     <Card style={styles.card} padding="sm">
-      <View style={styles.header}>
+      <Pressable
+        onPress={onToggleExpanded}
+        accessibilityRole="button"
+        accessibilityLabel={isExpanded ? 'Ocultar fuentes y sistema' : 'Ver fuentes y sistema'}
+        accessibilityState={{ expanded: isExpanded }}
+        style={({ pressed }) => [
+          styles.header,
+          pressed ? styles.headerPressed : null,
+        ]}
+      >
         <View style={styles.iconBubble}>
           <Ionicons name="library-outline" size={17} color={nutritionTheme.accentStrong} />
         </View>
 
         <View style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>Fuentes</Text>
-          <Text numberOfLines={isExpanded ? 2 : 1} style={styles.title}>
-            {title}
+          <Text style={styles.title}>Fuentes y sistema</Text>
+          <Text numberOfLines={isExpanded ? 2 : 1} style={styles.subtitle}>
+            {systemLabel}
           </Text>
-          {!isExpanded && labels.collapsedSubtitle ? (
-            <Text numberOfLines={1} style={styles.subtitle}>
-              {labels.collapsedSubtitle}
-            </Text>
-          ) : null}
         </View>
 
         <View style={styles.headerActions}>
@@ -127,28 +126,17 @@ export const DietSourcesCard: React.FC<DietSourcesCardProps> = ({
               {hasCitations ? buildCitationCountLabel(sortedCitations.length) : 'Sin fuentes'}
             </Text>
           </View>
-          {hasCitations ? (
-            <TouchableOpacity
-              style={styles.toggleButton}
-              onPress={onToggleExpanded}
-              activeOpacity={0.84}
-              accessibilityRole="button"
-              accessibilityLabel={isExpanded ? 'Ocultar fuentes' : 'Ver fuentes'}
-            >
-              <Text style={styles.toggleText}>{isExpanded ? 'Ocultar' : 'Ver'}</Text>
-              <Ionicons
-                name={isExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
-                size={14}
-                color={nutritionTheme.accentStrong}
-              />
-            </TouchableOpacity>
-          ) : null}
+          <Ionicons
+            name={isExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+            size={18}
+            color={nutritionTheme.accentStrong}
+          />
         </View>
-      </View>
+      </Pressable>
 
-      {displayedCitations.length > 0 ? (
+      {isExpanded && sortedCitations.length > 0 ? (
         <View style={styles.list}>
-          {displayedCitations.map((citation) => (
+          {sortedCitations.map((citation) => (
             <TouchableOpacity
               key={`${citation.sortOrder}-${citation.url}`}
               style={styles.sourceRow}
@@ -176,21 +164,23 @@ export const DietSourcesCard: React.FC<DietSourcesCardProps> = ({
             </TouchableOpacity>
           ))}
         </View>
-      ) : (
+      ) : isExpanded ? (
         <View style={styles.emptyRow}>
           <Ionicons name="document-outline" size={15} color={nutritionTheme.accentStrong} />
           <Text style={styles.emptyText}>
             Referencia pendiente para este sistema.
           </Text>
         </View>
-      )}
+      ) : null}
 
-      <View style={styles.footer}>
-        <Ionicons name="information-circle-outline" size={14} color={nutritionTheme.accentStrong} />
-        <Text style={styles.footerText}>
-          Consulta profesional antes de tomar decisiones medicas.
-        </Text>
-      </View>
+      {isExpanded ? (
+        <View style={styles.footer}>
+          <Ionicons name="information-circle-outline" size={14} color={nutritionTheme.accentStrong} />
+          <Text style={styles.footerText}>
+            Consulta profesional antes de tomar decisiones médicas.
+          </Text>
+        </View>
+      ) : null}
     </Card>
   );
 };
@@ -203,9 +193,15 @@ const createStyles = (theme: AppTheme) =>
       backgroundColor: theme.isDark ? 'rgba(20, 83, 45, 0.16)' : '#F7FEFB',
     },
     header: {
+      minHeight: 48,
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
+      borderRadius: borderRadius.md,
+      paddingHorizontal: spacing.xs,
+    },
+    headerPressed: {
+      opacity: 0.74,
     },
     iconBubble: {
       width: 34,
@@ -220,14 +216,7 @@ const createStyles = (theme: AppTheme) =>
     headerCopy: {
       flex: 1,
       minWidth: 0,
-      gap: 1,
-    },
-    eyebrow: {
-      color: nutritionTheme.accentStrong,
-      fontSize: 10,
-      fontWeight: '800',
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
+      gap: 2,
     },
     title: {
       color: theme.colors.textPrimary,
@@ -241,7 +230,8 @@ const createStyles = (theme: AppTheme) =>
       lineHeight: 16,
     },
     headerActions: {
-      alignItems: 'flex-end',
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: spacing.xs,
       flexShrink: 0,
     },
@@ -257,22 +247,6 @@ const createStyles = (theme: AppTheme) =>
     countText: {
       color: nutritionTheme.accentStrong,
       fontSize: 11,
-      fontWeight: '800',
-    },
-    toggleButton: {
-      minHeight: 28,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 2,
-      borderRadius: borderRadius.full,
-      paddingHorizontal: 9,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: theme.isDark ? 'rgba(110, 231, 183, 0.16)' : '#BBF7D0',
-    },
-    toggleText: {
-      color: nutritionTheme.accentStrong,
-      fontSize: fontSize.xs,
       fontWeight: '800',
     },
     list: {

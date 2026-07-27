@@ -35,7 +35,7 @@ export type SharedWeeklyCalendarVariant =
   | 'diet';
 
 export type SharedWeeklyCalendarHeroSelectionMode = 'selected-or-today' | 'selected-only';
-export type SharedWeeklyCalendarDensity = 'default' | 'tight-top';
+export type SharedWeeklyCalendarDensity = 'default' | 'tight-top' | 'compact';
 
 export interface SharedWeeklyCalendarDay {
   id: string;
@@ -214,6 +214,7 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
   isTabletPortrait = false,
 }) => {
   const styles = useThemedStyles(createStyles);
+  const isCompactDensity = density === 'compact';
   const heroDayIndex = useMemo(
     () => days.findIndex((day) => getShowSpecialShape(day, heroSelectionMode)),
     [days, heroSelectionMode],
@@ -222,21 +223,49 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
 
   const metrics = useMemo<CalendarMetrics>(() => {
     const usableWidth = Math.max(0, contentWidth);
-    const isCompact = usableWidth < 390;
+    const isCompactWidth = usableWidth < 390;
     const isTablet = usableWidth >= 720;
-    const dayGap = isTabletPortrait ? 4 : isTablet ? 8 : isCompact ? 4 : 6;
-    const minBaseSlotWidth = isTabletPortrait ? 36 : isTablet ? 42 : isCompact ? 28 : 34;
-    const maxBaseSlotWidth = isTabletPortrait ? 56 : isTablet ? 68 : isCompact ? 42 : 54;
+    const dayGap = isCompactDensity
+      ? isTablet
+        ? 6
+        : 3
+      : isTabletPortrait
+        ? 4
+        : isTablet
+          ? 8
+          : isCompactWidth
+            ? 4
+            : 6;
+    const minBaseSlotWidth = isTabletPortrait ? 36 : isTablet ? 42 : isCompactWidth ? 28 : 34;
+    const maxBaseSlotWidth = isTabletPortrait ? 56 : isTablet ? 68 : isCompactWidth ? 42 : 54;
     const computedSlotWidth = (usableWidth - dayGap * 6) / 7;
     const defaultSlotWidth = clamp(computedSlotWidth, minBaseSlotWidth, maxBaseSlotWidth);
-    const idealShapeSize = Math.max(
-      defaultSlotWidth + (isTabletPortrait ? 34 : isTablet ? 42 : 50),
-      Math.min(
-        isTabletPortrait ? 112 : isTablet ? 128 : 132,
-        defaultSlotWidth + (isTabletPortrait ? 56 : isTablet ? 74 : 86),
-      ),
-    );
-    const heroSafePadding = isTabletPortrait ? 4 : isTablet ? 10 : isCompact ? 6 : 8;
+    const idealShapeSize = isCompactDensity
+      ? Math.max(
+          defaultSlotWidth + 32,
+          Math.min(
+            isTablet ? 112 : 104,
+            defaultSlotWidth + (isTabletPortrait ? 46 : isTablet ? 50 : 62),
+          ),
+        )
+      : Math.max(
+          defaultSlotWidth + (isTabletPortrait ? 34 : isTablet ? 42 : 50),
+          Math.min(
+            isTabletPortrait ? 112 : isTablet ? 128 : 132,
+            defaultSlotWidth + (isTabletPortrait ? 56 : isTablet ? 74 : 86),
+          ),
+        );
+    const heroSafePadding = isCompactDensity
+      ? isTablet
+        ? 8
+        : 4
+      : isTabletPortrait
+        ? 4
+        : isTablet
+          ? 10
+          : isCompactWidth
+            ? 6
+            : 8;
     const heroFootprintWidthRatio =
       (HERO_GEOMETRY.footprint.maxX - HERO_GEOMETRY.footprint.minX) / HERO_GEOMETRY.canvasWidth;
     const maxSelectedSlotWidth = Math.max(
@@ -254,7 +283,10 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
     const baseSlotWidth = hasHero
       ? (usableWidth - dayGap * 6 - selectedSlotWidth) / 6
       : defaultSlotWidth;
-    const circleRadius = Math.max(16, Math.min(20, shapeSize * HERO_CIRCLE_RADIUS_RATIO));
+    const circleRadius = Math.max(
+      isCompactDensity ? 15 : 16,
+      Math.min(isCompactDensity ? 16 : 20, shapeSize * HERO_CIRCLE_RADIUS_RATIO),
+    );
     const scale = shapeSize / HERO_GEOMETRY.canvasWidth;
     const circleCenterX = HERO_GEOMETRY.circleAnchor.x * scale;
     const footprintMinXScaled = HERO_GEOMETRY.footprint.minX * scale;
@@ -276,9 +308,9 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
       circleCenterY: HERO_GEOMETRY.circleAnchor.y * scale,
       footprintMinXScaled,
       footprintMaxXScaled,
-      heroEdgeGutter: isTabletPortrait ? 0 : isTablet ? 8 : isCompact ? 2 : 4,
+      heroEdgeGutter: isTabletPortrait ? 0 : isTablet ? 8 : isCompactWidth ? 2 : 4,
     };
-  }, [contentWidth, hasHero, isTabletPortrait]);
+  }, [contentWidth, hasHero, isCompactDensity, isTabletPortrait]);
 
   const slotLayouts = useMemo(() => {
     let startX = 0;
@@ -323,6 +355,7 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
       style={[
         styles.container,
         density === 'tight-top' ? styles.containerTightTop : null,
+        isCompactDensity ? styles.containerCompact : null,
       ]}
     >
         <View
@@ -361,6 +394,13 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
               onPress={day.onPress}
               disabled={day.isDisabled}
               activeOpacity={0.85}
+              hitSlop={isCompactDensity ? 4 : undefined}
+              accessibilityRole="button"
+              accessibilityLabel={`${day.statusText ? `${day.statusText}, ` : ''}${day.dayLabel} ${day.dateNumber}`}
+              accessibilityState={{
+                disabled: Boolean(day.isDisabled),
+                selected: day.isSelected,
+              }}
             >
               {showSpecialShape ? (
                 <View
@@ -390,8 +430,22 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
                         },
                       ]}
                     >
-                      <Text style={styles.statusHighlighted}>{statusText}</Text>
-                      <Text style={styles.dayLabelHighlighted}>{day.dayLabel}</Text>
+                      <Text
+                        style={[
+                          styles.statusHighlighted,
+                          isCompactDensity ? styles.statusHighlightedCompact : null,
+                        ]}
+                      >
+                        {statusText}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.dayLabelHighlighted,
+                          isCompactDensity ? styles.dayLabelHighlightedCompact : null,
+                        ]}
+                      >
+                        {day.dayLabel}
+                      </Text>
                     </View>
 
                     <View
@@ -415,7 +469,14 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
                           },
                         ]}
                       >
-                        <Text style={styles.dateNumberHighlighted}>{day.dateNumber}</Text>
+                        <Text
+                          style={[
+                            styles.dateNumberHighlighted,
+                            isCompactDensity ? styles.dateNumberHighlightedCompact : null,
+                          ]}
+                        >
+                          {day.dateNumber}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -428,8 +489,22 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
                     { paddingTop: metrics.textContainerTop },
                   ]}
                 >
-                  <Text style={getStatusTextStyle(day, styles)}>{statusText}</Text>
-                  <Text style={getDayLabelStyle(day, styles)}>{day.dayLabel}</Text>
+                  <Text
+                    style={[
+                      getStatusTextStyle(day, styles),
+                      isCompactDensity ? styles.statusCompact : null,
+                    ]}
+                  >
+                    {statusText}
+                  </Text>
+                  <Text
+                    style={[
+                      getDayLabelStyle(day, styles),
+                      isCompactDensity ? styles.dayLabelCompact : null,
+                    ]}
+                  >
+                    {day.dayLabel}
+                  </Text>
                   <View
                     style={[
                       styles.dateCircleContainer,
@@ -446,7 +521,14 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
                         },
                       ]}
                     >
-                      <Text style={getDateNumberStyle(day, styles)}>{day.dateNumber}</Text>
+                      <Text
+                        style={[
+                          getDateNumberStyle(day, styles),
+                          isCompactDensity ? styles.dateNumberCompact : null,
+                        ]}
+                      >
+                        {day.dateNumber}
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -470,6 +552,10 @@ const createStyles = (theme: AppTheme) =>
       paddingTop: 2,
       paddingBottom: 10,
       overflow: 'visible',
+    },
+    containerCompact: {
+      paddingTop: 0,
+      paddingBottom: 2,
     },
     daysRow: {
       flexDirection: 'row',
@@ -510,12 +596,21 @@ const createStyles = (theme: AppTheme) =>
       color: theme.colors.surface,
       lineHeight: 16,
     },
+    statusHighlightedCompact: {
+      fontSize: 10,
+      lineHeight: 12,
+    },
     dayLabelHighlighted: {
       marginTop: 2,
       fontSize: fontSize.xs,
       fontWeight: '600',
       color: theme.colors.surface,
       lineHeight: 16,
+    },
+    dayLabelHighlightedCompact: {
+      marginTop: 0,
+      fontSize: 10,
+      lineHeight: 12,
     },
     circleContainerHighlighted: {
       position: 'absolute',
@@ -532,6 +627,10 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '700',
       color: theme.colors.primary,
       lineHeight: 22,
+    },
+    dateNumberHighlightedCompact: {
+      fontSize: fontSize.sm,
+      lineHeight: 18,
     },
     status: {
       fontSize: fontSize.xs,
@@ -554,12 +653,21 @@ const createStyles = (theme: AppTheme) =>
     statusDietToday: {
       color: theme.colors.primary,
     },
+    statusCompact: {
+      fontSize: 10,
+      lineHeight: 12,
+    },
     dayLabel: {
       marginTop: 2,
       fontSize: fontSize.xs,
       fontWeight: '500',
       color: theme.colors.textMuted,
       lineHeight: 16,
+    },
+    dayLabelCompact: {
+      marginTop: 0,
+      fontSize: 10,
+      lineHeight: 14,
     },
     dayLabelSelected: {
       color: theme.colors.primary,
@@ -611,6 +719,10 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '600',
       color: theme.colors.textPrimary,
       lineHeight: 22,
+    },
+    dateNumberCompact: {
+      fontSize: fontSize.sm,
+      lineHeight: 18,
     },
     dateNumberSelectedGhost: {
       color: theme.colors.primary,

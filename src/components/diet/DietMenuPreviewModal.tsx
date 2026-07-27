@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   ScrollView,
@@ -46,6 +46,17 @@ export const DietMenuPreviewModal: React.FC<DietMenuPreviewModalProps> = ({
   const availableHeight = Math.max(320, height - spacing.lg);
   const sheetHeight = Math.min(Math.max(height * 0.9, 420), availableHeight);
   const canConfirm = mode === 'confirm' && Boolean(onConfirm) && Boolean(menu);
+  const firstMealId = menu?.meals[0]?.id ?? null;
+  const [expandedMealId, setExpandedMealId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!visible) {
+      setExpandedMealId(null);
+      return;
+    }
+
+    setExpandedMealId(firstMealId);
+  }, [firstMealId, menu?.menuId, visible]);
 
   const handleRecipePress = (recipe: ClientDietRecipeCard) => {
     onClose();
@@ -124,6 +135,12 @@ export const DietMenuPreviewModal: React.FC<DietMenuPreviewModalProps> = ({
                       <DietMealCard
                         key={meal.id}
                         meal={meal}
+                        expanded={expandedMealId === meal.id}
+                        onToggleExpanded={() => {
+                          setExpandedMealId((currentMealId) => (
+                            currentMealId === meal.id ? null : meal.id
+                          ));
+                        }}
                         onRecipePress={handleRecipePress}
                       />
                     ))}

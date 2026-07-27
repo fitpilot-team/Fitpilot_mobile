@@ -48,7 +48,7 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
   const styles = useThemedStyles(createStyles);
   const showEyebrow = Boolean(eyebrow);
   const resolvedAccentColor = accentColor ?? theme.colors.primary;
-  const shouldStackHeaderActions = isTabletPortrait;
+  const showDateButtonText = contentWidth >= 420;
 
   const panResponder = useMemo(
     () =>
@@ -85,64 +85,54 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
   return (
     <View style={styles.containerShell}>
       <View style={styles.containerSurface}>
-      <View style={[styles.header, shouldStackHeaderActions ? styles.headerStacked : null]}>
-        <View style={styles.headerCopy}>
-          {showEyebrow ? (
-            <Text style={[styles.eyebrow, { color: resolvedAccentColor }]}>{eyebrow}</Text>
-          ) : null}
-          <Text
-            numberOfLines={shouldStackHeaderActions ? 2 : 1}
-            style={[
-              styles.title,
-              showEyebrow ? styles.titleWithEyebrow : null,
-            ]}
-          >
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text numberOfLines={2} style={styles.subtitle}>
-              {subtitle}
-            </Text>
-          ) : null}
-        </View>
-
-        <View
-          style={[
-            styles.headerActions,
-            shouldStackHeaderActions ? styles.headerActionsStacked : null,
-          ]}
-        >
-          {weekLabel ? (
-            <View
+        <View style={styles.header}>
+          <View style={styles.headerCopy}>
+            {showEyebrow ? (
+              <Text style={[styles.eyebrow, { color: resolvedAccentColor }]}>{eyebrow}</Text>
+            ) : null}
+            <Text
+              numberOfLines={1}
               style={[
-                styles.weekPill,
-                shouldStackHeaderActions ? styles.weekPillStacked : null,
-                {
-                  backgroundColor: theme.colors.surfaceAlt,
-                  borderColor: theme.colors.border,
-                },
+                styles.title,
+                showEyebrow ? styles.titleWithEyebrow : null,
               ]}
             >
-              <Text
-                numberOfLines={1}
-                style={[styles.weekPillText, { color: resolvedAccentColor }]}
-              >
-                {weekLabel}
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text numberOfLines={1} style={styles.subtitle}>
+                {subtitle}
               </Text>
-            </View>
-          ) : null}
+            ) : null}
+          </View>
 
-          <View
-            style={[
-              styles.actionRow,
-              shouldStackHeaderActions ? styles.actionRowStacked : null,
-            ]}
-          >
+          <View style={styles.actionRow}>
+            {weekLabel ? (
+              <View
+                style={[
+                  styles.weekPill,
+                  {
+                    backgroundColor: theme.colors.surfaceAlt,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[styles.weekPillText, { color: resolvedAccentColor }]}
+                >
+                  {weekLabel}
+                </Text>
+              </View>
+            ) : null}
+
             {showWeekButtons ? (
               <>
                 <Pressable
                   onPress={() => onShiftWeek(-1)}
                   disabled={!canGoToPreviousWeek}
+                  accessibilityRole="button"
+                  accessibilityLabel="Semana anterior"
                   style={[
                     styles.navButton,
                     !canGoToPreviousWeek ? styles.navButtonDisabled : null,
@@ -158,6 +148,8 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
                 <Pressable
                   onPress={() => onShiftWeek(1)}
                   disabled={!canGoToNextWeek}
+                  accessibilityRole="button"
+                  accessibilityLabel="Semana siguiente"
                   style={[
                     styles.navButton,
                     !canGoToNextWeek ? styles.navButtonDisabled : null,
@@ -175,45 +167,43 @@ export const HistoricalNavigator: React.FC<HistoricalNavigatorProps> = ({
             {onOpenDatePicker ? (
               <Pressable
                 onPress={onOpenDatePicker}
+                accessibilityRole="button"
+                accessibilityLabel={datePickerLabel}
                 style={[
                   styles.dateButton,
+                  !showDateButtonText ? styles.dateButtonIconOnly : null,
                   {
                     backgroundColor: theme.colors.surfaceAlt,
                     borderColor: theme.colors.border,
                   },
                 ]}
               >
-                <Ionicons name="calendar-clear-outline" size={14} color={resolvedAccentColor} />
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.dateButtonText,
-                    { color: resolvedAccentColor },
-                  ]}
-                >
-                  {datePickerLabel}
-                </Text>
+                <Ionicons name="calendar-clear-outline" size={18} color={resolvedAccentColor} />
+                {showDateButtonText ? (
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.dateButtonText,
+                      { color: resolvedAccentColor },
+                    ]}
+                  >
+                    {datePickerLabel}
+                  </Text>
+                ) : null}
               </Pressable>
             ) : null}
           </View>
         </View>
-      </View>
 
-      <View
-        style={[
-          styles.calendarWrap,
-          shouldStackHeaderActions ? styles.calendarWrapStacked : null,
-        ]}
-        {...panResponder.panHandlers}
-      >
-        <SharedWeeklyCalendar
-          days={days}
-          heroSelectionMode="selected-only"
-          density="tight-top"
-          contentWidth={contentWidth}
-          isTabletPortrait={isTabletPortrait}
-        />
-      </View>
+        <View style={styles.calendarWrap} {...panResponder.panHandlers}>
+          <SharedWeeklyCalendar
+            days={days}
+            heroSelectionMode="selected-only"
+            density="compact"
+            contentWidth={contentWidth}
+            isTabletPortrait={isTabletPortrait}
+          />
+        </View>
       </View>
     </View>
   );
@@ -243,19 +233,16 @@ const createStyles = (theme: AppTheme) =>
           : theme.isDark
             ? theme.colors.primaryBorder
             : theme.colors.border,
-      paddingTop: spacing.sm,
-      paddingBottom: 2,
+      paddingTop: spacing.xs,
+      paddingBottom: spacing.xs,
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: spacing.sm,
-      paddingHorizontal: spacing.md,
-    },
-    headerStacked: {
-      alignItems: 'stretch',
-      flexWrap: 'wrap',
+      minHeight: 48,
+      paddingHorizontal: spacing.sm,
     },
     headerCopy: {
       flex: 1,
@@ -266,62 +253,48 @@ const createStyles = (theme: AppTheme) =>
       fontWeight: '800',
       textTransform: 'uppercase',
       letterSpacing: 1,
+      lineHeight: 12,
     },
     title: {
-      fontSize: fontSize.base,
+      fontSize: fontSize.sm,
       fontWeight: '800',
       color: theme.colors.textPrimary,
-    },
-    titleWithEyebrow: {
-      marginTop: 6,
-    },
-    subtitle: {
-      marginTop: 2,
-      fontSize: fontSize.xs,
-      color: theme.colors.textMuted,
       lineHeight: 18,
     },
-    headerActions: {
-      alignItems: 'flex-end',
-      gap: 6,
-      maxWidth: '52%',
+    titleWithEyebrow: {
+      marginTop: 1,
     },
-    headerActionsStacked: {
-      width: '100%',
-      maxWidth: '100%',
-      alignItems: 'flex-start',
+    subtitle: {
+      marginTop: 1,
+      fontSize: fontSize.xs,
+      color: theme.colors.textMuted,
+      lineHeight: 15,
     },
     weekPill: {
+      minHeight: 32,
+      maxWidth: 108,
+      justifyContent: 'center',
       paddingHorizontal: spacing.sm,
-      paddingVertical: 6,
       borderRadius: borderRadius.full,
       borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
-      alignSelf: 'flex-end',
-    },
-    weekPillStacked: {
-      alignSelf: 'flex-start',
     },
     weekPillText: {
-      fontSize: fontSize.xs,
+      fontSize: 11,
       fontWeight: '700',
       textTransform: 'capitalize',
-      textAlign: 'right',
+      textAlign: 'center',
     },
     actionRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'flex-end',
-      gap: 6,
-      flexWrap: 'wrap',
-    },
-    actionRowStacked: {
-      justifyContent: 'flex-start',
-      width: '100%',
+      gap: spacing.xs,
+      flexShrink: 0,
     },
     navButton: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surfaceAlt,
@@ -337,18 +310,20 @@ const createStyles = (theme: AppTheme) =>
       gap: 5,
       borderRadius: borderRadius.full,
       borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
+      minHeight: 44,
       paddingHorizontal: spacing.sm,
-      paddingVertical: 6,
+    },
+    dateButtonIconOnly: {
+      width: 44,
+      paddingHorizontal: 0,
+      justifyContent: 'center',
     },
     dateButtonText: {
       fontSize: fontSize.xs,
       fontWeight: '700',
     },
     calendarWrap: {
-      marginTop: -8,
-    },
-    calendarWrapStacked: {
-      marginTop: spacing.xs,
+      marginTop: -4,
     },
   });
 
