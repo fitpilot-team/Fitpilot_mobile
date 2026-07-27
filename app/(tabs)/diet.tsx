@@ -1,14 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Linking,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -22,7 +19,6 @@ import {
   ProfileShortcutButton,
   Skeleton,
   TabScreenWrapper,
-  WorkoutCardSkeleton,
 } from '../../src/components/common';
 import {
   CalendarDatePickerModal,
@@ -219,7 +215,7 @@ export default function DietScreen() {
   const { theme } = useAppTheme();
   const styles = useThemedStyles(createStyles);
   const tabBarScroll = useBottomTabBarScroll();
-  const contentInsetBottom = useBottomTabBarContentInset();
+  const contentInsetBottom = useBottomTabBarContentInset(spacing.xl);
   const { user } = useAuthStore();
   const [dietDays, setDietDays] = useState<ClientDietWeekDay[]>([]);
   const [anchorDate, setAnchorDate] = useState(getTodayDietDateKey());
@@ -243,6 +239,7 @@ export default function DietScreen() {
   const [isSavingSwap, setIsSavingSwap] = useState(false);
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [isSourcesExpanded, setIsSourcesExpanded] = useState(false);
+  const [expandedMealId, setExpandedMealId] = useState<string | null>(null);
   const isTablet = isTabletLayout(width, height);
   const isTabletPortrait = isTablet && height > width;
 
@@ -499,8 +496,19 @@ export default function DietScreen() {
   const visibleMenuLabel = visibleMenu
     ? menuLabelsById.get(visibleMenu.menuId) ?? buildDietMenuLabel(0)
     : 'Sin menú asignado';
+  const firstVisibleMealId = visibleMenu?.meals[0]?.id ?? null;
   const visibleMenuExchangeSystem = visibleMenu?.exchangeSystem ?? null;
   const visibleMenuSourceCitations = visibleMenuExchangeSystem?.citations ?? [];
+
+  useEffect(() => {
+    setExpandedMealId(firstVisibleMealId);
+  }, [firstVisibleMealId, selectedDate, visibleMenu?.menuId]);
+
+  const handleToggleMeal = useCallback((mealId: string) => {
+    setExpandedMealId((currentMealId) => (
+      currentMealId === mealId ? null : mealId
+    ));
+  }, []);
 
   const hasHydratedOptionsForSelectedDate = Boolean(menuOptionsHydratedByDate[selectedDate]);
   const hasAvailableMenuOptions = Boolean(selectedDay) && (
@@ -567,7 +575,7 @@ export default function DietScreen() {
     () => (
       selectedDay
         ? formatLocalDate(selectedDay.assignedDate, {
-            weekday: 'long',
+            weekday: 'short',
             day: 'numeric',
             month: 'short',
           })
@@ -933,19 +941,15 @@ export default function DietScreen() {
               </View>
               <ProfileShortcutButton />
             </View>
-            <View style={[styles.skeletonDateRow, { maxWidth: contentWidth }]}>
-              {[1, 2, 3, 4, 5].map((item) => (
-                <Skeleton
-                  key={item}
-                  width="18%"
-                  height={58}
-                  borderRadius={borderRadius.lg}
-                />
-              ))}
+            <View style={[styles.skeletonBlock, { maxWidth: contentWidth }]}>
+              <Skeleton width="100%" height={156} borderRadius={borderRadius.lg} />
             </View>
-            {[1, 2, 3].map((item) => (
-              <View key={item} style={{ maxWidth: contentWidth, width: '100%' }}>
-                <WorkoutCardSkeleton />
+            <View style={[styles.skeletonBlock, { maxWidth: contentWidth }]}>
+              <Skeleton width="100%" height={166} borderRadius={borderRadius.lg} />
+            </View>
+            {[1, 2, 3, 4].map((item) => (
+              <View key={item} style={[styles.skeletonBlock, { maxWidth: contentWidth }]}>
+                <Skeleton width="100%" height={72} borderRadius={borderRadius.lg} />
               </View>
             ))}
           </ScrollView>
@@ -986,8 +990,8 @@ export default function DietScreen() {
             <View style={styles.headerCopy}>
               <Text style={styles.eyebrow}>Nutrición</Text>
               <Text style={styles.title}>Dieta</Text>
-              <Text style={styles.subtitle}>
-                Revisa tu menú del día y las recetas asignadas.
+              <Text numberOfLines={1} style={styles.subtitle}>
+                Tu menú y comidas del día.
               </Text>
             </View>
             <ProfileShortcutButton />
@@ -1000,8 +1004,7 @@ export default function DietScreen() {
                 style={{ paddingHorizontal: horizontalPadding }}
               >
                 <HistoricalNavigator
-                  title="Historial semanal"
-                  subtitle={selectedDateLabel}
+                  title={selectedDateLabel}
                   weekLabel={currentWeekLabel}
                   days={navigatorDays}
                   contentWidth={contentWidth}
@@ -1016,98 +1019,38 @@ export default function DietScreen() {
 
               <Animated.View
                 entering={getEntryAnimation(110)}
-                style={[styles.weeklyPlanCtaSection, { paddingHorizontal: horizontalPadding }]}
+                style={[styles.heroSection, { paddingHorizontal: horizontalPadding }]}
               >
-                <TouchableOpacity
-                  style={styles.weeklyPlanCta}
-                  onPress={() => router.push('/diet/weekly-plan')}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  accessibilityLabel="Plan semanal y lista del súper"
-                >
-                  <View style={styles.weeklyPlanCtaIcon}>
-                    <Ionicons name="list-outline" size={20} color={nutritionTheme.accentStrong} />
-                  </View>
-                  <View style={styles.weeklyPlanCtaCopy}>
-                    <Text style={styles.weeklyPlanCtaTitle}>Plan semanal y lista del súper</Text>
-                    <Text style={styles.weeklyPlanCtaSubtitle} numberOfLines={2}>
-                      Elige los menús de la semana y genera tu lista de compras.
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={theme.colors.iconMuted} />
-                </TouchableOpacity>
+                <DietHero
+                  menu={visibleMenu}
+                  menuLabel={visibleMenuLabel}
+                  assignedDate={selectedDay.assignedDate}
+                  isToday={selectedDay.isToday}
+                  isPreview={isPreviewingMenu}
+                  supportingText={
+                    isPreviewingMenu
+                      ? 'Revisa este menú antes de confirmar el cambio.'
+                      : hasPersistedOverride
+                        ? 'Elegiste una opción distinta para este día.'
+                        : selectorSubtitle
+                  }
+                  canChangeMenu={hasAvailableMenuOptions}
+                  isLoadingMenuOptions={Boolean(menuOptionsLoadingByDate[selectedDate])}
+                  onChangeMenu={() => {
+                    void handleOpenMenuSelector();
+                  }}
+                  onOpenWeeklyPlan={() => router.push('/diet/weekly-plan')}
+                />
               </Animated.View>
 
-              {visibleMenu ? (
-                <Animated.View
-                  entering={getEntryAnimation(140)}
-                  style={[styles.heroSection, { paddingHorizontal: horizontalPadding }]}
-                >
-                  <DietHero
-                    menu={visibleMenu}
-                    menuLabel={visibleMenuLabel}
-                    assignedDate={selectedDay.assignedDate}
-                    isToday={selectedDay.isToday}
-                    isPreview={isPreviewingMenu}
-                    sourceSystemName={visibleMenuExchangeSystem?.name}
-                    sourceCount={visibleMenuSourceCitations.length}
-                  />
-                </Animated.View>
-              ) : null}
-
-              <Animated.View
-                entering={getEntryAnimation(180)}
-                style={[styles.selectorSection, { paddingHorizontal: horizontalPadding }]}
-              >
-                <View style={styles.selectorCardShell}>
-                  <TouchableOpacity
-                    style={[
-                      styles.selectorCard,
-                      !hasAvailableMenuOptions && styles.selectorCardDisabled,
-                    ]}
-                    onPress={handleOpenMenuSelector}
-                    disabled={!hasAvailableMenuOptions}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.selectorCopy}>
-                      <Text style={styles.selectorEyebrow}>Menú visible</Text>
-                      <Text style={styles.selectorTitle}>
-                        {visibleMenuLabel}
-                      </Text>
-                      <Text numberOfLines={2} style={styles.selectorSubtitle}>
-                        {isPreviewingMenu
-                          ? 'Estás revisando este menú antes de confirmarlo.'
-                          : hasPersistedOverride
-                            ? 'Elegiste una opción distinta para este día.'
-                            : selectorSubtitle}
-                      </Text>
-                    </View>
-
-                    <View style={styles.selectorAction}>
-                      {menuOptionsLoadingByDate[selectedDate] ? (
-                        <ActivityIndicator size="small" color={nutritionTheme.accentStrong} />
-                      ) : (
-                        <Ionicons
-                          name={hasAvailableMenuOptions ? 'chevron-forward-outline' : 'remove-outline'}
-                          size={20}
-                          color={hasAvailableMenuOptions ? nutritionTheme.accentStrong : theme.colors.iconMuted}
-                        />
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              </Animated.View>
-
-              <Animated.View entering={getEntryAnimation(220)} style={styles.mealsSection}>
+              <Animated.View entering={getEntryAnimation(160)} style={styles.mealsSection}>
                 <View style={[styles.sectionHeader, { paddingHorizontal: horizontalPadding }]}>
-                  <View>
-                    <Text style={styles.sectionTitle}>Comidas del día</Text>
-                    <Text style={styles.sectionSubtitle}>
+                  <Text style={styles.sectionTitle}>Comidas del día</Text>
+                  <View style={styles.sectionCountPill}>
+                    <Text style={styles.sectionCountText}>
                       {visibleMenu
-                        ? isPreviewingMenu
-                          ? `Estás revisando ${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} antes de confirmar el cambio`
-                          : `${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'} organizados para ti`
-                        : 'No hay comidas programadas para esta fecha'}
+                        ? `${visibleMenu.totalMeals} ${visibleMenu.totalMeals === 1 ? 'bloque' : 'bloques'}`
+                        : 'Sin comidas'}
                     </Text>
                   </View>
                 </View>
@@ -1118,10 +1061,12 @@ export default function DietScreen() {
                       visibleMenu.meals.map((meal, index) => (
                         <Animated.View
                           key={`${selectedDay.assignedDate}-${visibleMenu.menuId}-${renderVersion}-${meal.id}`}
-                          entering={FadeInDown.delay(300 + index * 60).duration(320)}
+                          entering={FadeInDown.delay(220 + index * 50).duration(300)}
                         >
                           <DietMealCard
                             meal={meal}
+                            expanded={expandedMealId === meal.id}
+                            onToggleExpanded={() => handleToggleMeal(meal.id)}
                             onRecipeIngredientPress={
                               isPreviewingMenu ? undefined : handleOpenRecipeIngredientSwap
                             }
@@ -1303,12 +1248,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.md,
     },
-    skeletonDateRow: {
+    skeletonBlock: {
       width: '100%',
       alignSelf: 'center',
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      gap: spacing.sm,
       paddingHorizontal: spacing.lg,
     },
     header: {
@@ -1336,128 +1278,49 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       fontWeight: '800',
     },
     subtitle: {
-      marginTop: spacing.sm,
+      marginTop: spacing.xs,
       color: theme.colors.textMuted,
-      fontSize: fontSize.base,
-      lineHeight: 22,
+      fontSize: fontSize.sm,
+      lineHeight: 20,
     },
     heroSection: {
-      marginTop: spacing.lg,
+      marginTop: spacing.md,
     },
     sourcesSection: {
       marginTop: spacing.md,
     },
     sectionHeader: {
       marginTop: spacing.lg,
-      marginBottom: spacing.md,
-    },
-    sectionTitle: {
-      color: theme.colors.textPrimary,
-      fontSize: fontSize.xl,
-      fontWeight: '800',
-    },
-    sectionSubtitle: {
-      marginTop: spacing.xs,
-      color: theme.colors.textMuted,
-      fontSize: fontSize.sm,
-    },
-    selectorSection: {
-      marginTop: spacing.md,
-    },
-    selectorCardShell: {
-      borderRadius: borderRadius.md,
-    },
-    weeklyPlanCtaSection: {
-      marginTop: spacing.md,
-    },
-    weeklyPlanCta: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.md,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.md,
-      borderRadius: borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-    },
-    weeklyPlanCtaIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.isDark
-        ? 'rgba(56, 189, 248, 0.16)'
-        : `${nutritionTheme.accentStrong}1A`,
-    },
-    weeklyPlanCtaCopy: {
-      flex: 1,
-      minWidth: 0,
-      gap: 2,
-    },
-    weeklyPlanCtaTitle: {
-      fontSize: fontSize.base,
-      fontWeight: '800',
-      color: theme.colors.textPrimary,
-    },
-    weeklyPlanCtaSubtitle: {
-      fontSize: fontSize.xs,
-      color: theme.colors.textMuted,
-      lineHeight: 16,
-    },
-    selectorCard: {
+      marginBottom: spacing.sm,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      borderRadius: borderRadius.md,
-      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
-      borderColor: theme.isDark ? 'rgba(36, 50, 71, 0.72)' : theme.colors.border,
-      backgroundColor: theme.colors.surfaceAlt,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
+      gap: spacing.sm,
     },
-    selectorCardDisabled: {
-      opacity: 0.65,
-    },
-    selectorCopy: {
-      flex: 1,
-      paddingRight: spacing.md,
-    },
-    selectorEyebrow: {
-      color: nutritionTheme.accentStrong,
-      fontSize: fontSize.xs,
-      fontWeight: '700',
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
-    },
-    selectorTitle: {
-      marginTop: 4,
+    sectionTitle: {
       color: theme.colors.textPrimary,
-      fontSize: fontSize.sm,
-      fontWeight: '700',
+      fontSize: fontSize.lg,
+      fontWeight: '800',
     },
-    selectorSubtitle: {
-      marginTop: 4,
-      color: theme.colors.textMuted,
-      fontSize: fontSize.xs,
-      lineHeight: 18,
-    },
-    selectorAction: {
-      width: 30,
-      height: 30,
-      borderRadius: borderRadius.full,
-      alignItems: 'center',
+    sectionCountPill: {
+      minHeight: 30,
       justifyContent: 'center',
-      backgroundColor: theme.colors.surface,
-      borderWidth: Platform.OS === 'android' && theme.isDark ? 0 : 1,
+      borderRadius: borderRadius.full,
+      paddingHorizontal: spacing.sm,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
       borderColor: theme.colors.border,
+    },
+    sectionCountText: {
+      fontSize: fontSize.xs,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
     },
     mealsSection: {
       marginTop: spacing.lg,
     },
     mealList: {
-      gap: spacing.md,
+      gap: spacing.sm,
     },
     previewActionBar: {
       borderTopWidth: 1,

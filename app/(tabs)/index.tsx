@@ -190,18 +190,6 @@ export default function HomeScreen() {
     () => getProgramTimelineWeekLabel(programTimelineView.currentWeekStartDateKey),
     [programTimelineView.currentWeekStartDateKey],
   );
-  const focusedDateLabel = useMemo(
-    () => (
-      programTimelineView.effectiveFocusedDateKey
-        ? formatLocalDate(programTimelineView.effectiveFocusedDateKey, {
-            weekday: 'long',
-            month: 'short',
-            day: 'numeric',
-          })
-        : 'Semana visible'
-    ),
-    [programTimelineView.effectiveFocusedDateKey],
-  );
   const navigatorDays = useMemo<SharedWeeklyCalendarDay[]>(
     () =>
       programTimelineView.days.map((day) => {
@@ -635,13 +623,13 @@ export default function HomeScreen() {
                 <HistoricalNavigator
                   eyebrow="Entrenamiento"
                   title={microcycleProgress?.microcycle_name || program?.name || 'Programa activo'}
-                  subtitle={focusedDateLabel}
                   weekLabel={currentWeekLabel}
                   days={navigatorDays}
                   contentWidth={calendarContentWidth}
                   canGoToPreviousWeek={programTimelineView.canGoToPreviousWeek}
                   canGoToNextWeek={programTimelineView.canGoToNextWeek}
                   showWeekButtons={isTablet}
+                  datePickerLabel="Fecha"
                   onShiftWeek={handleShiftWeek}
                   onOpenDatePicker={canOpenDatePicker ? handleOpenDatePicker : undefined}
                 />
