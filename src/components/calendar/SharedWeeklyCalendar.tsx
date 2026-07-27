@@ -284,8 +284,8 @@ export const SharedWeeklyCalendar: React.FC<SharedWeeklyCalendarProps> = ({
       ? (usableWidth - dayGap * 6 - selectedSlotWidth) / 6
       : defaultSlotWidth;
     const circleRadius = Math.max(
-      16,
-      Math.min(isCompactDensity ? 18 : 20, shapeSize * HERO_CIRCLE_RADIUS_RATIO),
+      isCompactDensity ? 15 : 16,
+      Math.min(isCompactDensity ? 16 : 20, shapeSize * HERO_CIRCLE_RADIUS_RATIO),
     );
     const scale = shapeSize / HERO_GEOMETRY.canvasWidth;
     const circleCenterX = HERO_GEOMETRY.circleAnchor.x * scale;
