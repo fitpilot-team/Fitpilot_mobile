@@ -90,6 +90,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       bundleIdentifier: 'com.fitpilot.mobile',
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        NSHealthShareUsageDescription:
+          'FitPilot lee datos de Salud y actividad para mostrar tu progreso de entrenamiento, nutrición y recuperación.',
+        NSHealthUpdateUsageDescription:
+          'FitPilot puede guardar en Salud los datos de actividad que elijas sincronizar para mantener actualizado tu historial de entrenamiento y progreso.',
         NSMicrophoneUsageDescription:
           'Allow $(PRODUCT_NAME) to record voice notes for chat.',
         NSAppTransportSecurity: {
