@@ -19,7 +19,7 @@
     <key>CFBundlePackageType</key>
     <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>1.1.0</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleURLTypes</key>
@@ -58,7 +58,9 @@
     <key>NSFaceIDUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
     <key>NSHealthShareUsageDescription</key>
-    <string>FitPilot lee datos de salud y actividad para mejorar el seguimiento de kcal, entrenamiento y recuperacion con tu entrenador.</string>
+    <string>FitPilot lee datos de Salud y actividad para mostrar tu progreso de entrenamiento, nutrición y recuperación.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>FitPilot puede guardar en Salud los datos de actividad que elijas sincronizar para mantener actualizado tu historial de entrenamiento y progreso.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Allow $(PRODUCT_NAME) to record voice notes for chat.</string>
     <key>NSPhotoLibraryUsageDescription</key>

@@ -12,6 +12,10 @@ import type {
   ConnectedHealthFeedbackRange,
 } from '../types/connectedHealthFeedback';
 import {
+  getConnectedHealthAuthorizationRecoveryMessage,
+  isConnectedHealthAuthorizationPending,
+} from '../utils/connectedHealthAuthorization';
+import {
   buildConnectedHealthHistory,
   buildConnectedHealthFeedback,
   isConnectedHealthSyncOlderThan,
@@ -39,17 +43,6 @@ const autoSyncAttempted = new Set<string>();
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
-
-// HealthKit lanza "Authorization not determined" cuando aún no se ha resuelto la
-// autorización (p.ej. tras reinstalar la dev build, que resetea los permisos, o antes
-// de que el usuario responda la hoja de permisos). No es un fallo real de sincronización:
-// no debe mostrarse como error alarmante, sobre todo si el resumen del backend ya tiene
-// datos. Los syncs explícitos piden permisos antes de consultar en iOS; los syncs de
-// fondo no presentan la hoja y pueden encontrar este estado tras una reinstalación.
-const isAuthorizationPendingError = (error: unknown): boolean => {
-  const message = error instanceof Error ? error.message : '';
-  return /not[\s_]?determined/i.test(message);
-};
 
 const pickLatestIsoString = (
   current: string | null | undefined,
@@ -201,7 +194,7 @@ export function useConnectedHealthFeedback({
         }
       } catch (syncFailure) {
         if (isMountedRef.current) {
-          if (!isAuthorizationPendingError(syncFailure)) {
+          if (!isConnectedHealthAuthorizationPending(syncFailure)) {
             setSyncError(
               getErrorMessage(syncFailure, 'No se pudo sincronizar salud conectada.'),
             );
@@ -209,9 +202,7 @@ export function useConnectedHealthFeedback({
             // Sync explícito: ya pedimos autorización y iOS aun así no la aplicó (hoja de
             // permisos que se cierra sola; estado corrupto tras reinstalar la app). No hay
             // nada más que la app pueda hacer: guiamos al usuario a arreglarlo en el sistema.
-            setSyncError(
-              'iOS no aplicó los permisos de Salud. Reinicia el iPhone y vuelve a intentar. Si persiste, ve a Ajustes > Privacidad y seguridad > Salud > FitPilot y activa los permisos.',
-            );
+            setSyncError(getConnectedHealthAuthorizationRecoveryMessage());
           }
         }
       } finally {
