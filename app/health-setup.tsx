@@ -17,6 +17,10 @@ import { borderRadius, fontSize, spacing } from '../src/constants/colors';
 import { connectedHealthService } from '../src/services/connectedHealth';
 import { markConnectedHealthSetupHandledForInstallation } from '../src/services/connectedHealthInstallation';
 import { useAuthStore } from '../src/store/authStore';
+import {
+  getConnectedHealthAuthorizationRecoveryMessage,
+  isConnectedHealthAuthorizationPending,
+} from '../src/utils/connectedHealthAuthorization';
 import { useThemedStyles, type AppTheme } from '../src/theme';
 import type { FitpilotHealthAvailability } from '../modules/fitpilot-health';
 
@@ -59,9 +63,11 @@ export default function HealthSetupScreen() {
   const [shareWithTrainer, setShareWithTrainer] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [permissionBlocked, setPermissionBlocked] = useState(false);
+  const [needsAuthorizationRecovery, setNeedsAuthorizationRecovery] = useState(false);
 
   const isAvailable = availability?.available ?? false;
   const isBusy = isConnecting || isSkipping;
+  const showSettingsAction = permissionBlocked || needsAuthorizationRecovery;
 
   const load = useCallback(async () => {
     try {
@@ -92,6 +98,7 @@ export default function HealthSetupScreen() {
     setIsConnecting(true);
     setError(null);
     setPermissionBlocked(false);
+    setNeedsAuthorizationRecovery(false);
     try {
       const status = await connectedHealthService.requestPermissions();
       if (!status.granted.length) {
@@ -105,11 +112,19 @@ export default function HealthSetupScreen() {
       await connectedHealthService.setSetupStatus('completed');
       await finish();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'No se pudo activar salud conectada. Intenta de nuevo.',
-      );
+      if (isConnectedHealthAuthorizationPending(err)) {
+        // Ya pedimos autorización justo antes y la plataforma sigue sin aplicarla: el
+        // mensaje crudo ("Authorization not determined") no le dice nada al usuario, así
+        // que mostramos los pasos de recuperación y ofrecemos abrir los ajustes.
+        setNeedsAuthorizationRecovery(true);
+        setError(getConnectedHealthAuthorizationRecoveryMessage());
+      } else {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'No se pudo activar salud conectada. Intenta de nuevo.',
+        );
+      }
     } finally {
       setIsConnecting(false);
     }
@@ -241,7 +256,7 @@ export default function HealthSetupScreen() {
               fullWidth
               icon={<Ionicons name="link-outline" size={18} color="#ffffff" />}
             />
-            {permissionBlocked ? (
+            {showSettingsAction ? (
               <Button
                 title={Platform.OS === 'android' ? 'Abrir Health Connect' : 'Abrir ajustes'}
                 onPress={() => {
