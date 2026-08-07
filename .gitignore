@@ -8,6 +8,8 @@ web-build/
 
 # Native builds
 *.orig.*
+*.aab
+*.apk
 *.jks
 *.p8
 *.p12
@@ -17,6 +19,9 @@ service-account-key*.json
 firebase-adminsdk*.json
 modules/**/android/build/
 modules/**/android/.gradle/
+
+# Store assets (screenshots are regenerated with scripts/generate_app_store_screenshots.ps1)
+app-store/
 
 # Metro
 .metro-health-check*
