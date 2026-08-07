@@ -19,6 +19,10 @@ import type {
   ClientRecipeSummary,
 } from '../types';
 import {
+  normalizeDietCourseCategory,
+  type NormalizedDietCourseCategory,
+} from '../utils/dietCourseSections';
+import {
   getLocalWeekDateKeys,
   getStartOfLocalWeekDateKey,
   getTodayDateKey,
@@ -162,6 +166,14 @@ type NutritionMenuItemResponse = {
   recipe_summary?: NutritionRecipeSummaryResponse | null;
   recipe_detail?: NutritionEmbeddedRecipeDetailResponse | null;
   portion_detail?: NutritionPortionResponse | null;
+  course_category_id?: number | null;
+  course_category?: {
+    id?: number | null;
+    code?: string | null;
+    name?: string | null;
+    emoji?: string | null;
+    sort_order?: number | null;
+  } | null;
 };
 
 type NutritionMenuMealResponse = {
@@ -209,10 +221,14 @@ type RecipeGroupAccumulator = {
   detail: NutritionEmbeddedRecipeDetailResponse | null;
   items: NutritionMenuItemResponse[];
   firstIndex: number;
+  courseCategory: NormalizedDietCourseCategory;
 };
 
 const DIET_LOOKAHEAD_DAYS = 7;
-const DIET_CALENDAR_CACHE_VERSION = 1;
+// Bumped from 1 to 2 for the menu course classification feature: legacy
+// payloads and offline cache entries that predate the embedded course category
+// summary must not hydrate under the new model (§8.3 of the plan).
+const DIET_CALENDAR_CACHE_VERSION = 2;
 const DIET_CALENDAR_CACHE_PREFIX = 'fitpilot:cache:diet-calendar';
 
 const buildDietCalendarCacheKey = (clientId: number, weekStartDate: string) =>
@@ -603,24 +619,33 @@ const resolveRecipeForItem = (
   mapRecipeSummaryFromDetail(item.recipe_detail) ||
   (item.recipe_id ? recipeSummaryMap.get(item.recipe_id) ?? null : null);
 
-const mapStandaloneFoodRow = (item: NutritionMenuItemResponse): ClientDietFoodRow => ({
-  id: String(item.id),
-  menuItemId: item.id,
-  foodId: item.food_id ?? item.foods?.id ?? null,
-  exchangeGroupId: item.exchange_group_id ?? item.foods?.exchange_group_id ?? null,
-  label:
-    item.foods?.name?.trim() ||
-    item.exchange_groups?.name?.trim() ||
-    'Alimento',
-  exchangeGroupName: item.exchange_groups?.name?.trim() || null,
-  isClientSwap: Boolean(item.is_client_swap),
-  originalFoodId: item.original_food_id ?? null,
-  originalLabel: item.original_food_name?.trim() || null,
-  portion: derivePortionFromMenuItem(item),
-});
+const mapStandaloneFoodRow = (item: NutritionMenuItemResponse): ClientDietFoodRow => {
+  const courseCategory = normalizeDietCourseCategory(item);
+  return {
+    id: String(item.id),
+    menuItemId: item.id,
+    foodId: item.food_id ?? item.foods?.id ?? null,
+    exchangeGroupId: item.exchange_group_id ?? item.foods?.exchange_group_id ?? null,
+    label:
+      item.foods?.name?.trim() ||
+      item.exchange_groups?.name?.trim() ||
+      'Alimento',
+    exchangeGroupName: item.exchange_groups?.name?.trim() || null,
+    isClientSwap: Boolean(item.is_client_swap),
+    originalFoodId: item.original_food_id ?? null,
+    originalLabel: item.original_food_name?.trim() || null,
+    portion: derivePortionFromMenuItem(item),
+    courseCategoryId: courseCategory.courseCategoryId,
+    courseCategory: courseCategory.courseCategory,
+  };
+};
 
 const mapRecipeIngredientRow = (
   ingredient: NutritionRecipeDetailIngredientResponse,
+  courseCategory: NormalizedDietCourseCategory = {
+    courseCategoryId: null,
+    courseCategory: null,
+  },
 ): ClientDietIngredientRow => ({
   id: String(ingredient.id),
   recipeIngredientId: toNumber(ingredient.id) ?? undefined,
@@ -632,6 +657,8 @@ const mapRecipeIngredientRow = (
   originalFoodId: ingredient.original_food_id ?? null,
   originalLabel: ingredient.original_food_name?.trim() || null,
   portion: derivePortionFromRecipeIngredient(ingredient),
+  courseCategoryId: courseCategory.courseCategoryId,
+  courseCategory: courseCategory.courseCategory,
 });
 
 const buildRecipeCardFromGroup = (
@@ -639,10 +666,13 @@ const buildRecipeCardFromGroup = (
 ): ClientDietRecipeCard => {
   const detailSummary = mapRecipeSummaryFromDetail(group.detail);
   const recipeSummary = detailSummary || group.summary;
+  const { courseCategoryId, courseCategory } = group.courseCategory;
 
   const ingredients =
     group.detail?.ingredients?.length
-      ? group.detail.ingredients.map(mapRecipeIngredientRow)
+      ? group.detail.ingredients.map((ingredient) =>
+          mapRecipeIngredientRow(ingredient, group.courseCategory),
+        )
       : group.items.map((item) => ({
           id: String(item.id),
           label:
@@ -651,6 +681,8 @@ const buildRecipeCardFromGroup = (
             'Ingrediente',
           exchangeGroupName: item.exchange_groups?.name?.trim() || null,
           portion: derivePortionFromMenuItem(item),
+          courseCategoryId,
+          courseCategory,
         }));
 
   return {
@@ -659,6 +691,8 @@ const buildRecipeCardFromGroup = (
     title: recipeSummary.title,
     imageUrl: recipeSummary.imageUrl,
     ingredientCount: ingredients.length,
+    courseCategoryId,
+    courseCategory,
     ingredients,
   };
 };
@@ -693,6 +727,7 @@ const mapDietMeal = (
       detail: item.recipe_detail ?? null,
       items: [item],
       firstIndex: index,
+      courseCategory: normalizeDietCourseCategory(item),
     });
   });
 
@@ -746,7 +781,9 @@ export const mapDietMenuResponse = (
 const mapDietRecipeDetailResponse = (
   recipe: NutritionRecipeDetailResponse,
 ): ClientDietRecipeDetail => {
-  const ingredients = (recipe.ingredients ?? []).map(mapRecipeIngredientRow);
+  const ingredients = (recipe.ingredients ?? []).map((ingredient) =>
+    mapRecipeIngredientRow(ingredient),
+  );
 
   return {
     id: `recipe-${recipe.id}`,

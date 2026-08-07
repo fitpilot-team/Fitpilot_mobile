@@ -931,6 +931,14 @@ export interface ClientDietPortion {
   grams: number | null;
 }
 
+export interface ClientDietCourseCategory {
+  id: number;
+  code: string;
+  name: string;
+  emoji: string;
+  sortOrder: number;
+}
+
 export interface ClientDietIngredientRow {
   id: string;
   menuItemId?: number;
@@ -943,6 +951,8 @@ export interface ClientDietIngredientRow {
   originalFoodId?: number | null;
   originalLabel?: string | null;
   portion: ClientDietPortion;
+  courseCategoryId: number | null;
+  courseCategory: ClientDietCourseCategory | null;
 }
 
 export type ClientDietFoodRow = ClientDietIngredientRow;
@@ -977,6 +987,8 @@ export interface ClientDietRecipeCard {
   title: string;
   imageUrl: string | null;
   ingredientCount: number;
+  courseCategoryId: number | null;
+  courseCategory: ClientDietCourseCategory | null;
   ingredients: ClientDietIngredientRow[];
 }
 
