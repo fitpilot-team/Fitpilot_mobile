@@ -23,6 +23,15 @@ PATH="${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-
 export ANDROID_HOME ANDROID_SDK_ROOT ANDROID_NDK_HOME ANDROID_NDK_ROOT
 export JAVA_HOME GRADLE_USER_HOME PATH
 
+# El checkout vive en NTFS y el git de Windows lo materializa con CRLF (core.autocrlf=true
+# en su config de sistema). El git de Linux no hereda ese ajuste, así que sin esto ve el
+# repo entero como modificado. Se inyecta por entorno para que también lo apliquen los
+# `git` que lanza eas-cli, y sin tocar la config del repo. Es inocuo en un checkout LF:
+# autocrlf normaliza a LF antes de comparar en ambos casos.
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=core.autocrlf
+export GIT_CONFIG_VALUE_0=true
+
 usage() {
   cat <<'EOF'
 Uso:

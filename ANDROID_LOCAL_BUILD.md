@@ -72,9 +72,13 @@ El script:
 3. **Aborta si hay cambios sin commitear**, porque EAS empaqueta el estado commiteado de
    git y esos cambios se quedarían fuera del artefacto sin aviso. Los archivos sin
    trackear solo generan un aviso.
-4. Compila en `~/.cache/eas-build/...` (ext4). No usar `/mnt/f` como working dir: el
+4. Fuerza `core.autocrlf=true` por entorno (`GIT_CONFIG_*`). El checkout vive en NTFS con
+   finales CRLF porque el git de Windows tiene ese ajuste en su config de sistema; el git
+   de Linux no lo hereda y, sin esto, ve **todo** el repo como modificado —lo que dispara
+   el guard anterior y confunde a eas-cli.
+5. Compila en `~/.cache/eas-build/...` (ext4). No usar `/mnt/f` como working dir: el
    `node_modules` de pnpm sobre DrvFs es lento y frágil.
-5. Copia el artefacto a `F:\FitPilot-Builds\android\<perfil>\` e imprime tamaño y SHA-256.
+6. Copia el artefacto a `F:\FitPilot-Builds\android\<perfil>\` e imprime tamaño y SHA-256.
 
 ## Versionado
 
