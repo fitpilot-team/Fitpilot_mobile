@@ -997,6 +997,7 @@ export interface ClientDietRecipeDetail {
   recipeId: number;
   title: string;
   imageUrl: string | null;
+  videoUrl: string | null;
   description: string | null;
   descriptionRich: unknown | null;
   ingredientCount: number;

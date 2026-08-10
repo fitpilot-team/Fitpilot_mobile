@@ -81,6 +81,7 @@ type NutritionRecipeDetailResponse = {
   description?: string | null;
   description_rich?: unknown | null;
   image_url: string | null;
+  video_url?: string | null;
   ingredient_count?: number | string | null;
   ingredients?: NutritionRecipeDetailIngredientResponse[] | null;
 };
@@ -790,6 +791,7 @@ const mapDietRecipeDetailResponse = (
     recipeId: recipe.id,
     title: recipe.name?.trim() || 'Receta',
     imageUrl: recipe.image_url ?? null,
+    videoUrl: recipe.video_url ?? null,
     description: recipe.description?.trim() || null,
     descriptionRich: recipe.description_rich ?? null,
     ingredientCount: toNumber(recipe.ingredient_count) ?? ingredients.length,

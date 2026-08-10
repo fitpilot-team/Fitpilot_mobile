@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button, Card, LoadingSpinner } from '../../src/components/common';
 import { RecipeIngredientSwapModal } from '../../src/components/diet';
+import { VideoPlayerModal } from '../../src/components/video/VideoPlayerModal';
+import { YouTubePlayerModal } from '../../src/components/video/YouTubePlayerModal';
 import {
   borderRadius,
   brandColors,
@@ -37,6 +39,7 @@ import type {
   ClientFoodSwapCandidate,
 } from '../../src/types';
 import { getRecipeRichTextBlocks } from '../../src/utils/recipeRichText';
+import { isYouTubeUrl } from '../../src/utils/exerciseTechnique';
 
 type RecipeTab = 'description' | 'ingredients';
 
@@ -196,6 +199,10 @@ export default function RecipeDetailScreen() {
   const [swapFoodsLoading, setSwapFoodsLoading] = useState(false);
   const [swapFoodsError, setSwapFoodsError] = useState<string | null>(null);
   const [isSavingSwap, setIsSavingSwap] = useState(false);
+  const [isVideoModalVisible, setIsVideoModalVisible] = useState(false);
+
+  const videoUrl = detail?.videoUrl ?? null;
+  const useYouTubePlayer = isYouTubeUrl(videoUrl);
 
   const selectedIngredient = useMemo(
     () => detail?.ingredients.find((ingredient) => ingredient.id === selectedIngredientId) ?? null,
@@ -470,6 +477,16 @@ export default function RecipeDetailScreen() {
         {!error && activeTab === 'description' ? (
           <Card style={styles.contentCard}>
             <Text style={styles.sectionTitle}>Preparacion</Text>
+            {videoUrl ? (
+              <TouchableOpacity
+                style={styles.videoButton}
+                activeOpacity={0.85}
+                onPress={() => setIsVideoModalVisible(true)}
+              >
+                <Ionicons name="play-circle-outline" size={22} color="#FFFFFF" />
+                <Text style={styles.videoButtonText}>Ver video de preparación</Text>
+              </TouchableOpacity>
+            ) : null}
             {descriptionBlocks.length > 0 ? (
               <View style={styles.descriptionContent}>
                 {descriptionBlocks.map((block, blockIndex) => {
@@ -547,6 +564,24 @@ export default function RecipeDetailScreen() {
         onSelectFood={handleSelectSwapFood}
         onReset={handleResetSwap}
       />
+
+      {videoUrl && !useYouTubePlayer ? (
+        <VideoPlayerModal
+          visible={isVideoModalVisible}
+          videoUri={videoUrl}
+          exerciseName={detail?.title ?? 'Receta'}
+          onClose={() => setIsVideoModalVisible(false)}
+        />
+      ) : null}
+
+      {videoUrl && useYouTubePlayer ? (
+        <YouTubePlayerModal
+          visible={isVideoModalVisible}
+          exerciseName={detail?.title ?? 'Receta'}
+          youtubeUrl={videoUrl}
+          onClose={() => setIsVideoModalVisible(false)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -677,6 +712,21 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
     contentCard: {
       gap: spacing.md,
       backgroundColor: theme.colors.surface,
+    },
+    videoButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      backgroundColor: theme.colors.primary,
+      borderRadius: borderRadius.lg,
+      paddingVertical: spacing.sm + 2,
+      paddingHorizontal: spacing.md,
+    },
+    videoButtonText: {
+      color: '#FFFFFF',
+      fontSize: fontSize.base,
+      fontWeight: '700',
     },
     sectionTitle: {
       color: theme.colors.textPrimary,
