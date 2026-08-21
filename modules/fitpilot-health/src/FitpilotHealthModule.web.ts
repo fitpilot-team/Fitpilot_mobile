@@ -1,6 +1,7 @@
 import type {
   FitpilotHealthAvailability,
   FitpilotHealthPermissionStatus,
+  FitpilotHealthSnapshot,
   FitpilotHealthSyncPayload,
   FitpilotHealthSyncRange,
 } from './FitpilotHealth.types';
@@ -28,6 +29,17 @@ export const syncRange = async (
   to_at: range.endAt,
   permissions: [],
   records: [],
+  daily_summaries: [],
+  metadata: { unsupported: true },
+});
+
+export const readSnapshot = async (
+  range: FitpilotHealthSyncRange,
+): Promise<FitpilotHealthSnapshot> => ({
+  platform: 'health_connect',
+  from_at: range.startAt,
+  to_at: range.endAt,
+  permissions: [],
   daily_summaries: [],
   metadata: { unsupported: true },
 });

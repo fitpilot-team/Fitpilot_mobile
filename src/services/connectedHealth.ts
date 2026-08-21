@@ -1,6 +1,7 @@
 import { AppState } from 'react-native';
 import FitpilotHealth, {
   type FitpilotHealthAvailability,
+  type FitpilotHealthSnapshot,
   type FitpilotHealthPermissionStatus,
   type FitpilotHealthSyncPayload,
 } from '../../modules/fitpilot-health';
@@ -128,6 +129,30 @@ export const connectedHealthService = {
     FitpilotHealth.getGrantedPermissions(),
 
   openSettings: (): Promise<void> => FitpilotHealth.openSettings(),
+
+  /**
+   * Lectura directa del dispositivo, sin red. Es lo que permite pintar la cifra que el
+   * teléfono ya tiene sin esperar al viaje de ida y vuelta al backend.
+   *
+   * Es tolerante a propósito: cualquier fallo devuelve `null` y la pantalla sigue su curso
+   * con lo que venga del backend. Es una optimización de render, nunca un motivo para
+   * romper la pantalla ni para mostrar un error.
+   */
+  readSnapshot: async (days = 30): Promise<FitpilotHealthSnapshot | null> => {
+    try {
+      const availability = await FitpilotHealth.isAvailable();
+      if (!availability.available) {
+        return null;
+      }
+
+      const snapshot = await FitpilotHealth.readSnapshot(buildSyncRange(days));
+      // Sin permisos el snapshot son días vacíos: no aporta nada y además haría que la
+      // pantalla marcara "actualizado ahora" sobre la nada.
+      return snapshot.permissions.length ? snapshot : null;
+    } catch {
+      return null;
+    }
+  },
 
   getSummary: (days = 30): Promise<ConnectedHealthSummaryResponse> =>
     nutritionClient.get<ConnectedHealthSummaryResponse>(

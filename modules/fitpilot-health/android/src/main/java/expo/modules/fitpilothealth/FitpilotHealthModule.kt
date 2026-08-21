@@ -113,6 +113,10 @@ class FitpilotHealthModule : Module() {
       permissionStatus(requiresManualGrant = false)
     }
 
+    AsyncFunction("readSnapshot") Coroutine { range: Map<String, String> ->
+      readSnapshot(range)
+    }
+
     AsyncFunction("syncRange") Coroutine { range: Map<String, String> ->
       syncRange(range)
     }
@@ -243,6 +247,115 @@ class FitpilotHealthModule : Module() {
   }
 
   // --- Sincronización -------------------------------------------------------
+
+  /**
+   * Lectura ligera para pintar la pantalla: agrega los días del rango y NO sube nada.
+   *
+   * Existe porque el dato ya está en el teléfono y hacerle dar la vuelta por el backend
+   * antes de enseñarlo es lo que hacía que las métricas se sintieran ajenas a la app. El
+   * sync completo sigue ocurriendo después, en segundo plano.
+   *
+   * Se salta la lectura de registros salvo HRV y glucosa, que son las dos métricas sin
+   * agregado en Health Connect y hay que promediar a mano.
+   */
+  private suspend fun readSnapshot(range: Map<String, String>): Map<String, Any?> {
+    val startAt = parseInstant(range["startAt"], "startAt")
+    val endAt = parseInstant(range["endAt"], "endAt")
+    if (!endAt.isAfter(startAt)) {
+      throw HealthRangeException("endAt debe ser posterior a startAt")
+    }
+
+    val emptySnapshot = mapOf(
+      "platform" to "health_connect",
+      "from_at" to startAt.toString(),
+      "to_at" to endAt.toString(),
+      "permissions" to emptyList<String>(),
+      "daily_summaries" to emptyList<Map<String, Any?>>(),
+    )
+
+    // A diferencia de syncRange, aquí no se lanza: el snapshot es una optimización de
+    // render y la pantalla debe poder seguir su curso con lo que venga del backend.
+    if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) {
+      return emptySnapshot
+    }
+
+    val granted = grantedPermissions()
+    if (granted.intersect(corePermissions).isEmpty()) {
+      return emptySnapshot
+    }
+
+    val zone = ZoneId.systemDefault()
+    val derived = queryDerivedDailyValues(startAt, endAt, granted, zone)
+    val summaries = queryDailySummaries(startAt, endAt, granted, zone, derived)
+
+    return mapOf(
+      "platform" to "health_connect",
+      "from_at" to startAt.toString(),
+      "to_at" to endAt.toString(),
+      "permissions" to granted.toList(),
+      "daily_summaries" to summaries.summaries,
+      "metadata" to mapOf(
+        "read_mode" to "snapshot",
+        "android_sdk" to Build.VERSION.SDK_INT,
+        "timezone_offset_minutes" to zone.rules.getOffset(endAt).totalSeconds / 60,
+        "source_packages" to summaries.sources.sorted(),
+      ),
+    )
+  }
+
+  /**
+   * Solo HRV y glucosa: son las dos métricas que Health Connect no sabe agregar, así que su
+   * media diaria hay que calcularla desde los registros. El resto del snapshot sale de
+   * agregados, que son mucho más baratos.
+   */
+  private suspend fun queryDerivedDailyValues(
+    startAt: Instant,
+    endAt: Instant,
+    granted: Set<String>,
+    zone: ZoneId,
+  ): DerivedDailyValues = withContext(Dispatchers.IO) {
+    val client = healthClient()
+    val timeRange = TimeRangeFilter.between(startAt, endAt)
+    val hrvBuckets = mutableMapOf<LocalDate, MutableList<Double>>()
+    val glucoseBuckets = mutableMapOf<LocalDate, MutableList<Double>>()
+
+    if (hasPermission(granted, HeartRateVariabilityRmssdRecord::class)) {
+      runCatching {
+        client.readRecords(
+          ReadRecordsRequest(
+            recordType = HeartRateVariabilityRmssdRecord::class,
+            timeRangeFilter = timeRange,
+            ascendingOrder = false,
+            pageSize = PAGE_SIZE,
+          )
+        ).records
+      }.getOrDefault(emptyList()).forEach { record ->
+        hrvBuckets.getOrPut(record.time.atZone(zone).toLocalDate()) { mutableListOf() }
+          .add(record.heartRateVariabilityMillis)
+      }
+    }
+
+    if (hasPermission(granted, BloodGlucoseRecord::class)) {
+      runCatching {
+        client.readRecords(
+          ReadRecordsRequest(
+            recordType = BloodGlucoseRecord::class,
+            timeRangeFilter = timeRange,
+            ascendingOrder = false,
+            pageSize = PAGE_SIZE,
+          )
+        ).records
+      }.getOrDefault(emptyList()).forEach { record ->
+        glucoseBuckets.getOrPut(record.time.atZone(zone).toLocalDate()) { mutableListOf() }
+          .add(record.level.inMilligramsPerDeciliter)
+      }
+    }
+
+    DerivedDailyValues(
+      hrvByDate = hrvBuckets.mapValues { (_, values) -> values.average().round(2) },
+      glucoseByDate = glucoseBuckets.mapValues { (_, values) -> values.average().round(2) },
+    )
+  }
 
   private suspend fun syncRange(range: Map<String, String>): Map<String, Any?> {
     val startAt = parseInstant(range["startAt"], "startAt")

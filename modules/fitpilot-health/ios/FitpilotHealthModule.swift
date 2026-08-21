@@ -57,6 +57,54 @@ public class FitpilotHealthModule: Module {
       self.permissionStatus(granted: self.permissionNames(), requiresManualGrant: false)
     }
 
+    // Lectura ligera para pintar la pantalla: agrega el rango y NO sube nada. El dato ya
+    // está en el teléfono; hacerle dar la vuelta por el backend antes de enseñarlo es lo
+    // que hacía que las métricas se sintieran ajenas a la app. Se salta los registros
+    // corporales (peso, grasa, masa magra), que no alimentan ninguna tarjeta del resumen.
+    AsyncFunction("readSnapshot") { (range: [String: String]) async throws -> [String: Any] in
+      guard
+        let startInput = range["startAt"],
+        let endInput = range["endAt"],
+        let startAt = ISO8601DateFormatter.fitpilot.date(from: startInput),
+        let endAt = ISO8601DateFormatter.fitpilot.date(from: endInput)
+      else {
+        throw NSError(
+          domain: "FitpilotHealth",
+          code: 3,
+          userInfo: [NSLocalizedDescriptionKey: "readSnapshot requires valid startAt and endAt ISO strings."]
+        )
+      }
+
+      // A diferencia de syncRange, aquí no se lanza por falta de disponibilidad: el
+      // snapshot es una optimización de render y la pantalla debe seguir su curso con lo
+      // que venga del backend.
+      guard HKHealthStore.isHealthDataAvailable() else {
+        return [
+          "platform": "healthkit",
+          "from_at": ISO8601DateFormatter.fitpilot.string(from: startAt),
+          "to_at": ISO8601DateFormatter.fitpilot.string(from: endAt),
+          "permissions": [String](),
+          "daily_summaries": [[String: Any]](),
+        ]
+      }
+
+      let quantitySummaries = try await self.queryDailyQuantitySummaries(startAt: startAt, endAt: endAt)
+      let sleepRecords = try await self.querySleepRecords(startAt: startAt, endAt: endAt)
+      let workoutRecords = try await self.queryWorkoutRecords(startAt: startAt, endAt: endAt)
+      let summaries = self.mergeSummaries(quantitySummaries, records: sleepRecords + workoutRecords)
+
+      return [
+        "platform": "healthkit",
+        "from_at": ISO8601DateFormatter.fitpilot.string(from: startAt),
+        "to_at": ISO8601DateFormatter.fitpilot.string(from: endAt),
+        "permissions": self.permissionNames(),
+        "daily_summaries": summaries,
+        "metadata": [
+          "read_mode": "snapshot",
+        ],
+      ]
+    }
+
     AsyncFunction("syncRange") { (range: [String: String]) async throws -> [String: Any] in
       guard HKHealthStore.isHealthDataAvailable() else {
         throw NSError(

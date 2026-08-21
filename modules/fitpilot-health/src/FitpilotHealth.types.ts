@@ -56,6 +56,21 @@ export type FitpilotHealthSyncRange = {
   endAt: string;
 };
 
+/**
+ * Lectura ligera y de solo lectura del dispositivo: agrega los días del rango sin subir
+ * nada al backend. Existe para que la app pueda pintar la cifra que el teléfono YA tiene
+ * antes de que haya red de por medio; el sync completo (`syncRange`) sigue ocurriendo
+ * después, en segundo plano.
+ */
+export type FitpilotHealthSnapshot = {
+  platform: Exclude<FitpilotHealthPlatform, 'unsupported'>;
+  from_at: string;
+  to_at: string;
+  permissions: string[];
+  daily_summaries: FitpilotHealthDailySummary[];
+  metadata?: Record<string, unknown>;
+};
+
 export type FitpilotHealthSyncPayload = {
   platform: Exclude<FitpilotHealthPlatform, 'unsupported'>;
   from_at: string;

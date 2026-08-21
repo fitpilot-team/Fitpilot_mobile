@@ -2,6 +2,7 @@ import {
   getGrantedPermissions,
   isAvailable,
   openSettings,
+  readSnapshot,
   requestPermissions,
   syncRange,
 } from './src/FitpilotHealthModule';
@@ -11,6 +12,7 @@ export {
   getGrantedPermissions,
   isAvailable,
   openSettings,
+  readSnapshot,
   requestPermissions,
   syncRange,
 } from './src/FitpilotHealthModule';
@@ -19,6 +21,7 @@ export default {
   getGrantedPermissions,
   isAvailable,
   openSettings,
+  readSnapshot,
   requestPermissions,
   syncRange,
 };
