@@ -2,6 +2,31 @@ import type { Ionicons } from '@expo/vector-icons';
 
 export type ConnectedHealthFeedbackRange = 7 | 14 | 30;
 
+/**
+ * Estado en el que está la integración, con la granularidad que la UI necesita para decir
+ * algo accionable. Hasta ahora "sin permisos", "con permisos pero con la plataforma de
+ * salud vacía" y "funcionando" eran indistinguibles: los tres acababan en el mismo empty
+ * state genérico con un botón de Sincronizar que no arreglaba nada.
+ */
+export type ConnectedHealthConnectionState =
+  | 'unavailable'
+  | 'needs_update'
+  | 'needs_install'
+  | 'no_permissions'
+  | 'no_source_data'
+  | 'partial_permissions'
+  | 'ok';
+
+export type ConnectedHealthStateAction = 'permissions' | 'settings' | 'sync' | 'none';
+
+export type ConnectedHealthStateCopy = {
+  title: string;
+  message: string;
+  /** Versión de una línea, para la tarjeta compacta del dashboard. */
+  compactMessage: string;
+  action: ConnectedHealthStateAction;
+};
+
 export type ConnectedHealthReadinessStatus =
   | 'good'
   | 'watch'
@@ -80,6 +105,10 @@ export type ConnectedHealthHistoryModel = {
 export type ConnectedHealthFeedbackModel = {
   range: ConnectedHealthFeedbackRange;
   hasData: boolean;
+  // Distingue "hay datos de verdad" de "hay filas". Health Connect sintetiza un gasto
+  // basal desde el perfil del usuario aunque no haya ningún dispositivo conectado, así
+  // que hasData puede ser true con cero mediciones reales detrás.
+  hasRealData: boolean;
   sourceLabel: string;
   latestSyncAt: string | null;
   freshnessLabel: string;
@@ -93,4 +122,7 @@ export type ConnectedHealthFeedbackModel = {
   };
   metrics: ConnectedHealthMetricCard[];
   insights: ConnectedHealthInsight[];
+  // Motivo del último sync fallido, tal y como lo guardó el backend. Se rellena solo
+  // cuando latest_sync.status === 'failed'.
+  lastSyncErrorMessage: string | null;
 };

@@ -19,6 +19,8 @@ import { markConnectedHealthSetupHandledForInstallation } from '../src/services/
 import { useAuthStore } from '../src/store/authStore';
 import {
   getConnectedHealthAuthorizationRecoveryMessage,
+  getConnectedHealthAvailabilityCopy,
+  getConnectedHealthPlatformLabel,
   isConnectedHealthAuthorizationPending,
 } from '../src/utils/connectedHealthAuthorization';
 import { useThemedStyles, type AppTheme } from '../src/theme';
@@ -42,16 +44,6 @@ const valueProps: { icon: keyof typeof Ionicons.glyphMap; title: string; copy: s
   },
 ];
 
-const getPlatformLabel = (platform?: string | null) => {
-  if (platform === 'healthkit') {
-    return 'Apple Health';
-  }
-  if (platform === 'health_connect') {
-    return 'Health Connect';
-  }
-  return Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
-};
-
 export default function HealthSetupScreen() {
   const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
@@ -66,6 +58,7 @@ export default function HealthSetupScreen() {
   const [needsAuthorizationRecovery, setNeedsAuthorizationRecovery] = useState(false);
 
   const isAvailable = availability?.available ?? false;
+  const availabilityCopy = getConnectedHealthAvailabilityCopy(availability);
   const isBusy = isConnecting || isSkipping;
   const showSettingsAction = permissionBlocked || needsAuthorizationRecovery;
 
@@ -168,7 +161,7 @@ export default function HealthSetupScreen() {
           </View>
           <Text style={styles.title}>Activa salud conectada</Text>
           <Text style={styles.subtitle}>
-            Conecta {getPlatformLabel(availability?.platform)} para que tus métricas de
+            Conecta {getConnectedHealthPlatformLabel(availability?.platform)} para que tus métricas de
             recuperación y energía trabajen por ti. Solo lectura, tú mandas.
           </Text>
         </View>
@@ -214,12 +207,10 @@ export default function HealthSetupScreen() {
         ) : (
           <View style={styles.unavailableBox}>
             <Ionicons name="alert-circle-outline" size={22} color={styles.unavailableIcon.color} />
-            <Text style={styles.unavailableText}>
-              {getPlatformLabel(availability?.platform)} no está disponible en este dispositivo.
-              {Platform.OS === 'android'
-                ? ' Instala Health Connect para activar tus métricas.'
-                : ' Revisa los ajustes de salud para continuar.'}
-            </Text>
+            <View style={styles.unavailableCopy}>
+              <Text style={styles.unavailableTitle}>{availabilityCopy.title}</Text>
+              <Text style={styles.unavailableText}>{availabilityCopy.message}</Text>
+            </View>
           </View>
         )}
 
@@ -227,7 +218,7 @@ export default function HealthSetupScreen() {
           <View style={styles.unavailableBox}>
             <Ionicons name="alert-circle-outline" size={22} color={styles.unavailableIcon.color} />
             <Text style={styles.unavailableText}>
-              No se activó ningún permiso. Abre {getPlatformLabel(availability?.platform)}, concede
+              No se activó ningún permiso. Abre {getConnectedHealthPlatformLabel(availability?.platform)}, concede
               los permisos de FitPilot y vuelve a intentar la conexión.
             </Text>
           </View>
@@ -277,7 +268,10 @@ export default function HealthSetupScreen() {
           </>
         ) : (
           <Button
-            title={Platform.OS === 'android' ? 'Abrir Health Connect' : 'Abrir ajustes'}
+            title={
+              availabilityCopy.actionLabel ??
+              (Platform.OS === 'android' ? 'Abrir Health Connect' : 'Abrir ajustes')
+            }
             onPress={() => {
               void connectedHealthService.openSettings();
             }}
@@ -444,6 +438,15 @@ const createStyles = (theme: AppTheme) =>
     },
     unavailableIcon: {
       color: theme.colors.warning,
+    },
+    unavailableCopy: {
+      flex: 1,
+      gap: spacing.xs,
+    },
+    unavailableTitle: {
+      fontSize: fontSize.base,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
     },
     unavailableText: {
       flex: 1,

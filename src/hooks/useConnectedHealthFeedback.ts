@@ -9,10 +9,13 @@ import {
   type ConnectedHealthSummaryResponse,
 } from '../services/connectedHealth';
 import type {
+  ConnectedHealthConnectionState,
   ConnectedHealthFeedbackRange,
 } from '../types/connectedHealthFeedback';
 import {
+  describeMissingConnectedHealthPermissions,
   getConnectedHealthAuthorizationRecoveryMessage,
+  getConnectedHealthPermissionState,
   isConnectedHealthAuthorizationPending,
 } from '../utils/connectedHealthAuthorization';
 import {
@@ -40,6 +43,15 @@ type LoadOptions = {
 
 const AUTO_SYNC_SESSION_KEY = 'connected-health-feedback-v1';
 const autoSyncAttempted = new Set<string>();
+
+const availabilityStateOf = (
+  status: FitpilotHealthAvailability['status'] | undefined,
+): ConnectedHealthConnectionState => {
+  if (status === 'needs_update' || status === 'needs_install') {
+    return status;
+  }
+  return 'unavailable';
+};
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -192,6 +204,21 @@ export function useConnectedHealthFeedback({
           setSummary(nextSyncedSummary);
           setNowMs(refreshedAtMs);
         }
+
+        // Si este sync presentó el diálogo de permisos, lo que tenemos en estado quedó
+        // obsoleto en cuanto el usuario respondió. Sin esto el aviso de permisos seguía
+        // visible hasta el siguiente load().
+        if (ensureAuthorization) {
+          try {
+            const refreshedPermissions =
+              await connectedHealthService.getGrantedPermissions();
+            if (isMountedRef.current) {
+              setPermissions(refreshedPermissions);
+            }
+          } catch {
+            // El sync ya fue bien: no merece la pena degradar la pantalla por esto.
+          }
+        }
       } catch (syncFailure) {
         if (isMountedRef.current) {
           if (!isConnectedHealthAuthorizationPending(syncFailure)) {
@@ -307,6 +334,46 @@ export function useConnectedHealthFeedback({
     await performSync({ ensureAuthorization: true });
   }, [performSync]);
 
+  // Pedir permisos y, si el usuario concede algo, sincronizar acto seguido. Antes el CTA
+  // del dashboard solo navegaba a Perfil > Salud conectada, donde había que dar un segundo
+  // toque en "Conectar permisos": tres toques para algo que debería ser uno.
+  const requestPermissions = useCallback(async () => {
+    if (!enabled || isSyncingRef.current) {
+      return;
+    }
+
+    setSyncError(null);
+    try {
+      const nextPermissions = await connectedHealthService.requestPermissions();
+      if (isMountedRef.current) {
+        setPermissions(nextPermissions);
+      }
+      if (nextPermissions.granted.length) {
+        await performSync({ ensureAuthorization: false });
+      } else if (isMountedRef.current) {
+        setSyncError(getConnectedHealthAuthorizationRecoveryMessage());
+      }
+    } catch (permissionFailure) {
+      if (isMountedRef.current) {
+        setSyncError(
+          getErrorMessage(permissionFailure, 'No se pudieron solicitar permisos.'),
+        );
+      }
+    }
+  }, [enabled, performSync]);
+
+  const openSettings = useCallback(async () => {
+    try {
+      await connectedHealthService.openSettings();
+    } catch (settingsFailure) {
+      if (isMountedRef.current) {
+        setSyncError(
+          getErrorMessage(settingsFailure, 'No se pudo abrir la app de salud.'),
+        );
+      }
+    }
+  }, []);
+
   const syncIfStale = useCallback(async () => {
     if (!enabled) {
       return;
@@ -383,15 +450,43 @@ export function useConnectedHealthFeedback({
     [days, summary],
   );
 
-  const hasGrantedPermissions = (permissions?.granted.length ?? 0) > 0;
+  const permissionState = getConnectedHealthPermissionState(permissions);
+
+  // Bloqueante: sin un solo permiso no hay nada que sincronizar. Ya NO depende de
+  // `feedback.hasData`, porque un día de solo energía basal sintética contaba como "hay
+  // datos" y suprimía el aviso para siempre; y porque si el usuario revoca los permisos,
+  // la app seguía mostrando lo cacheado sin avisar de nada.
   const needsPermissionCta =
-    availability?.available === true &&
-    !hasGrantedPermissions &&
-    !feedback.hasData;
+    availability?.available === true && permissionState === 'none';
+
+  // No bloqueante: hay datos, pero faltan permisos que alimentan tarjetas visibles. Antes
+  // se comprobaba solo `granted.length > 0`, así que conceder uno de quince bastaba para
+  // que la app se declarara conectada y no volviera a ofrecer completar permisos jamás.
+  const needsPermissionUpgradeCta =
+    availability?.available === true && permissionState === 'partial';
+
+  const missingPermissionsLabel = needsPermissionUpgradeCta
+    ? describeMissingConnectedHealthPermissions(permissions)
+    : '';
+
+  // Los tres estados que hasta ahora eran indistinguibles en la UI (sin permisos, con
+  // permisos pero con Health Connect vacío, y funcionando) más los de disponibilidad.
+  const connectionState: ConnectedHealthConnectionState =
+    availability?.available !== true
+      ? availabilityStateOf(availability?.status)
+      : permissionState === 'none'
+        ? 'no_permissions'
+        : !feedback.hasRealData
+          ? 'no_source_data'
+          : permissionState === 'partial'
+            ? 'partial_permissions'
+            : 'ok';
 
   return {
     availability,
     permissions,
+    permissionState,
+    connectionState,
     summary,
     feedback,
     history,
@@ -401,8 +496,12 @@ export function useConnectedHealthFeedback({
     error,
     syncError,
     needsPermissionCta,
+    needsPermissionUpgradeCta,
+    missingPermissionsLabel,
     refresh,
     sync,
+    requestPermissions,
+    openSettings,
     syncIfStale,
     refreshOnFocus,
   };

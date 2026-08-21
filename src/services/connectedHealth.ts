@@ -1,9 +1,10 @@
-import { Platform } from 'react-native';
+import { AppState } from 'react-native';
 import FitpilotHealth, {
   type FitpilotHealthAvailability,
   type FitpilotHealthPermissionStatus,
   type FitpilotHealthSyncPayload,
 } from '../../modules/fitpilot-health';
+import { ConnectedHealthPermissionsError } from '../utils/connectedHealthAuthorization';
 import { nutritionClient } from './api';
 
 export type ConnectedHealthConnection = {
@@ -87,11 +88,21 @@ const buildSyncRange = (days: number) => {
   };
 };
 
+// Desfase de la zona horaria del dispositivo, en minutos a SUMAR a un instante UTC para
+// obtener la hora local (UTC-6 -> -360). El backend lo necesita para agrupar los registros
+// por el día que el usuario vivió: agruparlos en UTC mandaba todo lo posterior a las 18:00
+// al día siguiente y creaba resúmenes fantasma.
+const timezoneOffsetMinutes = () => -new Date().getTimezoneOffset();
+
 const withSharingEnabled = (
   payload: FitpilotHealthSyncPayload,
 ): FitpilotHealthSyncPayload & { sharing_enabled: boolean } => ({
   ...payload,
   sharing_enabled: true,
+  metadata: {
+    ...(payload.metadata ?? {}),
+    timezone_offset_minutes: timezoneOffsetMinutes(),
+  },
 });
 
 // Solicitud de permisos en vuelo (compartida). Presentar dos hojas de permisos de
@@ -138,14 +149,33 @@ export const connectedHealthService = {
     // Sincronizar/Conectar), nunca desde el auto-sync ni desde focus/AppState: presentar la
     // hoja de permisos de HealthKit desde un contexto de fondo o de forma concurrente hace
     // que iOS no invoque el completion y la promesa nativa se cuelgue -> "Sincronizando"
-    // infinito. requestPermissions está serializado y es idempotente (no muestra hoja si el
-    // usuario ya decidió). El auto-sync no pide permisos: si aún no se concedieron, syncRange
-    // devuelve notDetermined y el hook lo trata como estado silencioso (sin banner de error).
-    if (options.ensureAuthorization && Platform.OS === 'ios') {
-      await connectedHealthService.requestPermissions();
+    // infinito.
+    //
+    // Eso lo garantizan `ensureAuthorization` (false en auto-sync/focus/AppState) y el
+    // serializador `permissionRequestInFlight`, no la plataforma. Este gate llegó a
+    // comprobar `Platform.OS === 'ios'`, lo cual era una tautología en iOS y dejaba a
+    // Android SIN pedir permisos nunca desde el botón Sincronizar: el usuario que se saltó
+    // el onboarding sincronizaba en vano una y otra vez, con Health Connect devolviendo
+    // resúmenes vacíos y el backend respondiendo 200. La comprobación de AppState cubre la
+    // carrera real que quedaba: que la app pase a segundo plano mientras isAvailable()
+    // resuelve. Si eso ocurre no se pide nada y se sincroniza en modo solo lectura.
+    if (options.ensureAuthorization && AppState.currentState === 'active') {
+      const status = await connectedHealthService.requestPermissions();
+      if (!status.granted.length) {
+        throw new ConnectedHealthPermissionsError();
+      }
     }
 
     const payload = await FitpilotHealth.syncRange(buildSyncRange(days));
+
+    // Sin un solo permiso concedido el payload son 30 resúmenes vacíos. Subirlo devolvía
+    // 200 y la app pintaba "Actualizado ahora" junto a "Sin datos recientes", en bucle y
+    // sin ningún error visible. Cortamos antes del POST: esto también frena al auto-sync y
+    // al sync por foco, que son los que más basura generaban.
+    if (!payload.permissions.length) {
+      throw new ConnectedHealthPermissionsError();
+    }
+
     return nutritionClient.post<ConnectedHealthSyncResponse>(
       '/connected-health/sync',
       withSharingEnabled(payload),

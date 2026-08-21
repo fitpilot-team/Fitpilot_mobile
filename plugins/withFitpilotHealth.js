@@ -6,6 +6,7 @@ const {
 } = require('expo/config-plugins');
 
 const HEALTH_CONNECT_PACKAGE = 'com.google.android.apps.healthdata';
+const HEALTH_CONNECT_SETTINGS_ACTION = 'androidx.health.ACTION_HEALTH_CONNECT_SETTINGS';
 
 const HEALTH_CONNECT_READ_PERMISSIONS = [
   'android.permission.health.READ_ACTIVE_CALORIES_BURNED',
@@ -23,6 +24,10 @@ const HEALTH_CONNECT_READ_PERMISSIONS = [
   'android.permission.health.READ_STEPS',
   'android.permission.health.READ_TOTAL_CALORIES_BURNED',
   'android.permission.health.READ_WEIGHT',
+  // Sin este permiso Health Connect limita cada lectura a los 30 días posteriores a la
+  // concesión, y el sync pide exactamente 30: los días más antiguos volvían vacíos.
+  // Denegarlo no bloquea nada, solo recorta el histórico.
+  'android.permission.health.READ_HEALTH_DATA_HISTORY',
 ];
 
 const addUniqueManifestNode = (nodes, node) => {
@@ -45,6 +50,24 @@ const ensureHealthConnectQueries = (manifest) => {
   queries.package = addUniqueManifestNode(packages, {
     $: { 'android:name': HEALTH_CONNECT_PACKAGE },
   });
+
+  // En Android 14+ los ajustes de Health Connect los sirve el modulo del sistema
+  // (com.google.android.healthconnect.controller), que no esta en <package>. Sin declarar
+  // tambien el intent, "Abrir Health Connect" no resolvia y caia al fallback de Play Store,
+  // que en Android 14+ es un callejon sin salida.
+  const intents = queries.intent ?? [];
+  const hasSettingsIntent = intents.some((intent) =>
+    intent?.action?.some(
+      (action) => action?.$?.['android:name'] === HEALTH_CONNECT_SETTINGS_ACTION,
+    ),
+  );
+  queries.intent = hasSettingsIntent
+    ? intents
+    : [
+        ...intents,
+        { action: [{ $: { 'android:name': HEALTH_CONNECT_SETTINGS_ACTION } }] },
+      ];
+
   manifest.queries = [queries];
 };
 

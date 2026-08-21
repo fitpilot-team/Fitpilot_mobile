@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Card } from '../common';
 import { useConnectedHealthFeedback } from '../../hooks/useConnectedHealthFeedback';
+import { getConnectedHealthStateCopy } from '../../utils/connectedHealthFeedback';
 import {
   borderRadius,
   fontSize,
@@ -97,7 +98,12 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
     syncError,
     error,
     needsPermissionCta,
+    needsPermissionUpgradeCta,
+    missingPermissionsLabel,
+    connectionState,
     sync,
+    requestPermissions,
+    openSettings,
     refreshOnFocus,
   } = useConnectedHealthFeedback({
     days: 7,
@@ -132,13 +138,9 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
   );
 
   const primaryInsight = feedback.insights[0] ?? null;
-  const showLoading = isLoading && !feedback.hasData;
+  const showLoading = isLoading && !feedback.hasRealData;
 
-  const settingsAction = {
-    label: 'Configurar',
-    icon: 'settings-outline' as const,
-    onPress: () => router.push('/profile/connected-health' as never),
-  };
+  const stateCopy = getConnectedHealthStateCopy(connectionState, feedback.sourceLabel);
 
   const syncAction = {
     label: 'Sincronizar',
@@ -149,8 +151,30 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
     loading: isSyncing,
   };
 
+  // El CTA lleva directamente a la acción que resuelve el estado, en vez de dejar al
+  // usuario en la pantalla de perfil buscando qué tocar.
+  const emptyStateAction =
+    stateCopy.action === 'permissions'
+      ? {
+          label: 'Conceder permisos',
+          icon: 'key-outline' as const,
+          onPress: () => {
+            void requestPermissions();
+          },
+          loading: isSyncing,
+        }
+      : stateCopy.action === 'settings'
+        ? {
+            label: `Abrir ${feedback.sourceLabel}`,
+            icon: 'open-outline' as const,
+            onPress: () => {
+              void openSettings();
+            },
+          }
+        : syncAction;
+
   const handlePress = () => {
-    if (needsPermissionCta || !feedback.hasData) {
+    if (needsPermissionCta || !feedback.hasRealData) {
       router.push('/profile/connected-health' as never);
       return;
     }
@@ -202,7 +226,7 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
 
       {showLoading ? (
         <ConnectedHealthCardSkeleton compact={isCompact} />
-      ) : feedback.hasData ? (
+      ) : feedback.hasRealData ? (
         isCompact ? (
           <View style={styles.bodyCompact}>
             <Text style={styles.readinessInline} numberOfLines={1}>
@@ -265,26 +289,18 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
       ) : isCompact ? (
         <View style={styles.compactEmptyState}>
           <View style={styles.compactEmptyCopy}>
-            <Text style={styles.compactEmptyTitle}>Sin datos recientes</Text>
+            <Text style={styles.compactEmptyTitle}>{stateCopy.title}</Text>
             <Text style={styles.compactEmptyMessage} numberOfLines={1}>
-                {needsPermissionCta
-                ? 'Revisa permisos para activar energía y recuperación.'
-                : 'Sincroniza sueño, kcal, pasos y recuperación.'}
+              {stateCopy.compactMessage}
             </Text>
           </View>
-          <ConnectedHealthInlineAction
-            action={needsPermissionCta ? settingsAction : syncAction}
-          />
+          <ConnectedHealthInlineAction action={emptyStateAction} />
         </View>
       ) : (
         <ConnectedHealthEmptyState
-          title="Sin datos recientes"
-          message={
-            needsPermissionCta
-              ? 'Revisa permisos para activar el feedback de energía y recuperación.'
-              : 'Sincroniza salud conectada para ver sueño, kcal, pasos y recuperación.'
-          }
-          action={needsPermissionCta ? settingsAction : syncAction}
+          title={stateCopy.title}
+          message={stateCopy.message}
+          action={emptyStateAction}
         />
       )}
 
@@ -293,7 +309,7 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
           <Text style={styles.sourceText}>
             Fuente: {feedback.sourceLabel} - {feedback.latestDateLabel}
           </Text>
-          {feedback.hasData && feedback.isStale ? (
+          {feedback.hasRealData && feedback.isStale ? (
             <ConnectedHealthInlineAction
               action={{
                 label: 'Actualizar',
@@ -308,7 +324,31 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
         </View>
       ) : null}
 
-      <ConnectedHealthErrorText message={syncError ?? error} />
+      {needsPermissionUpgradeCta && feedback.hasRealData && !isCompact ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Completar permisos de salud conectada"
+          onPress={() => {
+            void requestPermissions();
+          }}
+          style={styles.partialPermissionsRow}
+        >
+          <Ionicons
+            name="key-outline"
+            size={16}
+            color={theme.colors.warning}
+          />
+          <Text style={styles.partialPermissionsText} numberOfLines={2}>
+            Permisos incompletos
+            {missingPermissionsLabel ? `: faltan ${missingPermissionsLabel}` : ''}.
+            Actívalos para completar tu recuperación.
+          </Text>
+        </Pressable>
+      ) : null}
+
+      <ConnectedHealthErrorText
+        message={syncError ?? error ?? feedback.lastSyncErrorMessage}
+      />
     </Card>
   );
 
@@ -546,6 +586,22 @@ const createStyles = (theme: AppTheme) =>
     compactEmptyMessage: {
       fontSize: fontSize.xs,
       color: theme.colors.textMuted,
+      lineHeight: 16,
+    },
+    partialPermissionsRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      borderRadius: borderRadius.md,
+      backgroundColor: `${theme.colors.warning}12`,
+    },
+    partialPermissionsText: {
+      flex: 1,
+      fontSize: fontSize.xs,
+      color: theme.colors.textSecondary,
       lineHeight: 16,
     },
   });

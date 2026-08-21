@@ -23,6 +23,13 @@ import {
   fontSize,
   spacing,
 } from '../../src/constants/colors';
+import {
+  describeMissingConnectedHealthPermissions,
+  getConnectedHealthAvailabilityCopy,
+  getConnectedHealthPermissionLabel,
+  getConnectedHealthPermissionState,
+  getConnectedHealthPlatformLabel,
+} from '../../src/utils/connectedHealthAuthorization';
 import { useAppTheme, useThemedStyles } from '../../src/theme';
 import type {
   FitpilotHealthAvailability,
@@ -48,64 +55,6 @@ const metricFormatters = {
     value == null ? 'Sin dato' : `${Math.round(value)} ms`,
   score: (value: number | null | undefined) =>
     value == null ? 'Sin dato' : `${Math.round(value)}/100`,
-};
-
-const permissionLabels: Record<string, string> = {
-  active_energy: 'Kcal activas',
-  basal_energy: 'Kcal basales',
-  steps: 'Pasos',
-  distance: 'Distancia',
-  exercise_minutes: 'Minutos de ejercicio',
-  workouts: 'Entrenamientos',
-  sleep: 'Sueño',
-  heart_rate: 'Frecuencia cardíaca',
-  resting_heart_rate: 'FC reposo',
-  heart_rate_variability: 'HRV',
-  glucose: 'Glucosa',
-  blood_pressure_systolic: 'Presión sistólica',
-  blood_pressure_diastolic: 'Presión diastólica',
-  weight: 'Peso',
-  body_fat: 'Grasa corporal',
-  lean_body_mass: 'Masa magra',
-};
-
-const healthConnectPermissionLabels: [string, string][] = [
-  ['READ_ACTIVE_CALORIES_BURNED', 'Kcal activas'],
-  ['READ_BASAL_METABOLIC_RATE', 'Kcal basales'],
-  ['READ_TOTAL_CALORIES_BURNED', 'Kcal totales'],
-  ['READ_STEPS', 'Pasos'],
-  ['READ_DISTANCE', 'Distancia'],
-  ['READ_EXERCISE', 'Entrenamientos'],
-  ['READ_SLEEP', 'Sueño'],
-  ['READ_HEART_RATE_VARIABILITY', 'HRV'],
-  ['READ_RESTING_HEART_RATE', 'FC reposo'],
-  ['READ_HEART_RATE', 'Frecuencia cardíaca'],
-  ['READ_BLOOD_GLUCOSE', 'Glucosa'],
-  ['READ_BLOOD_PRESSURE', 'Presión arterial'],
-  ['READ_WEIGHT', 'Peso'],
-  ['READ_BODY_FAT', 'Grasa corporal'],
-  ['READ_LEAN_BODY_MASS', 'Masa magra'],
-];
-
-const getPermissionLabel = (permission: string) => {
-  if (permissionLabels[permission]) {
-    return permissionLabels[permission];
-  }
-
-  const matched = healthConnectPermissionLabels.find(([token]) =>
-    permission.includes(token),
-  );
-  return matched?.[1] ?? permission.replace(/^android\.permission\.health\./, '');
-};
-
-const getPlatformLabel = (platform?: string | null) => {
-  if (platform === 'healthkit') {
-    return 'Apple Health';
-  }
-  if (platform === 'health_connect') {
-    return 'Health Connect';
-  }
-  return Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
 };
 
 const formatDateTime = (value?: string | null) => {
@@ -153,6 +102,12 @@ export default function ConnectedHealthScreen() {
   const latestSyncAt =
     primaryConnection?.last_sync_at ?? state.summary?.latest_sync?.completed_at ?? null;
   const isAvailable = state.availability?.available ?? false;
+  const availabilityCopy = getConnectedHealthAvailabilityCopy(state.availability);
+  const permissionState = getConnectedHealthPermissionState(state.permissions);
+  const lastSyncError =
+    state.summary?.latest_sync?.status === 'failed'
+      ? (state.summary.latest_sync.error_message ?? null)
+      : null;
 
   const load = useCallback(async () => {
     setError(null);
@@ -180,7 +135,7 @@ export default function ConnectedHealthScreen() {
     const all = Array.from(new Set([...granted, ...missing]));
 
     return all.map((permission) => ({
-      label: getPermissionLabel(permission),
+      label: getConnectedHealthPermissionLabel(permission),
       granted: granted.includes(permission),
     }));
   }, [state.permissions]);
@@ -189,21 +144,56 @@ export default function ConnectedHealthScreen() {
     setIsRequesting(true);
     setError(null);
     try {
+      const previousGranted = state.permissions?.granted.length ?? 0;
       const permissions = await connectedHealthService.requestPermissions();
       setState((current) => ({ ...current, permissions }));
+
       if (!permissions.granted.length) {
+        // Health Connect deja de presentar el diálogo tras dos rechazos del mismo
+        // conjunto de permisos: a partir de ahí la única vía es la propia app de Health
+        // Connect, así que ofrecemos abrirla en lugar de repetir el intento.
         Alert.alert(
           'Sin permisos',
           Platform.OS === 'android'
-            ? 'No se activó ningún permiso. Abre Health Connect con "Abrir ajustes", concede los permisos de FitPilot y vuelve a sincronizar.'
+            ? 'No se activó ningún permiso. Si el diálogo ya no aparece, ábrelos directamente en Health Connect.'
             : 'No se activó ningún permiso. Revisa los ajustes de salud y vuelve a intentar.',
+          Platform.OS === 'android'
+            ? [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                  text: 'Abrir Health Connect',
+                  onPress: () => {
+                    void connectedHealthService.openSettings();
+                  },
+                },
+              ]
+            : undefined,
         );
         return;
       }
+
+      if (permissions.missing.length && permissions.granted.length === previousGranted) {
+        // Se pidieron los que faltaban y no cambió nada: mismo callejón, con datos.
+        Alert.alert(
+          'Permisos sin cambios',
+          'Los permisos que faltan no se activaron. Concédelos en Health Connect para completar tus métricas.',
+          [
+            { text: 'Ahora no', style: 'cancel' },
+            {
+              text: 'Abrir Health Connect',
+              onPress: () => {
+                void connectedHealthService.openSettings();
+              },
+            },
+          ],
+        );
+        return;
+      }
+
       Alert.alert(
         'Permisos',
-        Platform.OS === 'android'
-          ? 'Revisa Health Connect y vuelve a sincronizar cuando termines de conceder permisos.'
+        permissions.missing.length
+          ? 'Permisos actualizados. Aún faltan algunos: puedes completarlos cuando quieras.'
           : 'Permisos actualizados. Ya puedes sincronizar tus datos.',
       );
     } catch (err) {
@@ -266,11 +256,21 @@ export default function ConnectedHealthScreen() {
               </View>
               <View style={styles.statusText}>
                 <Text style={styles.statusTitle}>
-                  {isAvailable ? getPlatformLabel(state.availability?.platform) : 'No disponible'}
+                  {isAvailable
+                    ? getConnectedHealthPlatformLabel(state.availability?.platform)
+                    : availabilityCopy.title}
                 </Text>
                 <Text style={styles.statusDescription}>
-                  Última lectura: {formatDateTime(latestSyncAt)}
+                  {isAvailable
+                    ? `Última lectura: ${formatDateTime(latestSyncAt)}`
+                    : availabilityCopy.message}
                 </Text>
+                {isAvailable && permissionState === 'partial' ? (
+                  <Text style={styles.statusWarning}>
+                    Permisos incompletos: faltan{' '}
+                    {describeMissingConnectedHealthPermissions(state.permissions)}.
+                  </Text>
+                ) : null}
               </View>
             </View>
 
@@ -295,11 +295,13 @@ export default function ConnectedHealthScreen() {
                 icon={<Ionicons name="sync-outline" size={18} color="#ffffff" />}
               />
               <Button
-                title="Abrir ajustes"
+                // Sin `disabled`: cuando Health Connect está desactualizado o desactivado
+                // este botón es la única salida del callejón, y era precisamente cuando se
+                // deshabilitaba.
+                title={availabilityCopy.actionLabel ?? 'Abrir Health Connect'}
                 onPress={() => {
                   void connectedHealthService.openSettings();
                 }}
-                disabled={!isAvailable}
                 appearance="profile"
                 variant="ghost"
                 fullWidth
@@ -308,9 +310,9 @@ export default function ConnectedHealthScreen() {
             </View>
           </View>
 
-          {error ? (
+          {error || lastSyncError ? (
             <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.errorText}>{error ?? lastSyncError}</Text>
             </View>
           ) : null}
 
@@ -381,7 +383,7 @@ export default function ConnectedHealthScreen() {
           </View>
 
           <Text style={styles.sourceText}>
-            Fuente: {getPlatformLabel(primaryConnection?.platform)}. Rango visible: {state.summary?.range.start_date ?? '--'} a {state.summary?.range.end_date ?? '--'}.
+            Fuente: {getConnectedHealthPlatformLabel(primaryConnection?.platform)}. Rango visible: {state.summary?.range.start_date ?? '--'} a {state.summary?.range.end_date ?? '--'}.
           </Text>
         </View>
       )}
@@ -442,6 +444,11 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>['theme']) =>
       marginTop: spacing.xs,
       fontSize: fontSize.sm,
       color: theme.colors.textMuted,
+    },
+    statusWarning: {
+      marginTop: spacing.xs,
+      fontSize: fontSize.sm,
+      color: theme.colors.warning,
     },
     actions: {
       marginTop: spacing.lg,
