@@ -4,6 +4,7 @@ import type {
   ConnectedHealthSummaryResponse,
 } from '../services/connectedHealth';
 import type {
+  ConnectedHealthConnectionState,
   ConnectedHealthFeedbackModel,
   ConnectedHealthFeedbackRange,
   ConnectedHealthHistoryModel,
@@ -13,6 +14,7 @@ import type {
   ConnectedHealthInsightTone,
   ConnectedHealthMetricCard,
   ConnectedHealthReadinessStatus,
+  ConnectedHealthStateCopy,
 } from '../types/connectedHealthFeedback';
 import {
   addDaysToDateKey,
@@ -35,6 +37,9 @@ const dateFormatter = new Intl.DateTimeFormat('es-MX', {
   month: 'short',
 });
 
+const isPresent = (value: number | null | undefined) =>
+  value !== null && value !== undefined;
+
 const hasMetricValue = (summary: ConnectedHealthDailySummary) =>
   [
     summary.active_energy_kcal,
@@ -48,7 +53,42 @@ const hasMetricValue = (summary: ConnectedHealthDailySummary) =>
     summary.avg_hr_bpm,
     summary.hrv_ms,
     summary.recovery_score,
-  ].some((value) => value !== null && value !== undefined);
+  ].some(isPresent);
+
+// Igual que hasMetricValue pero SIN la energía basal ni la total. Health Connect deriva
+// ambas del perfil del usuario aunque no haya ninguna app fuente escribiendo datos, así
+// que un día "con datos" puede no tener ni una sola medición real detrás. Esto es lo que
+// separa "Health Connect vacío" de "Health Connect funcionando".
+const hasRealMetricValue = (summary: ConnectedHealthDailySummary) =>
+  [
+    summary.active_energy_kcal,
+    summary.steps,
+    summary.distance_m,
+    summary.exercise_minutes,
+    summary.sleep_minutes,
+    summary.resting_hr_bpm,
+    summary.avg_hr_bpm,
+    summary.hrv_ms,
+  ].some(isPresent);
+
+// Señales sobre las que se puede estimar recuperación. Sin ninguna, no hay score que dar:
+// el backend devuelve null y marca 'insufficient_signals'. El respaldo por campos cubre los
+// días guardados antes de ese cambio, que conservan un 100 fabricado.
+const hasRecoverySignal = (summary: ConnectedHealthDailySummary) =>
+  [
+    summary.sleep_minutes,
+    summary.resting_hr_bpm,
+    summary.hrv_ms,
+    summary.active_energy_kcal,
+  ].some(isPresent);
+
+const isSyntheticEnergyOnly = (summary: ConnectedHealthDailySummary | null) =>
+  summary != null &&
+  (summary.flags?.includes('synthetic_basal_energy') === true ||
+    (isPresent(summary.basal_energy_kcal) &&
+      !isPresent(summary.active_energy_kcal) &&
+      !isPresent(summary.steps) &&
+      !isPresent(summary.distance_m)));
 
 const parseDate = (value?: string | null) => {
   if (!value) {
@@ -309,6 +349,19 @@ const buildReadiness = (
     };
   }
 
+  // Sin sueño, FC en reposo, HRV ni kcal activas no hay nada sobre lo que estimar. Antes
+  // se caía al heurístico, que parte de 64 y solo ajusta cuando hay datos: el resultado
+  // era un score inventado presentado como si fuera una medición.
+  if (!hasRecoverySignal(latest)) {
+    return {
+      status: 'unknown' as ConnectedHealthReadinessStatus,
+      score: null,
+      title: 'Sin señales suficientes',
+      message:
+        'Faltan sueño, frecuencia cardíaca o HRV para estimar tu recuperación. Conecta un reloj o una app de actividad.',
+    };
+  }
+
   const recoveryScore = latest.recovery_score;
   let score = recoveryScore ?? null;
 
@@ -501,13 +554,26 @@ const buildMetrics = (
   const energyFromActive = latest?.active_energy_kcal != null;
   const energyValue = latest?.active_energy_kcal ?? latest?.total_energy_kcal ?? null;
   const energyAvg = energyFromActive ? activeEnergyAvg : totalEnergyAvg;
+  // ...pero si ese total es solo el basal que Health Connect deriva del perfil, no es
+  // gasto medido y la tarjeta no debe presentarlo como tal.
+  const energyIsSynthetic = !energyFromActive && isSyntheticEnergyOnly(latest);
+  const energyLabel = energyIsSynthetic
+    ? 'Gasto basal estimado'
+    : energyFromActive
+      ? 'Kcal activas'
+      : 'Kcal totales';
 
   const metrics: ConnectedHealthMetricCard[] = [
     {
       key: 'recovery',
       label: 'Recuperación',
       value: formatScore(latest?.recovery_score),
-      helper: latest?.recovery_score == null ? 'Estimación por señales' : 'Score conectado',
+      helper:
+        latest?.recovery_score != null
+          ? 'Score conectado'
+          : latest && hasRecoverySignal(latest)
+            ? 'Estimación por señales'
+            : 'Sin señales suficientes',
       trendLabel: null,
       icon: 'pulse-outline',
       tone: readinessTone,
@@ -523,9 +589,11 @@ const buildMetrics = (
     },
     {
       key: 'active_energy',
-      label: energyFromActive ? 'Kcal activas' : 'Kcal totales',
+      label: energyLabel,
       value: formatKcal(energyValue),
-      helper: formatAverageHelper(avgLabel, energyAvg, formatKcal),
+      helper: energyIsSynthetic
+        ? 'Estimado por Health Connect, no medido'
+        : formatAverageHelper(avgLabel, energyAvg, formatKcal),
       trendLabel: formatTrend(energyValue, energyAvg, formatKcal),
       icon: 'flame-outline',
       tone: 'neutral',
@@ -758,6 +826,7 @@ export const buildConnectedHealthFeedback = (
   return {
     range,
     hasData: summaries.length > 0,
+    hasRealData: summaries.some(hasRealMetricValue),
     sourceLabel,
     latestSyncAt,
     freshnessLabel: freshness.label,
@@ -766,7 +835,80 @@ export const buildConnectedHealthFeedback = (
     readiness,
     metrics: buildMetrics(latest, summaries, range, readinessTone),
     insights: buildInsights(latest, summaries, sourceLabel),
+    // El backend guarda el motivo del fallo pero hasta ahora nadie lo pintaba: el usuario
+    // veía "Sin sincronizar" sin explicación, porque getLatestSyncAt ignora los runs
+    // fallidos.
+    lastSyncErrorMessage:
+      summary?.latest_sync?.status === 'failed'
+        ? (summary.latest_sync.error_message ?? null)
+        : null,
   };
+};
+
+/**
+ * Qué contar al usuario en cada estado, y con qué botón sacarle de ahí.
+ *
+ * El caso que más confundía a los testers es `no_source_data`: la plataforma de salud
+ * instalada, los permisos concedidos y aun así ningún dato, porque no hay ninguna app
+ * fuente escribiendo en ella. La app mostraba "Sincroniza para ver sueño, kcal, pasos" y
+ * un botón que repetía el mismo sync vacío indefinidamente.
+ */
+export const getConnectedHealthStateCopy = (
+  state: ConnectedHealthConnectionState,
+  platformLabel = "Health Connect",
+): ConnectedHealthStateCopy => {
+  switch (state) {
+    case "no_permissions":
+      return {
+        title: "Falta conceder permisos",
+        message: `FitPilot no tiene permisos de ${platformLabel}. Concédelos para ver pasos, sueño, kcal y recuperación.`,
+        compactMessage: "Concede permisos para ver tus métricas.",
+        action: "permissions",
+      };
+    case "partial_permissions":
+      return {
+        title: "Permisos incompletos",
+        message: `Faltan permisos en ${platformLabel}. Actívalos para completar tu recuperación.`,
+        compactMessage: "Faltan permisos por activar.",
+        action: "permissions",
+      };
+    case "no_source_data":
+      return {
+        title: `${platformLabel} está vacío`,
+        message: `FitPilot ya tiene permisos, pero ${platformLabel} no tiene datos de ningún dispositivo ni app. Conecta ahí tu reloj o tu app de actividad (Samsung Health, Fitbit, Garmin, Zepp, Google Fit) y vuelve a sincronizar.`,
+        compactMessage: `${platformLabel} no tiene datos de ningún dispositivo.`,
+        action: "settings",
+      };
+    case "needs_update":
+      return {
+        title: `${platformLabel} está desactualizado`,
+        message: `Actualiza ${platformLabel} desde Play Store para que FitPilot pueda leer tus métricas.`,
+        compactMessage: `Actualiza ${platformLabel} para continuar.`,
+        action: "settings",
+      };
+    case "needs_install":
+      return {
+        title: `Falta instalar ${platformLabel}`,
+        message: `Instala ${platformLabel} desde Play Store para activar tus métricas.`,
+        compactMessage: `Instala ${platformLabel} para activar tus métricas.`,
+        action: "settings",
+      };
+    case "unavailable":
+      return {
+        title: `${platformLabel} no está activo`,
+        message: `Actívalo en los ajustes del dispositivo para que FitPilot pueda leer tus métricas.`,
+        compactMessage: `${platformLabel} no está activo.`,
+        action: "settings",
+      };
+    case "ok":
+    default:
+      return {
+        title: "Sin datos recientes",
+        message: "Sincroniza salud conectada para ver sueño, kcal, pasos y recuperación.",
+        compactMessage: "Sincroniza sueño, kcal, pasos y recuperación.",
+        action: "sync",
+      };
+  }
 };
 
 export const shouldAutoSyncConnectedHealth = (

@@ -3,7 +3,11 @@ export type FitpilotHealthPlatform = 'healthkit' | 'health_connect' | 'unsupport
 export type FitpilotHealthAvailability = {
   available: boolean;
   platform: FitpilotHealthPlatform;
-  status: 'available' | 'unavailable' | 'needs_install' | 'unsupported';
+  // 'needs_install': Health Connect no está en el dispositivo (Android < 14).
+  // 'needs_update': está instalado pero su versión es anterior a la que exige el SDK.
+  // 'unavailable': el proveedor existe pero no se puede usar (desactivado, perfil de
+  // trabajo, Android 14+ con Health Connect deshabilitado).
+  status: 'available' | 'unavailable' | 'needs_install' | 'needs_update' | 'unsupported';
   message?: string;
 };
 

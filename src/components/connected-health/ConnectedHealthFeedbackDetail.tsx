@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Button, Card, SegmentedControl } from '../common';
 import { useConnectedHealthFeedback } from '../../hooks/useConnectedHealthFeedback';
+import { getConnectedHealthStateCopy } from '../../utils/connectedHealthFeedback';
 import {
   borderRadius,
   fontSize,
@@ -40,19 +41,23 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
   const {
     feedback,
     history,
-    availability,
     isLoading,
     isRefreshing,
     isSyncing,
-    needsPermissionCta,
+    needsPermissionUpgradeCta,
+    missingPermissionsLabel,
+    connectionState,
     syncError,
     error,
     sync,
+    requestPermissions,
+    openSettings,
     refresh,
   } = useConnectedHealthFeedback({
     days: range,
     autoSync: true,
   });
+  const stateCopy = getConnectedHealthStateCopy(connectionState, feedback.sourceLabel);
   const statusColor = useMemo(() => {
     if (feedback.readiness.status === 'good') {
       return theme.colors.success;
@@ -64,7 +69,7 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
 
     return theme.colors.primary;
   }, [feedback.readiness.status, theme.colors.primary, theme.colors.success, theme.colors.warning]);
-  const showLoading = isLoading && !feedback.hasData;
+  const showLoading = isLoading && !feedback.hasRealData;
 
   return (
     <View style={styles.container}>
@@ -93,7 +98,7 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
 
         {showLoading ? (
           <ConnectedHealthCardSkeleton />
-        ) : feedback.hasData ? (
+        ) : feedback.hasRealData ? (
           <View style={styles.readinessPanel}>
             <View style={[styles.readinessScore, { borderColor: `${statusColor}44` }]}>
               <Text style={[styles.readinessScoreText, { color: statusColor }]}>
@@ -110,22 +115,28 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
           </View>
         ) : (
           <ConnectedHealthEmptyState
-            title={
-              availability?.available === false
-                ? 'Salud conectada no disponible'
-                : 'Sin datos de salud recientes'
-            }
-            message={
-              needsPermissionCta
-                ? 'Activa permisos para que FitPilot pueda leer datos agregados.'
-                : 'Sincroniza para calcular feedback de sueño, kcal, pasos y recuperación.'
-            }
+            title={stateCopy.title}
+            message={stateCopy.message}
             action={{
-              label: needsPermissionCta ? 'Configurar permisos' : 'Sincronizar ahora',
-              icon: needsPermissionCta ? 'settings-outline' : 'sync-outline',
+              label:
+                stateCopy.action === 'permissions'
+                  ? 'Conceder permisos'
+                  : stateCopy.action === 'settings'
+                    ? `Abrir ${feedback.sourceLabel}`
+                    : 'Sincronizar ahora',
+              icon:
+                stateCopy.action === 'permissions'
+                  ? 'key-outline'
+                  : stateCopy.action === 'settings'
+                    ? 'open-outline'
+                    : 'sync-outline',
               onPress: () => {
-                if (needsPermissionCta) {
-                  router.push('/profile/connected-health' as never);
+                if (stateCopy.action === 'permissions') {
+                  void requestPermissions();
+                  return;
+                }
+                if (stateCopy.action === 'settings') {
+                  void openSettings();
                   return;
                 }
 
@@ -136,10 +147,20 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
           />
         )}
 
-        <ConnectedHealthErrorText message={syncError ?? error} />
+        {needsPermissionUpgradeCta && feedback.hasRealData ? (
+          <Text style={styles.partialPermissionsText}>
+            Permisos incompletos
+            {missingPermissionsLabel ? `: faltan ${missingPermissionsLabel}` : ''}. Actívalos
+            desde el botón de permisos para completar tu recuperación.
+          </Text>
+        ) : null}
+
+        <ConnectedHealthErrorText
+          message={syncError ?? error ?? feedback.lastSyncErrorMessage}
+        />
       </Card>
 
-      {feedback.hasData ? (
+      {feedback.hasRealData ? (
         <>
           <View style={styles.actionsRow}>
             <Button
@@ -329,5 +350,10 @@ const createStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: spacing.sm,
+    },
+    partialPermissionsText: {
+      fontSize: fontSize.xs,
+      color: theme.colors.warning,
+      lineHeight: 16,
     },
   });
