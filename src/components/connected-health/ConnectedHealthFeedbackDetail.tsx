@@ -162,17 +162,10 @@ export const ConnectedHealthFeedbackDetail: React.FC = () => {
 
       {feedback.hasRealData ? (
         <>
+          {/* Los datos ya se releen del dispositivo al entrar y al volver a la pantalla;
+              subirlos al backend ocurre solo y en silencio. Lo único que queda aquí es el
+              acceso a la configuración. */}
           <View style={styles.actionsRow}>
-            <Button
-              title="Sincronizar"
-              onPress={() => {
-                void sync();
-              }}
-              isLoading={isSyncing}
-              disabled={isRefreshing}
-              icon={<Ionicons name="sync-outline" size={17} color="#ffffff" />}
-              style={styles.actionButton}
-            />
             <Button
               title="Ajustes"
               variant="secondary"

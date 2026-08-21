@@ -306,21 +306,12 @@ export const ConnectedHealthFeedbackSummaryCard: React.FC<ConnectedHealthFeedbac
 
       {!isCompact ? (
         <View style={styles.footer}>
+          {/* Sin botón de actualizar: la tarjeta relee el dispositivo en cada foco, así
+              que no hay nada que el usuario pueda pulsar para conseguir un dato más
+              reciente del que ya está viendo. */}
           <Text style={styles.sourceText}>
             Fuente: {feedback.sourceLabel} - {feedback.latestDateLabel}
           </Text>
-          {feedback.hasRealData && feedback.isStale ? (
-            <ConnectedHealthInlineAction
-              action={{
-                label: 'Actualizar',
-                icon: 'sync-outline',
-                onPress: () => {
-                  void sync();
-                },
-                loading: isSyncing,
-              }}
-            />
-          ) : null}
         </View>
       ) : null}
 

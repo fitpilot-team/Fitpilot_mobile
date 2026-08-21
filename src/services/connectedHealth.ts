@@ -1,6 +1,7 @@
 import { AppState } from 'react-native';
 import FitpilotHealth, {
   type FitpilotHealthAvailability,
+  type FitpilotHealthSnapshot,
   type FitpilotHealthPermissionStatus,
   type FitpilotHealthSyncPayload,
 } from '../../modules/fitpilot-health';
@@ -105,6 +106,22 @@ const withSharingEnabled = (
   },
 });
 
+// --- Observación de cambios ------------------------------------------------
+// iOS empuja los cambios de HealthKit (HKObserverQuery); Health Connect no tiene nada
+// equivalente y hay que preguntarle con un token. Ambos caminos se encapsulan aquí para que
+// el hook no tenga que saber en qué plataforma está.
+
+type HealthDataChangedListener = (event: { types?: string[] }) => void;
+
+const changeListeners = new Set<HealthDataChangedListener>();
+let nativeSubscription: { remove: () => void } | null = null;
+let observerStartPromise: Promise<boolean> | null = null;
+
+// Token de la Changes API de Health Connect. Vive en memoria a propósito: al arrancar la
+// app siempre se hace una carga completa, así que persistirlo entre sesiones no compraría
+// nada y sí añadiría un estado más que puede quedar desincronizado.
+let healthConnectChangesToken: string | null = null;
+
 // Solicitud de permisos en vuelo (compartida). Presentar dos hojas de permisos de
 // HealthKit a la vez cuelga a iOS (no invoca el completion), así que serializamos.
 let permissionRequestInFlight: Promise<FitpilotHealthPermissionStatus> | null = null;
@@ -128,6 +145,100 @@ export const connectedHealthService = {
     FitpilotHealth.getGrantedPermissions(),
 
   openSettings: (): Promise<void> => FitpilotHealth.openSettings(),
+
+  /**
+   * Se suscribe a los cambios que empuje la plataforma. Devuelve la función para darse de
+   * baja, y `null` si la plataforma no los empuja (Android).
+   *
+   * El observador nativo se arranca una sola vez aunque haya varias pantallas suscritas, y
+   * se para cuando se va la última: pararlo al desmontar cualquiera de ellas dejaría a las
+   * demás sin actualizaciones.
+   */
+  subscribeToHealthDataChanges: async (
+    listener: HealthDataChangedListener,
+  ): Promise<(() => void) | null> => {
+    try {
+      if (!observerStartPromise) {
+        observerStartPromise = FitpilotHealth.startObservingChanges().catch(() => false);
+      }
+      const supported = await observerStartPromise;
+      if (!supported) {
+        return null;
+      }
+
+      changeListeners.add(listener);
+      if (!nativeSubscription) {
+        nativeSubscription = FitpilotHealth.addHealthDataChangedListener((event) => {
+          changeListeners.forEach((current) => current(event));
+        });
+      }
+
+      return () => {
+        changeListeners.delete(listener);
+        if (changeListeners.size === 0) {
+          nativeSubscription?.remove();
+          nativeSubscription = null;
+          observerStartPromise = null;
+          void FitpilotHealth.stopObservingChanges().catch(() => undefined);
+        }
+      };
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * ¿Hay datos nuevos desde la última vez que se preguntó? (Health Connect.)
+   *
+   * Preguntar cuesta una llamada, frente a releer y reagregar treinta días. Solo devuelve
+   * `false` cuando la plataforma afirma que no hay nada nuevo; ante cualquier duda responde
+   * `true` y decide el throttle de siempre.
+   */
+  hasPendingHealthChanges: async (): Promise<boolean> => {
+    try {
+      if (!healthConnectChangesToken) {
+        healthConnectChangesToken = await FitpilotHealth.getChangesToken();
+        // Sin token no se puede afirmar que NO haya cambios: puede ser la primera vez, o
+        // una plataforma que no usa tokens (iOS). Devolver false aquí desactivaba el sync
+        // por foco en iOS por completo.
+        return true;
+      }
+
+      const changes = await FitpilotHealth.getChanges(healthConnectChangesToken);
+      healthConnectChangesToken =
+        changes.nextToken ?? (await FitpilotHealth.getChangesToken());
+
+      return changes.requiresFullSync || changes.dates.length > 0;
+    } catch {
+      // Ante la duda, que decida el throttle de siempre.
+      healthConnectChangesToken = null;
+      return true;
+    }
+  },
+
+  /**
+   * Lectura directa del dispositivo, sin red. Es lo que permite pintar la cifra que el
+   * teléfono ya tiene sin esperar al viaje de ida y vuelta al backend.
+   *
+   * Es tolerante a propósito: cualquier fallo devuelve `null` y la pantalla sigue su curso
+   * con lo que venga del backend. Es una optimización de render, nunca un motivo para
+   * romper la pantalla ni para mostrar un error.
+   */
+  readSnapshot: async (days = 30): Promise<FitpilotHealthSnapshot | null> => {
+    try {
+      const availability = await FitpilotHealth.isAvailable();
+      if (!availability.available) {
+        return null;
+      }
+
+      const snapshot = await FitpilotHealth.readSnapshot(buildSyncRange(days));
+      // Sin permisos el snapshot son días vacíos: no aporta nada y además haría que la
+      // pantalla marcara "actualizado ahora" sobre la nada.
+      return snapshot.permissions.length ? snapshot : null;
+    } catch {
+      return null;
+    }
+  },
 
   getSummary: (days = 30): Promise<ConnectedHealthSummaryResponse> =>
     nutritionClient.get<ConnectedHealthSummaryResponse>(

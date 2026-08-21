@@ -13,9 +13,12 @@ private struct QuantityMetric {
 
 public class FitpilotHealthModule: Module {
   private let healthStore = HKHealthStore()
+  private var observerQueries: [HKObserverQuery] = []
 
   public func definition() -> ModuleDefinition {
     Name("FitpilotHealth")
+
+    Events("onHealthDataChanged")
 
     AsyncFunction("isAvailable") { () -> [String: Any] in
       [
@@ -55,6 +58,54 @@ public class FitpilotHealthModule: Module {
     AsyncFunction("getGrantedPermissions") { () -> [String: Any] in
       // HealthKit read permissions are privacy-preserving; a denied read returns no samples.
       self.permissionStatus(granted: self.permissionNames(), requiresManualGrant: false)
+    }
+
+    // Lectura ligera para pintar la pantalla: agrega el rango y NO sube nada. El dato ya
+    // está en el teléfono; hacerle dar la vuelta por el backend antes de enseñarlo es lo
+    // que hacía que las métricas se sintieran ajenas a la app. Se salta los registros
+    // corporales (peso, grasa, masa magra), que no alimentan ninguna tarjeta del resumen.
+    AsyncFunction("readSnapshot") { (range: [String: String]) async throws -> [String: Any] in
+      guard
+        let startInput = range["startAt"],
+        let endInput = range["endAt"],
+        let startAt = ISO8601DateFormatter.fitpilot.date(from: startInput),
+        let endAt = ISO8601DateFormatter.fitpilot.date(from: endInput)
+      else {
+        throw NSError(
+          domain: "FitpilotHealth",
+          code: 3,
+          userInfo: [NSLocalizedDescriptionKey: "readSnapshot requires valid startAt and endAt ISO strings."]
+        )
+      }
+
+      // A diferencia de syncRange, aquí no se lanza por falta de disponibilidad: el
+      // snapshot es una optimización de render y la pantalla debe seguir su curso con lo
+      // que venga del backend.
+      guard HKHealthStore.isHealthDataAvailable() else {
+        return [
+          "platform": "healthkit",
+          "from_at": ISO8601DateFormatter.fitpilot.string(from: startAt),
+          "to_at": ISO8601DateFormatter.fitpilot.string(from: endAt),
+          "permissions": [String](),
+          "daily_summaries": [[String: Any]](),
+        ]
+      }
+
+      let quantitySummaries = try await self.queryDailyQuantitySummaries(startAt: startAt, endAt: endAt)
+      let sleepRecords = try await self.querySleepRecords(startAt: startAt, endAt: endAt)
+      let workoutRecords = try await self.queryWorkoutRecords(startAt: startAt, endAt: endAt)
+      let summaries = self.mergeSummaries(quantitySummaries, records: sleepRecords + workoutRecords)
+
+      return [
+        "platform": "healthkit",
+        "from_at": ISO8601DateFormatter.fitpilot.string(from: startAt),
+        "to_at": ISO8601DateFormatter.fitpilot.string(from: endAt),
+        "permissions": self.permissionNames(),
+        "daily_summaries": summaries,
+        "metadata": [
+          "read_mode": "snapshot",
+        ],
+      ]
     }
 
     AsyncFunction("syncRange") { (range: [String: String]) async throws -> [String: Any] in
@@ -98,6 +149,71 @@ public class FitpilotHealthModule: Module {
       ]
     }
 
+    /**
+     * Se suscribe a los cambios de HealthKit. A partir de aquí la app no tiene que
+     * preguntar: iOS avisa en cuanto el reloj o el iPhone escriben una muestra nueva, así
+     * que la pantalla se pone al día sola mientras está abierta.
+     *
+     * `enableBackgroundDelivery` además hace que iOS despierte la app cuando llegan datos
+     * con la app cerrada; si el runtime de JS alcanza a arrancar, el evento llega igual.
+     */
+    AsyncFunction("startObservingChanges") { () async -> Bool in
+      guard HKHealthStore.isHealthDataAvailable() else {
+        return false
+      }
+
+      await self.stopObserving()
+
+      for type in self.observedSampleTypes() {
+        let query = HKObserverQuery(sampleType: type, predicate: nil) { [weak self] _, completionHandler, error in
+          // El completionHandler debe invocarse SIEMPRE, también en error: si no, iOS deja
+          // de entregar cambios para ese tipo durante el resto de la sesión.
+          defer { completionHandler() }
+          guard error == nil, let self else {
+            return
+          }
+          self.sendEvent("onHealthDataChanged", ["types": [type.identifier]])
+        }
+
+        self.healthStore.execute(query)
+        self.observerQueries.append(query)
+
+        // .immediate solo se respeta para tipos de alta frecuencia; para el resto iOS aplica
+        // su propia cadencia. No es un problema: mientras la app está abierta el observer
+        // dispara igualmente.
+        self.healthStore.enableBackgroundDelivery(for: type, frequency: .immediate) { _, _ in }
+      }
+
+      return !self.observerQueries.isEmpty
+    }
+
+    AsyncFunction("stopObservingChanges") { () async -> Void in
+      await self.stopObserving()
+    }
+
+    // HealthKit no usa el modelo de token de Health Connect: aquí los cambios llegan por
+    // push con el observador de arriba, que es estrictamente mejor. Se mantiene el método
+    // para que el contrato sea el mismo en ambas plataformas.
+    AsyncFunction("getChangesToken") { () -> String? in
+      nil
+    }
+
+    AsyncFunction("getChanges") { (_: String) -> [String: Any] in
+      [
+        "dates": [String](),
+        "nextToken": NSNull(),
+        "expired": true,
+        "requiresFullSync": false,
+      ]
+    }
+
+    OnDestroy {
+      for query in self.observerQueries {
+        self.healthStore.stop(query)
+      }
+      self.observerQueries = []
+    }
+
     AsyncFunction("openSettings") { () -> Void in
       if let url = URL(string: UIApplication.openSettingsURLString) {
         DispatchQueue.main.async {
@@ -116,6 +232,29 @@ public class FitpilotHealthModule: Module {
       "missing": missing,
       "requiresManualGrant": requiresManualGrant,
     ]
+  }
+
+  /** Tipos cuyos cambios merece la pena vigilar: los que alimentan alguna tarjeta. */
+  private func observedSampleTypes() -> [HKSampleType] {
+    var types: [HKSampleType] = quantityMetrics().map(.type)
+    if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
+      types.append(sleep)
+    }
+    types.append(HKObjectType.workoutType())
+    return types
+  }
+
+  private func stopObserving() async {
+    for query in observerQueries {
+      healthStore.stop(query)
+    }
+    observerQueries = []
+
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      healthStore.disableAllBackgroundDelivery { _, _ in
+        continuation.resume()
+      }
+    }
   }
 
   private func permissionNames() -> [String] {

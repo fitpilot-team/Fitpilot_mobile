@@ -56,6 +56,21 @@ export type FitpilotHealthSyncRange = {
   endAt: string;
 };
 
+/**
+ * Lectura ligera y de solo lectura del dispositivo: agrega los días del rango sin subir
+ * nada al backend. Existe para que la app pueda pintar la cifra que el teléfono YA tiene
+ * antes de que haya red de por medio; el sync completo (`syncRange`) sigue ocurriendo
+ * después, en segundo plano.
+ */
+export type FitpilotHealthSnapshot = {
+  platform: Exclude<FitpilotHealthPlatform, 'unsupported'>;
+  from_at: string;
+  to_at: string;
+  permissions: string[];
+  daily_summaries: FitpilotHealthDailySummary[];
+  metadata?: Record<string, unknown>;
+};
+
 export type FitpilotHealthSyncPayload = {
   platform: Exclude<FitpilotHealthPlatform, 'unsupported'>;
   from_at: string;
@@ -66,4 +81,31 @@ export type FitpilotHealthSyncPayload = {
   metadata?: Record<string, unknown>;
 };
 
-export type FitpilotHealthModuleEvents = Record<string, never>;
+/**
+ * Resultado de preguntar por los cambios desde un token.
+ *
+ * `dates` son fechas locales (YYYY-MM-DD), no registros: lo único que la app necesita saber
+ * es qué días hay que volver a agregar. `requiresFullSync` se activa cuando hubo borrados
+ * —Health Connect solo entrega el id del registro borrado, no su fecha— o cuando el token
+ * caducó.
+ */
+export type FitpilotHealthChanges = {
+  dates: string[];
+  nextToken: string | null;
+  expired: boolean;
+  requiresFullSync: boolean;
+};
+
+export type FitpilotHealthDataChangedEvent = {
+  /** Identificadores de las métricas que cambiaron, cuando la plataforma los expone. */
+  types?: string[];
+};
+
+/**
+ * iOS entrega los cambios de HealthKit por push (HKObserverQuery), así que la app puede
+ * reaccionar en cuanto el reloj escribe algo. Health Connect no tiene equivalente: en
+ * Android hay que preguntar con `getChanges`.
+ */
+export type FitpilotHealthModuleEvents = {
+  onHealthDataChanged: (event: FitpilotHealthDataChangedEvent) => void;
+};

@@ -2,12 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   FitpilotHealthAvailability,
   FitpilotHealthPermissionStatus,
+  FitpilotHealthSnapshot,
 } from '../../modules/fitpilot-health';
 import {
   connectedHealthService,
   type ConnectedHealthSyncResponse,
   type ConnectedHealthSummaryResponse,
 } from '../services/connectedHealth';
+import {
+  readCachedConnectedHealthSummary,
+  writeCachedConnectedHealthSummary,
+} from '../services/connectedHealthCache';
+import { useAuthStore } from '../store/authStore';
 import type {
   ConnectedHealthConnectionState,
   ConnectedHealthFeedbackRange,
@@ -18,6 +24,7 @@ import {
   getConnectedHealthPermissionState,
   isConnectedHealthAuthorizationPending,
 } from '../utils/connectedHealthAuthorization';
+import { mergeDeviceSnapshotIntoSummary } from '../utils/connectedHealthDeviceMerge';
 import {
   buildConnectedHealthHistory,
   buildConnectedHealthFeedback,
@@ -39,19 +46,28 @@ const FRESHNESS_TICK_MS = 60_000;
 type LoadOptions = {
   allowAutoSync?: boolean;
   silent?: boolean;
+  /**
+   * Salta la lectura del dispositivo. Lo usa quien acaba de leerlo por su cuenta: en
+   * Android cada snapshot son varias llamadas IPC a Health Connect y no tiene sentido
+   * repetirlas dos veces en el mismo gesto.
+   */
+  skipDevice?: boolean;
 };
 
-const AUTO_SYNC_SESSION_KEY = 'connected-health-feedback-v1';
-const autoSyncAttempted = new Set<string>();
-
-const availabilityStateOf = (
-  status: FitpilotHealthAvailability['status'] | undefined,
-): ConnectedHealthConnectionState => {
-  if (status === 'needs_update' || status === 'needs_install') {
-    return status;
-  }
-  return 'unavailable';
+type DeviceReading = {
+  snapshot: FitpilotHealthSnapshot;
+  readAtMs: number;
 };
+
+/**
+ * Instante del último sync al backend, compartido por todas las instancias del hook.
+ *
+ * Antes era un `Set` con una clave constante, de modo que el auto-sync corría UNA sola vez
+ * por sesión de JS: si ese único intento fallaba, no se reintentaba hasta reiniciar la app.
+ * Ahora que la pantalla se pinta desde el dispositivo, el sync deja de ser urgente y basta
+ * con no repetirlo entre instancias dentro de la ventana de throttle.
+ */
+let lastBackgroundSyncAtMs = 0;
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error ? error.message : fallback;
@@ -127,6 +143,15 @@ const withSuccessfulSyncTimestamp = (
   };
 };
 
+const availabilityStateOf = (
+  status: FitpilotHealthAvailability['status'] | undefined,
+): ConnectedHealthConnectionState => {
+  if (status === 'needs_update' || status === 'needs_install') {
+    return status;
+  }
+  return 'unavailable';
+};
+
 export function useConnectedHealthFeedback({
   days = 7,
   autoSync = false,
@@ -134,10 +159,14 @@ export function useConnectedHealthFeedback({
   enabled = true,
   foregroundSyncMaxAgeMs,
 }: UseConnectedHealthFeedbackOptions = {}) {
-  const [summary, setSummary] = useState<ConnectedHealthSummaryResponse | null>(null);
+  const userId = useAuthStore((state) => state.user?.id);
+  // Lo que dice el backend y lo que dice el teléfono se guardan por separado: fusionarlos
+  // al vuelo evita que un refresco de red borre la lectura local recién hecha (o al revés).
+  const [backendSummary, setBackendSummary] = useState<ConnectedHealthSummaryResponse | null>(null);
+  const [deviceReading, setDeviceReading] = useState<DeviceReading | null>(null);
   const [availability, setAvailability] = useState<FitpilotHealthAvailability | null>(null);
   const [permissions, setPermissions] = useState<FitpilotHealthPermissionStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(enabled);
+  const [hasHydrated, setHasHydrated] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,8 +174,31 @@ export function useConnectedHealthFeedback({
   const [nowMs, setNowMs] = useState(() => Date.now());
   const isMountedRef = useRef(true);
   const summaryRef = useRef<ConnectedHealthSummaryResponse | null>(null);
-  const lastSyncAttemptRef = useRef<number>(0);
+  const hasHydratedRef = useRef(false);
   const isSyncingRef = useRef(false);
+
+  // El resumen visible es la superposición de ambas fuentes. `readAtMs` va en la clave del
+  // memo (y no `nowMs`) para que la marca de "última lectura" quede fija en el instante en
+  // que se leyó del dispositivo, en vez de avanzar sola con el tick de frescura.
+  const summary = useMemo(
+    () =>
+      mergeDeviceSnapshotIntoSummary(
+        backendSummary,
+        deviceReading?.snapshot ?? null,
+        deviceReading?.readAtMs ?? Date.now(),
+      ),
+    [backendSummary, deviceReading],
+  );
+
+  const markHydrated = useCallback(() => {
+    if (hasHydratedRef.current) {
+      return;
+    }
+    hasHydratedRef.current = true;
+    if (isMountedRef.current) {
+      setHasHydrated(true);
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -173,36 +225,51 @@ export function useConnectedHealthFeedback({
     return () => clearInterval(intervalId);
   }, [enabled]);
 
-  // Ejecuta un sync completo (HealthKit -> backend -> refresca resumen). Con guarda de
-  // re-entrada para no lanzar syncs solapados. `ensureAuthorization` solo debe ser true
-  // en acciones EXPLÍCITAS del usuario: pedir permisos desde auto-sync/focus/AppState
-  // (fondo) puede colgar la hoja de HealthKit en iOS y dejar "Sincronizando" infinito.
+  /**
+   * Sube al backend lo que hay en el dispositivo y recoge lo que el backend deriva.
+   *
+   * `silent` es la diferencia entre "lo pidió el usuario" y "se está poniendo al día solo".
+   * Un refresco de fondo no pinta spinner ni banner de error: la pantalla ya está mostrando
+   * datos reales del teléfono y no hay nada que el usuario tenga que esperar ni que hacer.
+   *
+   * `ensureAuthorization` sigue siendo true solo en acciones explícitas: presentar la hoja
+   * de permisos de HealthKit desde segundo plano o de forma concurrente cuelga a iOS.
+   */
   const performSync = useCallback(
-    async ({ ensureAuthorization }: { ensureAuthorization: boolean }) => {
+    async ({
+      ensureAuthorization,
+      silent = false,
+    }: {
+      ensureAuthorization: boolean;
+      silent?: boolean;
+    }) => {
       if (!enabled || isSyncingRef.current) {
         return;
       }
 
       isSyncingRef.current = true;
       const syncStartedAtMs = Date.now();
-      lastSyncAttemptRef.current = syncStartedAtMs;
-      setIsSyncing(true);
-      setSyncError(null);
-      setNowMs(syncStartedAtMs);
+      lastBackgroundSyncAtMs = syncStartedAtMs;
+
+      if (!silent) {
+        setIsSyncing(true);
+        setSyncError(null);
+        setNowMs(syncStartedAtMs);
+      }
 
       try {
         const syncResult = await connectedHealthService.sync(30, { ensureAuthorization });
         const refreshedSummary = await connectedHealthService.getSummary(days);
-        const nextSyncedSummary = withSuccessfulSyncTimestamp(
-          refreshedSummary,
-          syncResult,
-        );
+        const nextSyncedSummary = withSuccessfulSyncTimestamp(refreshedSummary, syncResult);
 
         if (isMountedRef.current) {
-          const refreshedAtMs = Date.now();
-          summaryRef.current = nextSyncedSummary;
-          setSummary(nextSyncedSummary);
-          setNowMs(refreshedAtMs);
+          setBackendSummary(nextSyncedSummary);
+          markHydrated();
+          setNowMs(Date.now());
+        }
+
+        if (userId) {
+          void writeCachedConnectedHealthSummary(String(userId), days, nextSyncedSummary);
         }
 
         // Si este sync presentó el diálogo de permisos, lo que tenemos en estado quedó
@@ -220,45 +287,63 @@ export function useConnectedHealthFeedback({
           }
         }
       } catch (syncFailure) {
-        if (isMountedRef.current) {
+        // En un sync de fondo no se dice nada: el estado de conexión ya explica lo que
+        // falte, y la pantalla sigue enseñando la lectura del dispositivo.
+        if (isMountedRef.current && !silent) {
           if (!isConnectedHealthAuthorizationPending(syncFailure)) {
             setSyncError(
               getErrorMessage(syncFailure, 'No se pudo sincronizar salud conectada.'),
             );
           } else if (ensureAuthorization) {
-            // Sync explícito: ya pedimos autorización y iOS aun así no la aplicó (hoja de
-            // permisos que se cierra sola; estado corrupto tras reinstalar la app). No hay
-            // nada más que la app pueda hacer: guiamos al usuario a arreglarlo en el sistema.
+            // Sync explícito: ya pedimos autorización y la plataforma aun así no la aplicó
+            // (hoja que se cierra sola; estado corrupto tras reinstalar). No hay nada más
+            // que la app pueda hacer: guiamos al usuario a arreglarlo en el sistema.
             setSyncError(getConnectedHealthAuthorizationRecoveryMessage());
           }
         }
       } finally {
         isSyncingRef.current = false;
-        if (isMountedRef.current) {
+        if (isMountedRef.current && !silent) {
           setIsSyncing(false);
         }
       }
     },
-    [days, enabled],
+    [days, enabled, markHydrated, userId],
   );
 
   const load = useCallback(
-    async ({ allowAutoSync = false, silent = false }: LoadOptions = {}) => {
+    async ({ allowAutoSync = false, silent = false, skipDevice = false }: LoadOptions = {}) => {
       if (!enabled) {
         return;
       }
 
-      const hasCachedSummary = summaryRef.current !== null;
-
       if (!silent) {
-        if (hasCachedSummary) {
-          setIsRefreshing(true);
-        } else {
-          setIsLoading(true);
+        setIsRefreshing(true);
+      }
+      setError(null);
+
+      // (a) Lo último que se vio, desde disco. Da un primer frame con datos reales sin
+      //     esperar a nada: antes la pantalla siempre empezaba por un skeleton porque
+      //     getSummary pega a la red en cada montaje.
+      if (!hasHydratedRef.current && userId) {
+        const cached = await readCachedConnectedHealthSummary(String(userId), days);
+        if (cached && isMountedRef.current && !hasHydratedRef.current) {
+          setBackendSummary(cached);
+          markHydrated();
         }
       }
 
-      setError(null);
+      // (b) Dispositivo y red, en paralelo. El teléfono casi siempre gana, así que se pinta
+      //     en cuanto llega sin esperar al backend.
+      if (!skipDevice) {
+        void connectedHealthService.readSnapshot(days).then((snapshot) => {
+          if (snapshot && isMountedRef.current) {
+            setDeviceReading({ snapshot, readAtMs: Date.now() });
+            markHydrated();
+            setNowMs(Date.now());
+          }
+        });
+      }
 
       const [summaryResult, availabilityResult, permissionResult] = await Promise.allSettled([
         connectedHealthService.getSummary(days),
@@ -271,8 +356,6 @@ export function useConnectedHealthFeedback({
       }
 
       const loadedAtMs = Date.now();
-      const nextSummary =
-        summaryResult.status === 'fulfilled' ? summaryResult.value : summaryRef.current;
       const nextAvailability =
         availabilityResult.status === 'fulfilled' ? availabilityResult.value : null;
       const nextPermissions =
@@ -281,9 +364,14 @@ export function useConnectedHealthFeedback({
       setNowMs(loadedAtMs);
 
       if (summaryResult.status === 'fulfilled') {
-        summaryRef.current = nextSummary;
-        setSummary(nextSummary);
-      } else {
+        setBackendSummary(summaryResult.value);
+        markHydrated();
+        if (userId) {
+          void writeCachedConnectedHealthSummary(String(userId), days, summaryResult.value);
+        }
+      } else if (!hasHydratedRef.current) {
+        // Solo es un error visible si no hay NADA que enseñar. Si ya hay caché o lectura
+        // del dispositivo, que la red falle es irrelevante para el usuario.
         setError(
           getErrorMessage(
             summaryResult.reason,
@@ -300,37 +388,80 @@ export function useConnectedHealthFeedback({
         setPermissions(nextPermissions);
       }
 
-      const shouldAutoSync =
-        allowAutoSync &&
-        autoSync &&
-        !autoSyncAttempted.has(AUTO_SYNC_SESSION_KEY) &&
-        nextAvailability?.available === true &&
-        shouldAutoSyncConnectedHealth(nextSummary, loadedAtMs);
-
-      if (shouldAutoSync) {
-        autoSyncAttempted.add(AUTO_SYNC_SESSION_KEY);
-        // Auto-sync: nunca pide permisos (no presenta hojas de HealthKit en segundo plano).
-        await performSync({ ensureAuthorization: false });
-      }
-
       if (isMountedRef.current && !silent) {
-        setIsLoading(false);
         setIsRefreshing(false);
       }
+
+      // (c) Y por último, poner al día el backend en segundo plano. Nadie está esperando
+      //     esto: la pantalla lleva rato pintada.
+      const shouldSyncQuietly =
+        allowAutoSync &&
+        autoSync &&
+        nextAvailability?.available === true &&
+        (nextPermissions?.granted.length ?? 0) > 0 &&
+        loadedAtMs - lastBackgroundSyncAtMs >= autoSyncThrottleMs &&
+        shouldAutoSyncConnectedHealth(summaryRef.current, loadedAtMs);
+
+      if (shouldSyncQuietly) {
+        await performSync({ ensureAuthorization: false, silent: true });
+      }
     },
-    [autoSync, days, enabled, performSync],
+    [autoSync, autoSyncThrottleMs, days, enabled, markHydrated, performSync, userId],
   );
 
-  const refresh = useCallback(
-    async () => {
-      await load({ allowAutoSync: false });
-    },
-    [load],
-  );
+  /**
+   * Relee el dispositivo, sin red y sin spinner. Es lo que se dispara al ganar foco: el
+   * coste es una lectura local, así que puede correr siempre que la pantalla aparezca.
+   */
+  const refreshFromDevice = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
+
+    const snapshot = await connectedHealthService.readSnapshot(days);
+    if (snapshot && isMountedRef.current) {
+      setDeviceReading({ snapshot, readAtMs: Date.now() });
+      markHydrated();
+      setNowMs(Date.now());
+    }
+  }, [days, enabled, markHydrated]);
+
+  // iOS empuja los cambios de HealthKit: en cuanto el reloj escribe una muestra, la
+  // pantalla se relee sola. No hay polling ni espera; en Android esto no engancha nada
+  // (Health Connect no notifica) y el trabajo lo hace el chequeo de cambios al ganar foco.
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+
+    void connectedHealthService
+      .subscribeToHealthDataChanges(() => {
+        void refreshFromDevice();
+      })
+      .then((dispose) => {
+        if (cancelled) {
+          dispose?.();
+          return;
+        }
+        unsubscribe = dispose;
+      });
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [enabled, refreshFromDevice]);
+
+  const refresh = useCallback(async () => {
+    await load({ allowAutoSync: false });
+  }, [load]);
 
   const sync = useCallback(async () => {
     // Acción explícita del usuario: aquí SÍ pedimos autorización (idempotente y en primer
-    // plano, contexto seguro para presentar la hoja de permisos de HealthKit).
+    // plano, contexto seguro para presentar la hoja de permisos).
     await performSync({ ensureAuthorization: true });
   }, [performSync]);
 
@@ -349,6 +480,7 @@ export function useConnectedHealthFeedback({
         setPermissions(nextPermissions);
       }
       if (nextPermissions.granted.length) {
+        await refreshFromDevice();
         await performSync({ ensureAuthorization: false });
       } else if (isMountedRef.current) {
         setSyncError(getConnectedHealthAuthorizationRecoveryMessage());
@@ -360,7 +492,7 @@ export function useConnectedHealthFeedback({
         );
       }
     }
-  }, [enabled, performSync]);
+  }, [enabled, performSync, refreshFromDevice]);
 
   const openSettings = useCallback(async () => {
     try {
@@ -390,23 +522,26 @@ export function useConnectedHealthFeedback({
       return;
     }
 
-    if (checkedAtMs - lastSyncAttemptRef.current < autoSyncThrottleMs) {
+    if (checkedAtMs - lastBackgroundSyncAtMs < autoSyncThrottleMs) {
       return;
     }
 
-    // Disparo en segundo plano (focus / AppState): NO pide permisos.
-    await performSync({ ensureAuthorization: false });
+    await performSync({ ensureAuthorization: false, silent: true });
   }, [autoSyncThrottleMs, availability?.available, enabled, performSync]);
 
-  // Handler pensado para el foco de pantalla / vuelta a primer plano: hace UNA
-  // sola llamada de red. Si el dispositivo está disponible y la última sync es
-  // más vieja que el umbral (y no está throttled), sincroniza el dispositivo
-  // (que además re-lee el resumen). En caso contrario, solo re-lee el backend
-  // para reflejar el último estado sin coste de sensor.
+  /**
+   * Foco de pantalla / vuelta a primer plano.
+   *
+   * Siempre relee el dispositivo —es local y barato, y es lo que hace que al volver a la
+   * app la cifra ya esté al día—. La subida al backend solo se encola si toca, y siempre en
+   * silencio. Antes esto disparaba un sync completo con spinner en cada foco.
+   */
   const refreshOnFocus = useCallback(async () => {
     if (!enabled) {
       return;
     }
+
+    await refreshFromDevice();
 
     const checkedAtMs = Date.now();
     const isAvailable = availability?.available === true;
@@ -414,26 +549,34 @@ export function useConnectedHealthFeedback({
       foregroundSyncMaxAgeMs != null
         ? isConnectedHealthSyncOlderThan(summaryRef.current, foregroundSyncMaxAgeMs, checkedAtMs)
         : shouldAutoSyncConnectedHealth(summaryRef.current, checkedAtMs);
-    const isThrottled = checkedAtMs - lastSyncAttemptRef.current < autoSyncThrottleMs;
+    const isThrottled = checkedAtMs - lastBackgroundSyncAtMs < autoSyncThrottleMs;
 
-    if (isAvailable && isStale && !isThrottled) {
-      // Foco/AppState no es una acción explícita: sincroniza sin presentar permisos.
-      await performSync({ ensureAuthorization: false });
+    // Preguntar por cambios cuesta una llamada; subir treinta días cuesta unas cuantas. Si
+    // el dispositivo dice que no hay nada nuevo, no hay por qué sincronizar aunque el
+    // umbral de antigüedad ya haya vencido.
+    const hasChanges =
+      isAvailable && isStale && !isThrottled
+        ? await connectedHealthService.hasPendingHealthChanges()
+        : false;
+
+    if (isAvailable && isStale && !isThrottled && hasChanges) {
+      await performSync({ ensureAuthorization: false, silent: true });
     } else {
-      await refresh();
+      // El dispositivo ya se acaba de leer arriba: aquí solo falta refrescar el backend.
+      await load({ allowAutoSync: false, silent: true, skipDevice: true });
     }
   }, [
     autoSyncThrottleMs,
     availability?.available,
     enabled,
     foregroundSyncMaxAgeMs,
+    load,
     performSync,
-    refresh,
+    refreshFromDevice,
   ]);
 
   useEffect(() => {
     if (!enabled) {
-      setIsLoading(false);
       setIsRefreshing(false);
       return;
     }
@@ -452,7 +595,7 @@ export function useConnectedHealthFeedback({
 
   const permissionState = getConnectedHealthPermissionState(permissions);
 
-  // Bloqueante: sin un solo permiso no hay nada que sincronizar. Ya NO depende de
+  // Bloqueante: sin un solo permiso no hay nada que sincronizar. NO depende de
   // `feedback.hasData`, porque un día de solo energía basal sintética contaba como "hay
   // datos" y suprimía el aviso para siempre; y porque si el usuario revoca los permisos,
   // la app seguía mostrando lo cacheado sin avisar de nada.
@@ -470,7 +613,7 @@ export function useConnectedHealthFeedback({
     : '';
 
   // Los tres estados que hasta ahora eran indistinguibles en la UI (sin permisos, con
-  // permisos pero con Health Connect vacío, y funcionando) más los de disponibilidad.
+  // permisos pero con la plataforma de salud vacía, y funcionando) más los de disponibilidad.
   const connectionState: ConnectedHealthConnectionState =
     availability?.available !== true
       ? availabilityStateOf(availability?.status)
@@ -490,7 +633,9 @@ export function useConnectedHealthFeedback({
     summary,
     feedback,
     history,
-    isLoading,
+    // Solo hay "cargando" mientras no haya absolutamente nada que enseñar. Con caché o con
+    // lectura del dispositivo, el skeleton no llega a verse.
+    isLoading: enabled && !hasHydrated,
     isRefreshing,
     isSyncing,
     error,
@@ -499,6 +644,7 @@ export function useConnectedHealthFeedback({
     needsPermissionUpgradeCta,
     missingPermissionsLabel,
     refresh,
+    refreshFromDevice,
     sync,
     requestPermissions,
     openSettings,
