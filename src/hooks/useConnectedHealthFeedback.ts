@@ -426,6 +426,35 @@ export function useConnectedHealthFeedback({
     }
   }, [days, enabled, markHydrated]);
 
+  // iOS empuja los cambios de HealthKit: en cuanto el reloj escribe una muestra, la
+  // pantalla se relee sola. No hay polling ni espera; en Android esto no engancha nada
+  // (Health Connect no notifica) y el trabajo lo hace el chequeo de cambios al ganar foco.
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+
+    void connectedHealthService
+      .subscribeToHealthDataChanges(() => {
+        void refreshFromDevice();
+      })
+      .then((dispose) => {
+        if (cancelled) {
+          dispose?.();
+          return;
+        }
+        unsubscribe = dispose;
+      });
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [enabled, refreshFromDevice]);
+
   const refresh = useCallback(async () => {
     await load({ allowAutoSync: false });
   }, [load]);
@@ -522,7 +551,15 @@ export function useConnectedHealthFeedback({
         : shouldAutoSyncConnectedHealth(summaryRef.current, checkedAtMs);
     const isThrottled = checkedAtMs - lastBackgroundSyncAtMs < autoSyncThrottleMs;
 
-    if (isAvailable && isStale && !isThrottled) {
+    // Preguntar por cambios cuesta una llamada; subir treinta días cuesta unas cuantas. Si
+    // el dispositivo dice que no hay nada nuevo, no hay por qué sincronizar aunque el
+    // umbral de antigüedad ya haya vencido.
+    const hasChanges =
+      isAvailable && isStale && !isThrottled
+        ? await connectedHealthService.hasPendingHealthChanges()
+        : false;
+
+    if (isAvailable && isStale && !isThrottled && hasChanges) {
       await performSync({ ensureAuthorization: false, silent: true });
     } else {
       // El dispositivo ya se acaba de leer arriba: aquí solo falta refrescar el backend.

@@ -1,5 +1,6 @@
 import type {
   FitpilotHealthAvailability,
+  FitpilotHealthChanges,
   FitpilotHealthPermissionStatus,
   FitpilotHealthSnapshot,
   FitpilotHealthSyncPayload,
@@ -43,5 +44,18 @@ export const readSnapshot = async (
   daily_summaries: [],
   metadata: { unsupported: true },
 });
+
+export const getChangesToken = async (): Promise<string | null> => null;
+
+export const getChanges = async (): Promise<FitpilotHealthChanges> => ({
+  dates: [],
+  nextToken: null,
+  expired: true,
+  requiresFullSync: false,
+});
+
+export const startObservingChanges = async (): Promise<boolean> => false;
+export const stopObservingChanges = async () => {};
+export const addHealthDataChangedListener = () => ({ remove: () => {} });
 
 export const openSettings = async () => {};

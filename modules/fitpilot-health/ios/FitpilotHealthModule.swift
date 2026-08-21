@@ -13,9 +13,12 @@ private struct QuantityMetric {
 
 public class FitpilotHealthModule: Module {
   private let healthStore = HKHealthStore()
+  private var observerQueries: [HKObserverQuery] = []
 
   public func definition() -> ModuleDefinition {
     Name("FitpilotHealth")
+
+    Events("onHealthDataChanged")
 
     AsyncFunction("isAvailable") { () -> [String: Any] in
       [
@@ -146,6 +149,71 @@ public class FitpilotHealthModule: Module {
       ]
     }
 
+    /**
+     * Se suscribe a los cambios de HealthKit. A partir de aquí la app no tiene que
+     * preguntar: iOS avisa en cuanto el reloj o el iPhone escriben una muestra nueva, así
+     * que la pantalla se pone al día sola mientras está abierta.
+     *
+     * `enableBackgroundDelivery` además hace que iOS despierte la app cuando llegan datos
+     * con la app cerrada; si el runtime de JS alcanza a arrancar, el evento llega igual.
+     */
+    AsyncFunction("startObservingChanges") { () async -> Bool in
+      guard HKHealthStore.isHealthDataAvailable() else {
+        return false
+      }
+
+      await self.stopObserving()
+
+      for type in self.observedSampleTypes() {
+        let query = HKObserverQuery(sampleType: type, predicate: nil) { [weak self] _, completionHandler, error in
+          // El completionHandler debe invocarse SIEMPRE, también en error: si no, iOS deja
+          // de entregar cambios para ese tipo durante el resto de la sesión.
+          defer { completionHandler() }
+          guard error == nil, let self else {
+            return
+          }
+          self.sendEvent("onHealthDataChanged", ["types": [type.identifier]])
+        }
+
+        self.healthStore.execute(query)
+        self.observerQueries.append(query)
+
+        // .immediate solo se respeta para tipos de alta frecuencia; para el resto iOS aplica
+        // su propia cadencia. No es un problema: mientras la app está abierta el observer
+        // dispara igualmente.
+        self.healthStore.enableBackgroundDelivery(for: type, frequency: .immediate) { _, _ in }
+      }
+
+      return !self.observerQueries.isEmpty
+    }
+
+    AsyncFunction("stopObservingChanges") { () async -> Void in
+      await self.stopObserving()
+    }
+
+    // HealthKit no usa el modelo de token de Health Connect: aquí los cambios llegan por
+    // push con el observador de arriba, que es estrictamente mejor. Se mantiene el método
+    // para que el contrato sea el mismo en ambas plataformas.
+    AsyncFunction("getChangesToken") { () -> String? in
+      nil
+    }
+
+    AsyncFunction("getChanges") { (_: String) -> [String: Any] in
+      [
+        "dates": [String](),
+        "nextToken": NSNull(),
+        "expired": true,
+        "requiresFullSync": false,
+      ]
+    }
+
+    OnDestroy {
+      for query in self.observerQueries {
+        self.healthStore.stop(query)
+      }
+      self.observerQueries = []
+    }
+
     AsyncFunction("openSettings") { () -> Void in
       if let url = URL(string: UIApplication.openSettingsURLString) {
         DispatchQueue.main.async {
@@ -164,6 +232,29 @@ public class FitpilotHealthModule: Module {
       "missing": missing,
       "requiresManualGrant": requiresManualGrant,
     ]
+  }
+
+  /** Tipos cuyos cambios merece la pena vigilar: los que alimentan alguna tarjeta. */
+  private func observedSampleTypes() -> [HKSampleType] {
+    var types: [HKSampleType] = quantityMetrics().map(.type)
+    if let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
+      types.append(sleep)
+    }
+    types.append(HKObjectType.workoutType())
+    return types
+  }
+
+  private func stopObserving() async {
+    for query in observerQueries {
+      healthStore.stop(query)
+    }
+    observerQueries = []
+
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      healthStore.disableAllBackgroundDelivery { _, _ in
+        continuation.resume()
+      }
+    }
   }
 
   private func permissionNames() -> [String] {

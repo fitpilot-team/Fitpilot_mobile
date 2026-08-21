@@ -9,6 +9,8 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.aggregate.AggregateMetric
 import androidx.health.connect.client.aggregate.AggregationResult
+import androidx.health.connect.client.changes.DeletionChange
+import androidx.health.connect.client.changes.UpsertionChange
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.BasalMetabolicRateRecord
@@ -19,6 +21,8 @@ import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.InstantaneousRecord
+import androidx.health.connect.client.records.IntervalRecord
 import androidx.health.connect.client.records.LeanBodyMassRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.RestingHeartRateRecord
@@ -27,6 +31,7 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.request.AggregateRequest
+import androidx.health.connect.client.request.ChangesTokenRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import expo.modules.kotlin.activityresult.AppContextActivityResultContract
@@ -100,6 +105,10 @@ class FitpilotHealthModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("FitpilotHealth")
 
+    // Declarado para que el contrato sea idéntico en las dos plataformas, aunque en Android
+    // no llegue a emitirse: Health Connect no notifica cambios, hay que preguntarle.
+    Events("onHealthDataChanged")
+
     AsyncFunction("isAvailable") Coroutine { ->
       availability()
     }
@@ -111,6 +120,25 @@ class FitpilotHealthModule : Module() {
 
     AsyncFunction("getGrantedPermissions") Coroutine { ->
       permissionStatus(requiresManualGrant = false)
+    }
+
+    AsyncFunction("getChangesToken") Coroutine { ->
+      changesToken()
+    }
+
+    // Health Connect no tiene nada equivalente a HKObserverQuery: no existe forma de que
+    // avise de datos nuevos. Devolver `false` es la respuesta honesta, y hace que el lado
+    // JS caiga al camino de preguntar por los cambios al ganar foco.
+    AsyncFunction("startObservingChanges") Coroutine { ->
+      false
+    }
+
+    AsyncFunction("stopObservingChanges") Coroutine { ->
+      // Sin observador que parar.
+    }
+
+    AsyncFunction("getChanges") Coroutine { token: String ->
+      changesSince(token)
     }
 
     AsyncFunction("readSnapshot") Coroutine { range: Map<String, String> ->
@@ -247,6 +275,94 @@ class FitpilotHealthModule : Module() {
   }
 
   // --- Sincronización -------------------------------------------------------
+
+  // --- Cambios incrementales ------------------------------------------------
+
+  /**
+   * Un token opaco contra el que preguntar después "¿ha cambiado algo?".
+   *
+   * Sin esto, la única forma de saber si había datos nuevos era releer y reagregar los 30
+   * días enteros. Preguntar por los cambios cuesta una llamada y permite no sincronizar
+   * cuando no hay nada que sincronizar.
+   */
+  private suspend fun changesToken(): String? = withContext(Dispatchers.IO) {
+    if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) {
+      return@withContext null
+    }
+
+    val granted = grantedPermissions()
+    val types = WATCHED_RECORD_TYPES.filter { hasPermission(granted, it) }.toSet()
+    if (types.isEmpty()) {
+      return@withContext null
+    }
+
+    runCatching {
+      healthClient().getChangesToken(ChangesTokenRequest(recordTypes = types))
+    }.getOrNull()
+  }
+
+  /**
+   * Qué días tienen datos nuevos desde el token dado.
+   *
+   * Devuelve fechas locales, no registros: lo que la app necesita saber es qué días hay que
+   * reagregar. Un borrado no dice a qué día pertenecía —solo llega el id— así que en ese
+   * caso se pide una resincronización completa en lugar de adivinar.
+   */
+  private suspend fun changesSince(token: String): Map<String, Any?> = withContext(Dispatchers.IO) {
+    if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) {
+      return@withContext mapOf("expired" to true, "requiresFullSync" to true)
+    }
+
+    val zone = ZoneId.systemDefault()
+    val dates = sortedSetOf<String>()
+    var requiresFullSync = false
+    var nextToken = token
+    var expired = false
+    var pages = 0
+
+    while (pages < MAX_CHANGE_PAGES) {
+      pages += 1
+      val response = runCatching { healthClient().getChanges(nextToken) }.getOrElse {
+        return@withContext mapOf("expired" to true, "requiresFullSync" to true)
+      }
+
+      if (response.changesTokenExpired) {
+        expired = true
+        requiresFullSync = true
+        break
+      }
+
+      for (change in response.changes) {
+        when (change) {
+          is UpsertionChange -> {
+            val instant = when (val record = change.record) {
+              is InstantaneousRecord -> record.time
+              is IntervalRecord -> record.startTime
+              else -> null
+            }
+            instant?.let {
+              dates.add(it.atZone(zone).toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE))
+            }
+          }
+          // El borrado solo trae el id: no hay forma de saber qué día quedó afectado.
+          is DeletionChange -> requiresFullSync = true
+          else -> Unit
+        }
+      }
+
+      nextToken = response.nextChangesToken
+      if (!response.hasMore) {
+        break
+      }
+    }
+
+    mapOf(
+      "dates" to dates.toList(),
+      "nextToken" to nextToken,
+      "expired" to expired,
+      "requiresFullSync" to requiresFullSync,
+    )
+  }
 
   /**
    * Lectura ligera para pintar la pantalla: agrega los días del rango y NO sube nada.
@@ -892,6 +1008,26 @@ class FitpilotHealthModule : Module() {
 
     // Claves del resumen que no son métricas: no cuentan para la cobertura.
     private val SUMMARY_NON_METRIC_KEYS = setOf("date", "sources", "metadata", "flags")
+
+    // Tope de páginas al recorrer los cambios: si un proveedor volcó un histórico entero,
+    // sale más barato resincronizar que ir paginando miles de cambios.
+    private const val MAX_CHANGE_PAGES = 10
+
+    // Tipos cuyos cambios importan porque alimentan alguna métrica visible.
+    private val WATCHED_RECORD_TYPES = setOf(
+      ActiveCaloriesBurnedRecord::class,
+      TotalCaloriesBurnedRecord::class,
+      StepsRecord::class,
+      DistanceRecord::class,
+      ExerciseSessionRecord::class,
+      SleepSessionRecord::class,
+      HeartRateRecord::class,
+      RestingHeartRateRecord::class,
+      HeartRateVariabilityRmssdRecord::class,
+      BloodGlucoseRecord::class,
+      BloodPressureRecord::class,
+      WeightRecord::class,
+    )
   }
 }
 
